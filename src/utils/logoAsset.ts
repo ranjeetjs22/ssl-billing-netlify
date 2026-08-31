@@ -1,8 +1,11 @@
 /**
- * Utility to provide rasterized Base64 Data URL for jsPDF invoice printing
+ * Logo handling for PDF output.
+ *
+ * jsPDF stores PNG pixel data *uncompressed* unless told otherwise, so a 2 MB uploaded
+ * PNG easily became a 10 MB invoice. Every logo (uploaded or built-in) is therefore
+ * rasterised once onto a white canvas, capped at MAX_LOGO_WIDTH px, and embedded as a
+ * JPEG — typically 20–60 KB.
  */
-
-let cachedLogoDataUrl: string | null = null;
 
 export const LOGO_SVG_STRING = `<svg viewBox="0 0 620 180" fill="none" xmlns="http://www.w3.org/2000/svg">
   <defs>
@@ -131,44 +134,86 @@ export const LOGO_SVG_STRING = `<svg viewBox="0 0 620 180" fill="none" xmlns="ht
   </g>
 </svg>`;
 
-/**
- * Converts the SVG logo to a raster PNG data URI for jsPDF insertion.
- */
-export async function getLogoPngDataUrl(): Promise<string> {
-  if (cachedLogoDataUrl) {
-    return cachedLogoDataUrl;
-  }
 
-  return new Promise((resolve) => {
-    try {
-      const img = new Image();
-      const svgBlob = new Blob([LOGO_SVG_STRING], { type: 'image/svg+xml;charset=utf-8' });
-      const blobUrl = window.URL.createObjectURL(svgBlob);
+export interface PdfLogo {
+  dataUrl: string;
+  width: number;
+  height: number;
+  format: 'JPEG';
+}
 
-      img.onload = () => {
-        const canvas = document.createElement('canvas');
-        canvas.width = 620;
-        canvas.height = 180;
-        const ctx = canvas.getContext('2d');
-        if (ctx) {
-          ctx.drawImage(img, 0, 0, 620, 180);
-          cachedLogoDataUrl = canvas.toDataURL('image/png');
-          window.URL.revokeObjectURL(blobUrl);
-          resolve(cachedLogoDataUrl);
-        } else {
-          window.URL.revokeObjectURL(blobUrl);
-          resolve('');
-        }
-      };
+const MAX_LOGO_WIDTH = 720;
+const JPEG_QUALITY = 0.88;
+const logoCache = new Map<string, Promise<PdfLogo | null>>();
 
-      img.onerror = () => {
-        window.URL.revokeObjectURL(blobUrl);
-        resolve('');
-      };
-
-      img.src = blobUrl;
-    } catch {
-      resolve('');
-    }
+function loadImage(src: string): Promise<HTMLImageElement> {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    // Needed for Supabase Storage / CDN URLs so the canvas is not tainted
+    if (!src.startsWith('data:') && !src.startsWith('blob:')) img.crossOrigin = 'anonymous';
+    img.onload = () => resolve(img);
+    img.onerror = () => reject(new Error(`Could not load image: ${src.slice(0, 80)}`));
+    img.src = src;
   });
+}
+
+function rasterise(img: HTMLImageElement, srcWidth?: number, srcHeight?: number): PdfLogo | null {
+  const w = srcWidth || img.naturalWidth || img.width;
+  const h = srcHeight || img.naturalHeight || img.height;
+  if (!w || !h) return null;
+  const scale = Math.min(1, MAX_LOGO_WIDTH / w);
+  const canvas = document.createElement('canvas');
+  canvas.width = Math.round(w * scale);
+  canvas.height = Math.round(h * scale);
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return null;
+  ctx.fillStyle = '#FFFFFF';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+  return { dataUrl: canvas.toDataURL('image/jpeg', JPEG_QUALITY), width: canvas.width, height: canvas.height, format: 'JPEG' };
+}
+
+async function builtinLogo(): Promise<PdfLogo | null> {
+  const svgBlob = new Blob([LOGO_SVG_STRING], { type: 'image/svg+xml;charset=utf-8' });
+  const blobUrl = URL.createObjectURL(svgBlob);
+  try {
+    const img = await loadImage(blobUrl);
+    return rasterise(img, 620, 180);
+  } finally {
+    URL.revokeObjectURL(blobUrl);
+  }
+}
+
+/**
+ * Returns a compact, cached JPEG version of the company logo (falls back to the built-in
+ * SSL logo when no custom logo is set or it cannot be loaded).
+ */
+export function prepareLogoForPdf(src?: string | null): Promise<PdfLogo | null> {
+  const key = src || '__builtin__';
+  if (!logoCache.has(key)) {
+    logoCache.set(key, (async () => {
+      try {
+        if (src) {
+          try {
+            const img = await loadImage(src);
+            const out = rasterise(img);
+            if (out) return out;
+          } catch (e) {
+            console.warn('Custom logo unavailable, using built-in logo.', e);
+          }
+        }
+        return await builtinLogo();
+      } catch (e) {
+        console.warn('Logo rasterisation failed', e);
+        return null;
+      }
+    })());
+  }
+  return logoCache.get(key)!;
+}
+
+/** @deprecated use prepareLogoForPdf — kept for backwards compatibility. */
+export async function getLogoPngDataUrl(): Promise<string> {
+  const logo = await prepareLogoForPdf();
+  return logo?.dataUrl || '';
 }

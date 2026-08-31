@@ -7,6 +7,7 @@ import * as db from './db.js';
 import {
   hashPassword,
   verifyPassword,
+  needsRehash,
   createToken,
   publicUser,
   authMiddleware,
@@ -33,7 +34,7 @@ export async function seedData(): Promise<void> {
     if (!admin) {
       admin = await db.insert('app_users', {
         email: adminEmail,
-        password_hash: hashPassword(adminPassword),
+        password_hash: await hashPassword(adminPassword),
         full_name: adminName,
         role: 'admin',
         is_active: true,
@@ -81,7 +82,10 @@ export async function seedData(): Promise<void> {
       console.log('Seeded default bank account');
     }
 
-    const customers = await db.select('customers');
+    // Demo customers/invoices only in local mode (or when explicitly requested) — never
+    // pollute a production database with sample data.
+    const seedSamples = !db.hasSupabase() || process.env.SEED_SAMPLE_DATA === 'true';
+    const customers = seedSamples ? await db.select('customers') : [{}];
     if (!customers || customers.length === 0) {
       const c1 = await db.insert('customers', {
         name: 'Apex Industrial Corp',
@@ -303,7 +307,7 @@ app.post('/api/auth/login', async (req: Request, res: Response) => {
       return res.status(401).json({ detail: 'No account found with this email address.' });
     }
 
-    if (!verifyPassword(password, user.password_hash)) {
+    if (!(await verifyPassword(password, user.password_hash))) {
       return res.status(401).json({ detail: 'Incorrect password. Please try again.' });
     }
 
@@ -311,7 +315,12 @@ app.post('/api/auth/login', async (req: Request, res: Response) => {
       return res.status(403).json({ detail: 'This account has been deactivated. Contact your administrator.' });
     }
 
-    await db.update('app_users', { id: `eq.${user.id}` }, { last_login: new Date().toISOString() });
+    const patch: Record<string, any> = { last_login: new Date().toISOString() };
+    if (needsRehash(user.password_hash)) {
+      // Transparently upgrade legacy bcrypt hashes to the fast native scheme.
+      patch.password_hash = await hashPassword(password);
+    }
+    await db.update('app_users', { id: `eq.${user.id}` }, patch);
 
     const token = createToken(user);
     res.json({ token, user: publicUser(user) });
@@ -365,7 +374,7 @@ app.post('/api/auth/reset-password', async (req: Request, res: Response) => {
     }
 
     await db.update('app_users', { id: `eq.${row.user_id}` }, {
-      password_hash: hashPassword(password),
+      password_hash: await hashPassword(password),
       updated_at: new Date().toISOString(),
     });
     await db.update('password_resets', { id: `eq.${row.id}` }, { used: true });

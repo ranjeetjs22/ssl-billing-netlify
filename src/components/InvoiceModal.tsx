@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { 
   X, 
   Calculator, 
@@ -21,16 +21,73 @@ import {
 } from 'lucide-react';
 import { apiRequest } from '../services/api.js';
 import { Customer, ChargeItem, InvoiceTotals, Invoice } from '../types.js';
-import { formatINR } from '../utils/pdfGenerator.js';
+import { formatINR } from '../utils/format.js';
 import { lookupGSTIN, lookupPincode, isValidGSTINFormat } from '../utils/gstLookup.js';
+import { compute, r2 } from '../utils/calc.js';
 
 interface InvoiceModalProps {
   invoiceToEdit?: Invoice | null;
+  /** Pre-select this customer when creating a new invoice (e.g. from the customer statement). */
+  initialCustomerId?: string;
   onClose: () => void;
-  onSuccess: () => void;
+  onSuccess: (savedInvoice?: Invoice) => void;
 }
 
-export const InvoiceModal: React.FC<InvoiceModalProps> = ({ invoiceToEdit, onClose, onSuccess }) => {
+/** One LR / bilty row in the form. A single bill may carry many LRs. */
+interface LrLine {
+  key: string;
+  lr_no: string;
+  lr_date: string;
+  origin: string;
+  destination: string;
+  weight: number;
+  rate_kg: number;
+  amount: number;
+}
+
+let lrKeySeq = 0;
+const newLrLine = (partial: Partial<LrLine> = {}): LrLine => ({
+  key: `lr-${Date.now()}-${lrKeySeq++}`,
+  lr_no: '',
+  lr_date: '',
+  origin: 'Ahmedabad',
+  destination: '',
+  weight: 0,
+  rate_kg: 0,
+  amount: 0,
+  ...partial,
+});
+
+function buildInitialLrLines(inv?: Invoice | null): LrLine[] {
+  if (inv?.lr_items && inv.lr_items.length > 0) {
+    return inv.lr_items.map(l => newLrLine({
+      lr_no: l.lr_no || '',
+      lr_date: l.lr_date || '',
+      origin: l.origin || '',
+      destination: l.destination || '',
+      weight: Number(l.weight) || 0,
+      rate_kg: Number(l.rate_kg) || 0,
+      amount: Number(l.amount) || 0,
+    }));
+  }
+  if (inv && inv.id) {
+    // Legacy single-LR invoice → one line built from the scalar fields
+    return [newLrLine({
+      lr_no: inv.lr_no || '',
+      lr_date: inv.shipment_date || '',
+      origin: inv.origin || '',
+      destination: inv.destination || '',
+      weight: Number(inv.weight) || 0,
+      rate_kg: Number(inv.rate_kg) || 0,
+      amount: Number(inv.freight) || 0,
+    })];
+  }
+  return [newLrLine()];
+}
+
+const lrInputCls = 'w-full bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-slate-900 text-xs focus:outline-none focus:border-orange-500';
+
+export const InvoiceModal: React.FC<InvoiceModalProps> = ({ invoiceToEdit, initialCustomerId, onClose, onSuccess }) => {
   const isEditMode = Boolean(invoiceToEdit && invoiceToEdit.id);
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [selectedCustomerId, setSelectedCustomerId] = useState(invoiceToEdit?.customer_id || '');
@@ -47,14 +104,10 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({ invoiceToEdit, onClo
   const [shipToGstin, setShipToGstin] = useState(invoiceToEdit?.ship_to?.gstin || '');
   const [shipToPhone, setShipToPhone] = useState(invoiceToEdit?.ship_to?.phone || '');
 
-  // Consignment & Transport
-  const [lrNo, setLrNo] = useState(invoiceToEdit?.lr_no || '');
-  const [shipmentDate, setShipmentDate] = useState(invoiceToEdit?.shipment_date || '');
-  const [origin, setOrigin] = useState(invoiceToEdit?.origin || 'Ahmedabad');
-  const [destination, setDestination] = useState(invoiceToEdit?.destination || '');
-  const [weight, setWeight] = useState<number>(invoiceToEdit?.weight || 0);
-  const [rateKg, setRateKg] = useState<number>(invoiceToEdit?.rate_kg || 0);
-  const [freight, setFreight] = useState<number>(invoiceToEdit?.freight || 0);
+  // Consignment & Transport — one row per LR / bilty; freight is the sum of all lines
+  const [lrLines, setLrLines] = useState<LrLine[]>(() => buildInitialLrLines(invoiceToEdit));
+  const freight = useMemo(() => r2(lrLines.reduce((acc, l) => acc + (Number(l.amount) || 0), 0)), [lrLines]);
+  const totalWeight = useMemo(() => r2(lrLines.reduce((acc, l) => acc + (Number(l.weight) || 0), 0)), [lrLines]);
   const [extraCharges, setExtraCharges] = useState<ChargeItem[]>(
     invoiceToEdit?.extra_charges && invoiceToEdit.extra_charges.length > 0
       ? invoiceToEdit.extra_charges
@@ -76,7 +129,6 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({ invoiceToEdit, onClo
   const [dueDate, setDueDate] = useState(invoiceToEdit?.due_date || '');
   const [notes, setNotes] = useState(invoiceToEdit?.notes || '');
 
-  const [calcResult, setCalcResult] = useState<InvoiceTotals | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -110,13 +162,14 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({ invoiceToEdit, onClo
   useEffect(() => {
     const init = async () => {
       try {
-        const custRes = await apiRequest<{ items: Customer[] }>('/customers?page=1&page_size=100');
+        const custRes = await apiRequest<{ items: Customer[] }>('/customers?page=1&page_size=500');
         const list = custRes.items || [];
         setCustomers(list);
         if (!isEditMode) {
           if (list.length > 0) {
-            setSelectedCustomerId(list[0].id);
-            applyCustomerDefaults(list[0]);
+            const preferred = (initialCustomerId && list.find(c => c.id === initialCustomerId)) || list[0];
+            setSelectedCustomerId(preferred.id);
+            applyCustomerDefaults(preferred);
           }
 
           const numRes = await apiRequest<{ invoice_no: string }>(`/invoices/next-number?invoice_date=${invoiceDate}`);
@@ -135,6 +188,8 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({ invoiceToEdit, onClo
     const effectiveShipState = sameAsBuyer ? (buyer?.state || 'Gujarat') : (shipToState || 'Gujarat');
     if (effectiveShipState) {
       setPlaceOfSupply(effectiveShipState);
+      // An explicit "GST Exempt" choice must not be overridden by the state sync
+      if (gstType === 'exempt') return;
       if (effectiveShipState.toLowerCase() !== 'gujarat') {
         setGstType('igst');
       } else {
@@ -159,8 +214,8 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({ invoiceToEdit, onClo
       d.setDate(d.getDate() + Number(cust.credit_days));
       setDueDate(d.toISOString().slice(0, 10));
     }
-    if (cust.city && !destination) {
-      setDestination(cust.city);
+    if (cust.city) {
+      fillDestinationIfEmpty(cust.city);
     }
 
     // Default Ship To details when same as buyer
@@ -181,40 +236,47 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({ invoiceToEdit, onClo
     }
   };
 
-  // When weight & rateKg change, auto update freight
-  const handleWeightRateChange = (w: number, r: number) => {
-    setWeight(w);
-    setRateKg(r);
-    if (w > 0 && r > 0) {
-      setFreight(Math.round(w * r * 100) / 100);
-    }
+  // ---- LR line helpers ----
+  const updateLrLine = (key: string, patch: Partial<LrLine>) => {
+    setLrLines(prev => prev.map(l => {
+      if (l.key !== key) return l;
+      const next = { ...l, ...patch };
+      // Weight × Rate drives the line freight whenever both are known; a direct amount is also allowed
+      if (('weight' in patch || 'rate_kg' in patch) && next.weight > 0 && next.rate_kg > 0) {
+        next.amount = Math.round(next.weight * next.rate_kg * 100) / 100;
+      }
+      return next;
+    }));
   };
 
-  // Live calculations
-  useEffect(() => {
-    const runCalculation = async () => {
-      try {
-        const payload = {
-          freight,
-          weight,
-          rate_kg: rateKg,
-          extra_charges: extraCharges.filter(c => c.amount > 0),
-          discount_type: discountType,
-          discount_value: discountValue,
-          gst_type: gstType,
-          gst_rate: gstRate,
-        };
-        const res = await apiRequest<InvoiceTotals>('/invoices/calculate', {
-          method: 'POST',
-          body: JSON.stringify(payload),
-        });
-        setCalcResult(res);
-      } catch (err) {
-        console.error('Calculation error', err);
-      }
-    };
-    runCalculation();
-  }, [freight, weight, rateKg, extraCharges, discountType, discountValue, gstType, gstRate]);
+  const addLrLine = () => {
+    setLrLines(prev => {
+      const last = prev[prev.length - 1];
+      return [...prev, newLrLine({ origin: last?.origin || 'Ahmedabad', destination: last?.destination || '', rate_kg: last?.rate_kg || 0 })];
+    });
+  };
+
+  const removeLrLine = (key: string) => {
+    setLrLines(prev => (prev.length <= 1 ? prev : prev.filter(l => l.key !== key)));
+  };
+
+  /** Auto-fill the first LR's destination from the consignee city when it hasn't been typed yet. */
+  const fillDestinationIfEmpty = (city: string) => {
+    if (!city) return;
+    setLrLines(prev => prev.map((l, i) => (i === 0 && !l.destination ? { ...l, destination: city } : l)));
+  };
+
+  // Live calculations — same pure engine the server uses to persist totals (no network round-trip,
+  // so rapidly typed values can never be overwritten by a slower, stale response).
+  const calcResult = useMemo<InvoiceTotals>(() => compute({
+    freight,
+    lr_items: lrLines,
+    extra_charges: extraCharges.filter(c => c.amount > 0),
+    discount_type: discountType,
+    discount_value: discountValue,
+    gst_type: gstType,
+    gst_rate: gstRate,
+  }) as unknown as InvoiceTotals, [freight, lrLines, extraCharges, discountType, discountValue, gstType, gstRate]);
 
   const addChargeItem = () => {
     setExtraCharges([...extraCharges, { label: 'Additional Charge', amount: 0 }]);
@@ -250,7 +312,7 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({ invoiceToEdit, onClo
         }
         if (res.city) {
           setShipToCity(res.city);
-          if (!destination) setDestination(res.city);
+          fillDestinationIfEmpty(res.city);
         }
         if (res.pin && (!shipToPin || isExplicitClick)) setShipToPin(res.pin);
         if (res.address && (!shipToAddress || isExplicitClick)) setShipToAddress(res.address);
@@ -293,7 +355,7 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({ invoiceToEdit, onClo
       if (res && res.valid) {
         if (res.city) {
           setShipToCity(res.city);
-          if (!destination) setDestination(res.city);
+          fillDestinationIfEmpty(res.city);
         }
         if (res.state) {
           setShipToState(res.state);
@@ -451,10 +513,21 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({ invoiceToEdit, onClo
       setError('Please select or add a customer.');
       return;
     }
+    if (freight <= 0) {
+      setError('Please enter freight for at least one LR line (Weight × Rate, or type the amount directly).');
+      return;
+    }
     setSaving(true);
     setError(null);
 
     try {
+      const cleanLines = lrLines.map(({ key: _key, ...rest }) => ({
+        ...rest,
+        lr_no: rest.lr_no.trim(),
+        origin: rest.origin.trim(),
+        destination: rest.destination.trim(),
+      }));
+      const distinctRates = Array.from(new Set(cleanLines.map(l => l.rate_kg).filter(r => r > 0)));
       const payload = {
         customer_id: selectedCustomerId,
         invoice_date: invoiceDate,
@@ -469,12 +542,13 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({ invoiceToEdit, onClo
           gstin: shipToGstin,
           phone: shipToPhone,
         },
-        lr_no: lrNo,
-        shipment_date: shipmentDate || undefined,
-        origin,
-        destination,
-        weight,
-        rate_kg: rateKg,
+        lr_items: cleanLines,
+        lr_no: cleanLines.map(l => l.lr_no).filter(Boolean).join(', '),
+        shipment_date: cleanLines[0]?.lr_date || undefined,
+        origin: cleanLines[0]?.origin || '',
+        destination: cleanLines[cleanLines.length - 1]?.destination || cleanLines[0]?.destination || '',
+        weight: totalWeight,
+        rate_kg: distinctRates.length === 1 ? distinctRates[0] : 0,
         sac,
         place_of_supply: placeOfSupply,
         freight,
@@ -489,19 +563,20 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({ invoiceToEdit, onClo
         status: 'pending',
       };
 
+      let saved: Invoice;
       if (isEditMode && invoiceToEdit) {
-        await apiRequest(`/invoices/${invoiceToEdit.id}`, {
+        saved = await apiRequest<Invoice>(`/invoices/${invoiceToEdit.id}`, {
           method: 'PUT',
           body: JSON.stringify(payload),
         });
       } else {
-        await apiRequest('/invoices', {
+        saved = await apiRequest<Invoice>('/invoices', {
           method: 'POST',
           body: JSON.stringify(payload),
         });
       }
 
-      onSuccess();
+      onSuccess(saved);
       onClose();
     } catch (err: any) {
       setError(err.message || 'Failed to save invoice');
@@ -794,8 +869,12 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({ invoiceToEdit, onClo
                           type="text"
                           value={shipToCity}
                           onChange={(e) => {
+                            const prevCity = shipToCity;
                             setShipToCity(e.target.value);
-                            if (!destination) setDestination(e.target.value);
+                            // keep the first LR's destination in sync while it is still auto-filled
+                            setLrLines(lines => lines.map((l, i) =>
+                              i === 0 && (!l.destination || l.destination === prevCity) ? { ...l, destination: e.target.value } : l
+                            ));
                           }}
                           className="w-full bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-slate-900 text-xs focus:outline-none focus:border-orange-500"
                           placeholder="Surat"
@@ -832,101 +911,142 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({ invoiceToEdit, onClo
             </div>
           </div>
 
-          {/* Consignment & Route Details */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3.5">
-            <div>
-              <label className="block text-slate-700 font-medium mb-1">LR / Bilty Number</label>
-              <input
-                type="text"
-                value={lrNo}
-                onChange={(e) => setLrNo(e.target.value)}
-                className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-slate-900 focus:outline-none focus:border-orange-500"
-                placeholder="LR-88910"
-              />
-            </div>
-
-            <div>
-              <label className="block text-slate-700 font-medium mb-1">Shipment Date</label>
-              <input
-                type="date"
-                value={shipmentDate}
-                onChange={(e) => setShipmentDate(e.target.value)}
-                className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-slate-900 focus:outline-none focus:border-orange-500"
-              />
-            </div>
-
-            <div>
-              <label className="block text-slate-700 font-medium mb-1">Origin City</label>
-              <input
-                type="text"
-                value={origin}
-                onChange={(e) => setOrigin(e.target.value)}
-                className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-slate-900 focus:outline-none focus:border-orange-500"
-                placeholder="Ahmedabad"
-              />
-            </div>
-
-            <div>
-              <label className="block text-slate-700 font-medium mb-1">Destination City</label>
-              <input
-                type="text"
-                value={destination}
-                onChange={(e) => setDestination(e.target.value)}
-                className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-slate-900 focus:outline-none focus:border-orange-500"
-                placeholder="Surat / Mumbai"
-              />
-            </div>
-          </div>
-
-          {/* Freight Calculation Engine */}
-          <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-4">
+          {/* Consignments / LR Lines — a single bill can cover many LRs */}
+          <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-3">
             <div className="flex items-center justify-between border-b border-slate-200 pb-2">
               <span className="font-bold text-slate-900 uppercase tracking-wider text-[11px] flex items-center gap-1.5">
-                <Calculator className="w-3.5 h-3.5 text-orange-600" />
-                Freight & Weight Details
+                <Truck className="w-3.5 h-3.5 text-orange-600" />
+                <span>Consignments / LR Details</span>
+                <span className="ml-1 px-1.5 py-0.5 rounded-md bg-orange-100 text-orange-700 text-[10px] font-bold normal-case tracking-normal">
+                  {lrLines.length} LR{lrLines.length === 1 ? '' : 's'}
+                </span>
               </span>
-              <span className="text-[10px] text-slate-500">Rate × Weight or Direct Freight</span>
+              <button
+                type="button"
+                onClick={addLrLine}
+                className="text-xs text-orange-600 hover:text-orange-700 flex items-center gap-1 font-semibold cursor-pointer"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                <span>Add LR to this bill</span>
+              </button>
+            </div>
+            <p className="text-[11px] text-slate-500 -mt-1">
+              Add every LR / bilty covered by this single bill. Freight per LR = Weight × Rate, or type the amount directly.
+            </p>
+
+            <div className="overflow-x-auto -mx-1 px-1">
+              <table className="w-full min-w-[720px] text-xs border-separate border-spacing-y-1.5">
+                <thead>
+                  <tr className="text-[10px] uppercase tracking-wider text-slate-500">
+                    <th className="text-left font-semibold pl-1 w-6">#</th>
+                    <th className="text-left font-semibold">LR / Bilty No</th>
+                    <th className="text-left font-semibold">LR Date</th>
+                    <th className="text-left font-semibold">From</th>
+                    <th className="text-left font-semibold">To</th>
+                    <th className="text-right font-semibold">Weight (Kg)</th>
+                    <th className="text-right font-semibold">Rate / Kg</th>
+                    <th className="text-right font-semibold">Freight (₹)</th>
+                    <th className="w-8"></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {lrLines.map((line, idx) => (
+                    <tr key={line.key}>
+                      <td className="pl-1 text-slate-400 font-mono">{idx + 1}</td>
+                      <td className="pr-1.5">
+                        <input
+                          type="text"
+                          value={line.lr_no}
+                          onChange={(e) => updateLrLine(line.key, { lr_no: e.target.value })}
+                          className={`${lrInputCls} font-mono`}
+                          placeholder="LR-88910"
+                        />
+                      </td>
+                      <td className="pr-1.5">
+                        <input
+                          type="date"
+                          value={line.lr_date}
+                          onChange={(e) => updateLrLine(line.key, { lr_date: e.target.value })}
+                          className={lrInputCls}
+                        />
+                      </td>
+                      <td className="pr-1.5">
+                        <input
+                          type="text"
+                          value={line.origin}
+                          onChange={(e) => updateLrLine(line.key, { origin: e.target.value })}
+                          className={lrInputCls}
+                          placeholder="Ahmedabad"
+                        />
+                      </td>
+                      <td className="pr-1.5">
+                        <input
+                          type="text"
+                          value={line.destination}
+                          onChange={(e) => updateLrLine(line.key, { destination: e.target.value })}
+                          className={lrInputCls}
+                          placeholder="Surat"
+                        />
+                      </td>
+                      <td className="pr-1.5">
+                        <input
+                          type="number"
+                          min="0"
+                          step="any"
+                          value={line.weight || ''}
+                          onChange={(e) => updateLrLine(line.key, { weight: parseFloat(e.target.value) || 0 })}
+                          className={`${lrInputCls} text-right font-mono`}
+                          placeholder="0"
+                        />
+                      </td>
+                      <td className="pr-1.5">
+                        <input
+                          type="number"
+                          min="0"
+                          step="any"
+                          value={line.rate_kg || ''}
+                          onChange={(e) => updateLrLine(line.key, { rate_kg: parseFloat(e.target.value) || 0 })}
+                          className={`${lrInputCls} text-right font-mono`}
+                          placeholder="0.00"
+                        />
+                      </td>
+                      <td className="pr-1.5">
+                        <input
+                          type="number"
+                          min="0"
+                          step="any"
+                          value={line.amount || ''}
+                          onChange={(e) => updateLrLine(line.key, { amount: parseFloat(e.target.value) || 0 })}
+                          className={`${lrInputCls} text-right font-mono font-bold text-orange-600`}
+                          placeholder="0.00"
+                        />
+                      </td>
+                      <td>
+                        <button
+                          type="button"
+                          onClick={() => removeLrLine(line.key)}
+                          disabled={lrLines.length <= 1}
+                          title="Remove this LR"
+                          className="p-1.5 text-slate-400 hover:text-rose-600 disabled:opacity-30 disabled:hover:text-slate-400 transition cursor-pointer"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              <div>
-                <label className="block text-slate-600 font-medium mb-1">Charged Weight (Kg)</label>
-                <input
-                  type="number"
-                  min="0"
-                  step="any"
-                  value={weight || ''}
-                  onChange={(e) => handleWeightRateChange(parseFloat(e.target.value) || 0, rateKg)}
-                  className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 font-mono text-slate-900 focus:outline-none focus:border-orange-500"
-                  placeholder="e.g. 1200"
-                />
+            <div className="flex flex-wrap items-center justify-between gap-3 pt-2 border-t border-slate-200 text-xs">
+              <div className="text-slate-500">
+                Total Weight: <span className="font-mono font-semibold text-slate-800">{formatINR(totalWeight)} Kg</span>
+                <span className="mx-2 text-slate-300">|</span>
+                LRs on this bill: <span className="font-mono font-semibold text-slate-800">{lrLines.length}</span>
               </div>
-
-              <div>
-                <label className="block text-slate-600 font-medium mb-1">Rate per Kg (₹)</label>
-                <input
-                  type="number"
-                  min="0"
-                  step="any"
-                  value={rateKg || ''}
-                  onChange={(e) => handleWeightRateChange(weight, parseFloat(e.target.value) || 0)}
-                  className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 font-mono text-slate-900 focus:outline-none focus:border-orange-500"
-                  placeholder="e.g. 8.50"
-                />
-              </div>
-
-              <div>
-                <label className="block text-slate-600 font-medium mb-1">Total Freight (₹) *</label>
-                <input
-                  type="number"
-                  min="0"
-                  step="any"
-                  required
-                  value={freight || ''}
-                  onChange={(e) => setFreight(parseFloat(e.target.value) || 0)}
-                  className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 font-mono font-bold text-orange-600 focus:outline-none focus:border-orange-500"
-                  placeholder="0.00"
-                />
+              <div className="flex items-center gap-2">
+                <span className="text-slate-600 font-semibold">Total Freight (₹)</span>
+                <span className="font-mono font-extrabold text-orange-600 text-base">₹{formatINR(freight)}</span>
               </div>
             </div>
           </div>
@@ -1041,9 +1161,19 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({ invoiceToEdit, onClo
                 <span className="text-slate-500">SAC Code: {sac}</span>
               </div>
 
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-xs">
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4 text-xs">
                 <div>
-                  <div className="text-slate-500">Gross Freight</div>
+                  <div className="text-slate-500">Freight ({calcResult.lr_count || lrLines.length} LR{(calcResult.lr_count || lrLines.length) === 1 ? '' : 's'})</div>
+                  <div className="font-mono font-semibold text-slate-900 mt-0.5">₹{formatINR(calcResult.freight)}</div>
+                </div>
+
+                <div>
+                  <div className="text-slate-500">Additional Charges</div>
+                  <div className="font-mono font-semibold text-slate-900 mt-0.5">+₹{formatINR(calcResult.additional_total)}</div>
+                </div>
+
+                <div>
+                  <div className="text-slate-500">Gross Amount</div>
                   <div className="font-mono font-semibold text-slate-900 mt-0.5">₹{formatINR(calcResult.gross_amount)}</div>
                 </div>
 
@@ -1059,7 +1189,11 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({ invoiceToEdit, onClo
 
                 <div>
                   <div className="text-slate-500">
-                    {calcResult.gst_type === 'igst' ? 'IGST 18%' : calcResult.gst_type === 'intra' ? 'CGST+SGST 18%' : 'Exempt'}
+                    {calcResult.gst_type === 'igst'
+                      ? `IGST ${calcResult.gst_rate}%`
+                      : calcResult.gst_type === 'intra'
+                      ? `CGST+SGST ${calcResult.gst_rate}%`
+                      : 'GST Exempt'}
                   </div>
                   <div className="font-mono font-semibold text-purple-600 mt-0.5">₹{formatINR(calcResult.gst_amount)}</div>
                 </div>

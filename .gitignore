@@ -6,3 +6,8 @@ coverage/
 *.log
 .env*
 !.env.example
+.dev.vars*
+.wrangler/
+
+# local offline DB (may contain real customer data)
+data/

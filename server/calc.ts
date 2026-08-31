@@ -1,5 +1,9 @@
 /**
  * Single source of truth for freight, discount, GST calculations, and Indian amount in words.
+ *
+ * NOTE: This module is intentionally dependency-free and side-effect-free so the
+ * browser bundle can import it too (see src/utils/calc.ts) — the live preview in the
+ * invoice form and the persisted totals on the server are guaranteed to agree.
  */
 
 export function num(v: any): number {
@@ -12,6 +16,61 @@ export function r2(v: number): number {
   return Math.round((v + 1e-9) * 100) / 100;
 }
 
+export interface LrItem {
+  lr_no: string;
+  lr_date: string;
+  origin: string;
+  destination: string;
+  description: string;
+  packages: number;
+  weight: number;
+  rate_kg: number;
+  amount: number;
+}
+
+/**
+ * Normalise a raw `lr_items` payload (one row per LR / consignment on the bill).
+ * Rows with no LR number, weight, or amount are treated as blank and dropped.
+ */
+export function lrItemsList(raw: any): LrItem[] {
+  if (!Array.isArray(raw)) return [];
+  const out: LrItem[] = [];
+  for (const x of raw) {
+    if (!x || typeof x !== 'object') continue;
+    const weight = num(x.weight);
+    const rate = num(x.rate_kg ?? x.rate);
+    let amount = num(x.amount ?? x.freight);
+    if (amount <= 0 && weight > 0 && rate > 0) {
+      amount = r2(weight * rate);
+    }
+    const item: LrItem = {
+      lr_no: String(x.lr_no ?? x.lr ?? '').trim(),
+      lr_date: x.lr_date ? String(x.lr_date).slice(0, 10) : '',
+      origin: String(x.origin ?? x.from ?? '').trim(),
+      destination: String(x.destination ?? x.to ?? '').trim(),
+      description: String(x.description ?? '').trim(),
+      packages: num(x.packages),
+      weight,
+      rate_kg: rate,
+      amount: r2(amount),
+    };
+    if (item.lr_no || item.amount > 0 || item.weight > 0) {
+      out.push(item);
+    }
+  }
+  return out;
+}
+
+/** Sum of freight across LR lines. */
+export function lrItemsFreight(items: LrItem[]): number {
+  return r2(items.reduce((acc, l) => acc + l.amount, 0));
+}
+
+/** Comma separated LR numbers, e.g. "LR-101, LR-102" */
+export function lrNumbersLabel(items: LrItem[]): string {
+  return items.map(l => l.lr_no).filter(Boolean).join(', ');
+}
+
 export function extrasList(extra: any): { label: string; amount: number }[] {
   const out: { label: string; amount: number }[] = [];
   if (Array.isArray(extra)) {
@@ -19,7 +78,7 @@ export function extrasList(extra: any): { label: string; amount: number }[] {
       if (typeof e === 'object' && e !== null) {
         out.push({
           label: e.label || e.name || 'Additional charge',
-          amount: num(e.amount || e.value || e.amt),
+          amount: num(e.amount ?? e.value ?? e.amt),
         });
       } else {
         out.push({
@@ -53,25 +112,30 @@ export function normaliseGstType(t: any): 'intra' | 'igst' | 'exempt' {
 export function compute(inv: Record<string, any>) {
   const extras = extrasList(inv.extra_charges);
   const extrasSum = extras.reduce((acc, e) => acc + e.amount, 0);
+  const lrItems = lrItemsList(inv.lr_items);
+  const lrFreight = lrItemsFreight(lrItems);
 
   let freight = 0;
   let fuel = 0;
   let hike = 0;
-  let additional = 0;
 
-  if (inv.freight !== undefined && inv.freight !== null && inv.freight !== '') {
+  if (lrItems.length > 0 && lrFreight > 0) {
+    // Multi-LR bill: freight is always the sum of the consignment lines.
+    freight = lrFreight;
+  } else if (num(inv.freight) > 0) {
+    // Direct freight entered by the user (or persisted on the invoice).
     freight = num(inv.freight);
-    additional = extrasSum + num(inv.processing) + num(inv.insurance_amt);
   } else {
+    // Derive from weight × rate. A freight of 0 / "" must never override a valid weight × rate.
     const base = num(inv.weight) * num(inv.rate_kg);
     fuel = (base * num(inv.fuel_surcharge_pct)) / 100;
     hike = (base * num(inv.fuel_hike_pct)) / 100;
     freight = base + fuel + hike;
-    additional = extrasSum + num(inv.processing) + num(inv.insurance_amt);
   }
 
+  const additional = r2(extrasSum + num(inv.processing) + num(inv.insurance_amt));
+
   freight = r2(freight);
-  additional = r2(additional);
   const gross = r2(freight + additional);
 
   const dtype = String(inv.discount_type || 'percent').toLowerCase();
@@ -79,7 +143,7 @@ export function compute(inv: Record<string, any>) {
   let discount = 0;
 
   if (dtype === 'fixed') {
-    discount = Math.min(r2(dval), gross);
+    discount = Math.min(r2(Math.max(0, dval)), gross);
   } else {
     dval = Math.max(0, Math.min(dval, 100));
     discount = r2((gross * dval) / 100);
@@ -109,6 +173,8 @@ export function compute(inv: Record<string, any>) {
     freight,
     fuel_surcharge: r2(fuel),
     fuel_hike: r2(hike),
+    lr_items: lrItems,
+    lr_count: lrItems.length,
     additional_items: extras,
     additional_total: additional,
     gross_amount: gross,
@@ -126,6 +192,8 @@ export function compute(inv: Record<string, any>) {
     grand_total: grand,
   };
 }
+
+export type InvoiceTotals = ReturnType<typeof compute>;
 
 const ONES = ['', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine', 'Ten',
   'Eleven', 'Twelve', 'Thirteen', 'Fourteen', 'Fifteen', 'Sixteen', 'Seventeen',

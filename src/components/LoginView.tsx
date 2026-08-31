@@ -1,8 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { Truck, Lock, Mail, AlertCircle, ArrowRight, CheckCircle2 } from 'lucide-react';
+import { Lock, Mail, ArrowRight, CheckCircle2, Eye, EyeOff } from 'lucide-react';
 import { useAuth } from '../context/AuthContext.js';
 import { apiRequest } from '../services/api.js';
 import { CompanySettings } from '../types.js';
+import { SslLogo } from './SslLogo.js';
+import { Button, Card, Field, Input, FormError, Modal, IconButton } from './ui.js';
 
 export const LoginView: React.FC = () => {
   const { login } = useAuth();
@@ -11,6 +13,7 @@ export const LoginView: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [companySettings, setCompanySettings] = useState<CompanySettings | null>(null);
+  const [showPassword, setShowPassword] = useState(false);
 
   useEffect(() => {
     apiRequest<CompanySettings>('/settings/company')
@@ -76,177 +79,149 @@ export const LoginView: React.FC = () => {
     }
   };
 
+  const brandName = companySettings?.name || 'SHREE SANWARIYA LOGISTICS';
+
   return (
-    <div className="min-h-screen bg-[#F4F6F9] flex flex-col justify-center py-12 sm:px-6 lg:px-8">
-      <div className="sm:mx-auto sm:w-full sm:max-w-md">
-        <h2 className="text-center text-2xl font-extrabold tracking-tight text-slate-900">
-          SHREE SANWARIYA LOGISTICS
-        </h2>
-        <p className="mt-1 text-center text-xs text-slate-500 font-medium">
-          GST Invoicing & Transportation Billing Portal
-        </p>
-      </div>
+    <div className="min-h-dvh bg-canvas flex flex-col justify-center px-4 py-10 sm:px-6">
+      <div className="mx-auto w-full max-w-md">
+        <div className="flex flex-col items-center text-center mb-6">
+          <span className="bg-surface border border-line rounded-2xl p-3 shadow-card mb-4">
+            <SslLogo className="h-12 w-auto" customLogoUrl={companySettings?.logo_url} />
+          </span>
+          <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-ink">{brandName}</h1>
+          <p className="mt-1 text-sm text-ink-faint">GST Invoicing &amp; Transportation Billing</p>
+        </div>
 
-      <div className="mt-8 sm:mx-auto sm:w-full sm:max-w-md">
-        <div className="bg-white py-8 px-5 shadow-xs sm:rounded-2xl sm:px-10 border border-slate-200">
-          {error && (
-            <div className="mb-4 rounded-xl bg-rose-50 p-3 border border-rose-200 flex items-start gap-2.5 text-xs text-rose-700">
-              <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
-              <span>{error}</span>
-            </div>
-          )}
+        <Card className="sm:p-7">
+          <form className="space-y-4" onSubmit={handleSubmit}>
+            <FormError message={error} />
 
-          <form className="space-y-5" onSubmit={handleSubmit}>
-            <div>
-              <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1.5">
-                Email Address
-              </label>
+            <Field label="Email address" htmlFor="login-email" required>
               <div className="relative">
-                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
-                  <Mail className="w-4 h-4" />
-                </div>
-                <input
+                <Mail className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-ink-faint pointer-events-none z-10" aria-hidden="true" />
+                <Input
                   id="login-email"
                   type="email"
                   required
+                  autoComplete="username"
+                  inputMode="email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  className="block w-full pl-9 pr-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 placeholder-slate-400 text-xs focus:outline-none focus:border-orange-500 transition"
-                  placeholder="admin@shreesanwariya.com"
+                  className="pl-9"
+                  placeholder="you@company.com"
                 />
               </div>
-            </div>
+            </Field>
 
-            <div>
-              <div className="flex items-center justify-between mb-1.5">
-                <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider">
-                  Password
-                </label>
+            <Field
+              label="Password"
+              htmlFor="login-password"
+              required
+              action={
                 <button
                   type="button"
-                  onClick={() => {
-                    setForgotEmail(email);
-                    setShowForgot(true);
-                  }}
-                  className="text-xs text-orange-600 hover:text-orange-700 font-medium transition"
+                  onClick={() => { setForgotEmail(email); setShowForgot(true); }}
+                  className="text-xs font-semibold text-accent-ink hover:underline cursor-pointer"
                 >
                   Forgot password?
                 </button>
-              </div>
+              }
+            >
               <div className="relative">
-                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
-                  <Lock className="w-4 h-4" />
-                </div>
-                <input
+                <Lock className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-ink-faint pointer-events-none z-10" aria-hidden="true" />
+                <Input
                   id="login-password"
-                  type="password"
+                  type={showPassword ? 'text' : 'password'}
                   required
+                  autoComplete="current-password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className="block w-full pl-9 pr-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 placeholder-slate-400 text-xs focus:outline-none focus:border-orange-500 transition"
-                  placeholder="••••••••"
+                  className="pl-9 pr-11"
+                  placeholder="Enter your password"
                 />
+                <IconButton
+                  label={showPassword ? 'Hide password' : 'Show password'}
+                  onClick={() => setShowPassword((v) => !v)}
+                  className="absolute right-1.5 top-1/2 -translate-y-1/2"
+                >
+                  {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </IconButton>
               </div>
-            </div>
+            </Field>
 
-            <button
+            <Button
               id="login-submit-btn"
               type="submit"
-              disabled={loading}
-              className="w-full flex justify-center items-center gap-2 py-2.5 px-4 rounded-xl shadow-xs text-xs font-semibold text-white bg-orange-600 hover:bg-orange-700 focus:outline-none transition disabled:opacity-50"
+              variant="primary"
+              size="lg"
+              fullWidth
+              loading={loading}
+              icon={!loading ? <ArrowRight className="w-4 h-4" /> : undefined}
             >
-              {loading ? 'Authenticating...' : 'Sign in to Billing Portal'}
-              <ArrowRight className="w-4 h-4" />
-            </button>
+              {loading ? 'Signing in…' : 'Sign in'}
+            </Button>
           </form>
-        </div>
+        </Card>
+
+        <p className="mt-5 text-center text-xs text-ink-faint">
+          GSTIN {companySettings?.gstin || '—'} · SAC 996511
+        </p>
       </div>
 
-      {/* Forgot Password Modal */}
       {showForgot && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-50">
-          <div className="bg-white border border-slate-200 rounded-2xl max-w-md w-full p-6 shadow-2xl text-slate-800">
-            <h3 className="text-base font-bold text-slate-900 mb-1">Reset Password</h3>
-            <p className="text-xs text-slate-500 mb-4">
-              Enter your registered email address to receive a secure password recovery token.
-            </p>
-
-            {resetSuccess ? (
-              <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-xl flex items-center gap-3 text-emerald-700 text-xs font-medium">
-                <CheckCircle2 className="w-5 h-5 text-emerald-600" />
-                <span>Password updated successfully! Redirecting...</span>
+        <Modal
+          onClose={() => setShowForgot(false)}
+          title="Reset password"
+          subtitle="We will generate a secure recovery token"
+          size="sm"
+        >
+          {resetSuccess ? (
+            <div className="p-4 bg-positive-soft border border-positive-line rounded-xl flex items-center gap-3 text-positive-ink text-sm font-medium">
+              <CheckCircle2 className="w-5 h-5 shrink-0" aria-hidden="true" />
+              <span>Password updated. Redirecting…</span>
+            </div>
+          ) : !resetToken ? (
+            <form onSubmit={handleForgot} className="space-y-4">
+              <Field label="Registered email" htmlFor="forgot-email" required>
+                <Input
+                  id="forgot-email"
+                  type="email"
+                  required
+                  autoComplete="username"
+                  value={forgotEmail}
+                  onChange={(e) => setForgotEmail(e.target.value)}
+                />
+              </Field>
+              <div className="flex justify-end gap-2">
+                <Button type="button" variant="secondary" onClick={() => setShowForgot(false)}>Cancel</Button>
+                <Button type="submit" variant="primary">Generate token</Button>
               </div>
-            ) : !resetToken ? (
-              <form onSubmit={handleForgot} className="space-y-4 text-xs">
-                <div>
-                  <label className="block text-slate-700 font-medium mb-1">Email</label>
-                  <input
-                    type="email"
-                    required
-                    value={forgotEmail}
-                    onChange={(e) => setForgotEmail(e.target.value)}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-900 focus:outline-none focus:border-orange-500"
-                  />
-                </div>
-                <div className="flex justify-end gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setShowForgot(false)}
-                    className="px-4 py-2 text-xs bg-slate-100 text-slate-700 rounded-xl hover:bg-slate-200"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="submit"
-                    className="px-4 py-2 text-xs bg-orange-600 text-white font-semibold rounded-xl hover:bg-orange-700 shadow-xs"
-                  >
-                    Generate Token
-                  </button>
-                </div>
-              </form>
-            ) : (
-              <form onSubmit={handleReset} className="space-y-4 text-xs">
-                {forgotMsg && <div className="text-xs text-emerald-600">{forgotMsg}</div>}
-                <div>
-                  <label className="block text-slate-700 font-medium mb-1">Reset Token</label>
-                  <input
-                    type="text"
-                    readOnly
-                    value={resetToken}
-                    className="w-full bg-slate-100 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-600 font-mono"
-                  />
-                </div>
-                <div>
-                  <label className="block text-slate-700 font-medium mb-1">New Password (min 6 chars)</label>
-                  <input
-                    type="password"
-                    required
-                    minLength={6}
-                    value={newPassword}
-                    onChange={(e) => setNewPassword(e.target.value)}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-900 focus:outline-none focus:border-orange-500"
-                    placeholder="Enter new password"
-                  />
-                </div>
-                <div className="flex justify-end gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setShowForgot(false)}
-                    className="px-4 py-2 text-xs bg-slate-100 text-slate-700 rounded-xl hover:bg-slate-200"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="submit"
-                    className="px-4 py-2 text-xs bg-orange-600 text-white font-semibold rounded-xl hover:bg-orange-700 shadow-xs"
-                  >
-                    Save New Password
-                  </button>
-                </div>
-              </form>
-            )}
-          </div>
-        </div>
+            </form>
+          ) : (
+            <form onSubmit={handleReset} className="space-y-4">
+              {forgotMsg && <p className="text-sm text-positive-ink">{forgotMsg}</p>}
+              <Field label="Reset token" htmlFor="reset-token" hint="Copied automatically — keep this private.">
+                <Input id="reset-token" type="text" readOnly value={resetToken} className="font-mono" />
+              </Field>
+              <Field label="New password" htmlFor="reset-pass" required hint="At least 6 characters.">
+                <Input
+                  id="reset-pass"
+                  type="password"
+                  required
+                  minLength={6}
+                  autoComplete="new-password"
+                  value={newPassword}
+                  onChange={(e) => setNewPassword(e.target.value)}
+                  placeholder="Enter new password"
+                />
+              </Field>
+              <div className="flex justify-end gap-2">
+                <Button type="button" variant="secondary" onClick={() => setShowForgot(false)}>Cancel</Button>
+                <Button type="submit" variant="primary">Save password</Button>
+              </div>
+            </form>
+          )}
+        </Modal>
       )}
     </div>
   );

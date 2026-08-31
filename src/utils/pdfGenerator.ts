@@ -1,75 +1,39 @@
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { Invoice, CompanySettings, BankAccount, Customer, Payment } from '../types.js';
-import { getLogoPngDataUrl } from './logoAsset.js';
+import { prepareLogoForPdf } from './logoAsset.js';
+import { formatINR, numberToWords } from './format.js';
 
-export function formatINR(val: number | undefined | null): string {
-  if (val === undefined || val === null) return '0.00';
-  return Number(val).toLocaleString('en-IN', {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  });
-}
+// Re-exported for backwards compatibility — prefer importing from './format.js'
+export { formatINR, numberToWords };
 
-const ONES = ['', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine', 'Ten',
-  'Eleven', 'Twelve', 'Thirteen', 'Fourteen', 'Fifteen', 'Sixteen', 'Seventeen',
-  'Eighteen', 'Nineteen'];
-const TENS = ['', '', 'Twenty', 'Thirty', 'Forty', 'Fifty', 'Sixty', 'Seventy', 'Eighty', 'Ninety'];
-
-function twoDigits(n: number): string {
-  if (n < 20) return ONES[n];
-  return (TENS[Math.floor(n / 10)] + (n % 10 ? ' ' + ONES[n % 10] : '')).trim();
-}
-
-export function numberToWords(amount: number): string {
-  let n = Math.round(amount);
-  if (n === 0) return 'Rupees Zero Only';
-
-  const parts: string[] = [];
-  const crore = Math.floor(n / 10000000);
-  n %= 10000000;
-  const lakh = Math.floor(n / 100000);
-  n %= 100000;
-  const thousand = Math.floor(n / 1000);
-  n %= 1000;
-  const hundred = Math.floor(n / 100);
-  const rest = n % 100;
-
-  if (crore) parts.push(`${twoDigits(crore)} Crore`);
-  if (lakh) parts.push(`${twoDigits(lakh)} Lakh`);
-  if (thousand) parts.push(`${twoDigits(thousand)} Thousand`);
-  if (hundred) parts.push(`${ONES[hundred]} Hundred`);
-  if (rest) parts.push(twoDigits(rest));
-
-  return `Rupees ${parts.join(' ')} Only`;
+/**
+ * Draws the company logo (uploaded or built-in) at the given position, preserving its
+ * aspect ratio, and returns the rendered height in mm (0 when no logo is available).
+ */
+async function drawLogo(doc: jsPDF, company: CompanySettings, x: number, top: number, width: number): Promise<number> {
+  try {
+    const logo = await prepareLogoForPdf(company.logo_url);
+    if (!logo) return 0;
+    const height = Math.round(width * (logo.height / logo.width) * 100) / 100;
+    doc.addImage(logo.dataUrl, 'JPEG', x, top, width, height, undefined, 'FAST');
+    return height;
+  } catch (err) {
+    console.warn('Could not render logo in PDF', err);
+    return 0;
+  }
 }
 
 export async function printInvoicePDF(inv: Invoice, company: CompanySettings, bank?: BankAccount) {
-  const doc = new jsPDF({
-    unit: 'mm',
-    format: 'a4',
-  });
+  const doc = new jsPDF({ unit: 'mm', format: 'a4', compress: true });
 
   const pageWidth = doc.internal.pageSize.getWidth();
   const margin = 12;
   const logoWidth = 42;
-  const logoHeight = 23.6;
   const logoTop = 10;
   const leftColWidth = pageWidth - margin * 2 - logoWidth - 5; // ~139mm
 
-  // Render Logo if available
-  try {
-    if (company.logo_url) {
-      doc.addImage(company.logo_url, 'PNG', pageWidth - margin - logoWidth, logoTop, logoWidth, logoHeight);
-    } else {
-      const logoDataUrl = await getLogoPngDataUrl();
-      if (logoDataUrl) {
-        doc.addImage(logoDataUrl, 'PNG', pageWidth - margin - logoWidth, logoTop, logoWidth, logoHeight);
-      }
-    }
-  } catch (err) {
-    console.warn('Could not render logo in PDF', err);
-  }
+  const logoHeight = await drawLogo(doc, company, pageWidth - margin - logoWidth, logoTop, logoWidth);
 
   // Dynamic Header Rendering (Left Column)
   let curY = 15;
@@ -126,6 +90,15 @@ export async function printInvoicePDF(inv: Invoice, company: CompanySettings, ba
   doc.setFont('helvetica', 'normal');
   doc.text(`GST Invoice under SAC ${inv.sac || '996511'} (Goods Transport)`, pageWidth - margin - 3, bandY + 4.5, { align: 'right' });
 
+  // Multi-LR bills: one line per LR / consignment
+  const lrItems = Array.isArray(inv.lr_items)
+    ? inv.lr_items.filter(l => l && (l.lr_no || Number(l.amount) > 0 || Number(l.weight) > 0))
+    : [];
+  const multiLr = lrItems.length > 1;
+  const lrTotalWeight = lrItems.reduce((acc, l) => acc + (Number(l.weight) || 0), 0);
+  const lrTotalFreight = lrItems.reduce((acc, l) => acc + (Number(l.amount) || 0), 0);
+  const lrRates = Array.from(new Set(lrItems.map(l => Number(l.rate_kg) || 0).filter(r => r > 0)));
+
   // Invoice & LR Meta Box
   autoTable(doc, {
     startY: bandY + 8.5,
@@ -140,9 +113,21 @@ export async function printInvoicePDF(inv: Invoice, company: CompanySettings, ba
     },
     body: [
       ['Invoice No.', inv.invoice_no || '—', 'Invoice Date', inv.invoice_date || '—'],
-      ['LR No.', inv.lr_no || '—', 'Shipment Date', inv.shipment_date || '—'],
+      [
+        multiLr ? 'LR Nos.' : 'LR No.',
+        multiLr ? `${lrItems.length} LRs — see Consignment Details below` : (inv.lr_no || '—'),
+        multiLr ? 'First LR Date' : 'Shipment Date',
+        (multiLr ? lrItems[0].lr_date : inv.shipment_date) || '—',
+      ],
       ['Origin', inv.origin || '—', 'Destination', inv.destination || '—'],
-      ['Weight (Kg)', inv.weight ? `${inv.weight} Kg` : '—', 'Rate per Kg', inv.rate_kg ? `Rs. ${inv.rate_kg}` : '—'],
+      [
+        multiLr ? 'Total Weight (Kg)' : 'Weight (Kg)',
+        (multiLr ? lrTotalWeight : inv.weight) ? `${formatINR(multiLr ? lrTotalWeight : inv.weight)} Kg` : '—',
+        'Rate per Kg',
+        multiLr
+          ? (lrRates.length === 1 ? `Rs. ${lrRates[0]}` : (lrRates.length > 1 ? 'As per LR' : '—'))
+          : (inv.rate_kg ? `Rs. ${inv.rate_kg}` : '—'),
+      ],
       ['Place of Supply', inv.place_of_supply || '—', 'Payment Terms', inv.payment_terms || '—'],
     ],
   });
@@ -174,11 +159,57 @@ export async function printInvoicePDF(inv: Invoice, company: CompanySettings, ba
     ],
   });
 
-  const partiesEndY = (doc as any).lastAutoTable.finalY || 95;
+  let partiesEndY = (doc as any).lastAutoTable.finalY || 95;
+
+  // Consignment / LR details table (only when the bill covers more than one LR)
+  if (multiLr) {
+    const lrRows: any[] = lrItems.map((l, i) => [
+      String(i + 1),
+      l.lr_no || '—',
+      l.lr_date || '—',
+      [l.origin, l.destination].filter(Boolean).join(' -> ') || '—',
+      l.weight ? formatINR(l.weight) : '—',
+      l.rate_kg ? formatINR(l.rate_kg) : '—',
+      formatINR(l.amount),
+    ]);
+    lrRows.push([
+      { content: `Total (${lrItems.length} LRs)`, colSpan: 4, styles: { fontStyle: 'bold', halign: 'right', fillColor: [248, 250, 252] } },
+      { content: formatINR(lrTotalWeight), styles: { fontStyle: 'bold', halign: 'right', fillColor: [248, 250, 252] } },
+      { content: '', styles: { fillColor: [248, 250, 252] } },
+      { content: formatINR(lrTotalFreight), styles: { fontStyle: 'bold', halign: 'right', fillColor: [248, 250, 252] } },
+    ]);
+
+    autoTable(doc, {
+      startY: partiesEndY + 3,
+      margin: { left: margin, right: margin },
+      theme: 'grid',
+      headStyles: { fillColor: [51, 65, 85], textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 7.5 },
+      styles: { fontSize: 7.5, cellPadding: 1.8, textColor: [15, 23, 42] },
+      columnStyles: {
+        0: { cellWidth: 8, halign: 'center' },
+        1: { cellWidth: 30, fontStyle: 'bold' },
+        2: { cellWidth: 22 },
+        3: { cellWidth: 52 },
+        4: { cellWidth: 24, halign: 'right' },
+        5: { cellWidth: 22, halign: 'right' },
+        6: { cellWidth: 28, halign: 'right', fontStyle: 'bold' },
+      },
+      head: [['#', 'LR / Bilty No', 'LR Date', 'From -> To', 'Weight (Kg)', 'Rate / Kg', 'Freight (Rs)']],
+      body: lrRows,
+    });
+    partiesEndY = (doc as any).lastAutoTable.finalY || partiesEndY + 30;
+  }
 
   // Charges Table
   const chargeRows: any[] = [
-    ['1', 'Freight Charges (Logistics / Transportation)', inv.sac || '996511', formatINR(inv.totals?.freight || inv.freight || 0)],
+    [
+      '1',
+      multiLr
+        ? `Freight Charges — ${lrItems.length} LRs (as per Consignment Details above)`
+        : 'Freight Charges (Logistics / Transportation)',
+      inv.sac || '996511',
+      formatINR(inv.totals?.freight || inv.freight || 0),
+    ],
   ];
 
   let itemIdx = 2;
@@ -325,27 +356,15 @@ export async function printInvoicePDF(inv: Invoice, company: CompanySettings, ba
 }
 
 export async function printReceiptPDF(payment: Payment, company: CompanySettings) {
-  const doc = new jsPDF({
-    unit: 'mm',
-    format: 'a4',
-  });
+  const doc = new jsPDF({ unit: 'mm', format: 'a4', compress: true });
 
   const pageWidth = doc.internal.pageSize.getWidth();
   const margin = 14;
   const logoWidth = 38;
-  const logoHeight = 21.4;
   const logoTop = 12;
   const leftColWidth = pageWidth - margin * 2 - logoWidth - 5;
 
-  // Render Logo if available
-  try {
-    const logoDataUrl = await getLogoPngDataUrl();
-    if (logoDataUrl) {
-      doc.addImage(logoDataUrl, 'PNG', pageWidth - margin - logoWidth, logoTop, logoWidth, logoHeight);
-    }
-  } catch (err) {
-    console.warn('Could not render logo in PDF', err);
-  }
+  const logoHeight = await drawLogo(doc, company, pageWidth - margin - logoWidth, logoTop, logoWidth);
 
   // Dynamic Header
   let curY = 16;
@@ -438,32 +457,16 @@ export async function printStatementPDF(
   invoices: Invoice[] = [],
   bank?: BankAccount
 ) {
-  const doc = new jsPDF({
-    unit: 'mm',
-    format: 'a4',
-  });
+  const doc = new jsPDF({ unit: 'mm', format: 'a4', compress: true });
 
   const pageWidth = doc.internal.pageSize.getWidth();
   const pageHeight = doc.internal.pageSize.getHeight();
   const margin = 12;
   const logoWidth = 38;
-  const logoHeight = 21.4;
   const logoTop = 10;
   const leftColWidth = pageWidth - margin * 2 - logoWidth - 5;
 
-  // Render Logo if available
-  try {
-    if (company.logo_url) {
-      doc.addImage(company.logo_url, 'PNG', pageWidth - margin - logoWidth, logoTop, logoWidth, logoHeight);
-    } else {
-      const logoDataUrl = await getLogoPngDataUrl();
-      if (logoDataUrl) {
-        doc.addImage(logoDataUrl, 'PNG', pageWidth - margin - logoWidth, logoTop, logoWidth, logoHeight);
-      }
-    }
-  } catch (err) {
-    console.warn('Could not render logo in PDF', err);
-  }
+  const logoHeight = await drawLogo(doc, company, pageWidth - margin - logoWidth, logoTop, logoWidth);
 
   // Dynamic Header
   let curY = 14;

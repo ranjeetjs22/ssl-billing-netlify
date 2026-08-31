@@ -84,8 +84,14 @@ settingsRouter.post('/settings/logo', requireModule('settings'), upload.single('
     }
 
     const filename = `logo_${Date.now()}.${ext}`;
-    fileStore.set(filename, { buffer: file.buffer, mime: file.mimetype });
-    const logo_url = `/api/files/${filename}`;
+    let logo_url: string;
+    if (db.hasSupabase()) {
+      // Persist in Supabase Storage — serverless instances have no durable disk/memory.
+      logo_url = await db.uploadPublicFile('logos', filename, new Uint8Array(file.buffer), file.mimetype || `image/${ext === 'jpg' ? 'jpeg' : ext}`);
+    } else {
+      fileStore.set(filename, { buffer: file.buffer, mime: file.mimetype });
+      logo_url = `/api/files/${filename}`;
+    }
 
     const company = await db.selectOne('company_settings');
     if (company && company.id) {
@@ -221,7 +227,7 @@ settingsRouter.post('/users', requireAdmin, async (req: Request, res: Response) 
 
     const created = await db.insert('app_users', {
       email: cleanEmail,
-      password_hash: hashPassword(password || 'Password@123'),
+      password_hash: await hashPassword(password || 'Password@123'),
       full_name: full_name || '',
       role,
       is_active: true,
@@ -263,7 +269,7 @@ settingsRouter.put('/users/:user_id', requireAdmin, async (req: Request, res: Re
       if (password.length < 6) {
         return res.status(400).json({ detail: 'Password must be at least 6 characters.' });
       }
-      data.password_hash = hashPassword(password);
+      data.password_hash = await hashPassword(password);
     }
 
     const updated = await db.update('app_users', { id: `eq.${userId}` }, data);

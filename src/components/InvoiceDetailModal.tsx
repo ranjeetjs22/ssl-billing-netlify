@@ -14,7 +14,8 @@ import {
   Edit3
 } from 'lucide-react';
 import { Invoice, CompanySettings, BankAccount } from '../types.js';
-import { formatINR, printInvoicePDF, numberToWords } from '../utils/pdfGenerator.js';
+import { formatINR, numberToWords } from '../utils/format.js';
+import { printInvoicePDF } from '../utils/pdf.js';
 import { apiRequest } from '../services/api.js';
 import { SslLogo } from './SslLogo.js';
 import { DeleteInvoiceModal } from './DeleteInvoiceModal.js';
@@ -58,6 +59,10 @@ export const InvoiceDetailModal: React.FC<InvoiceDetailModalProps> = ({
     };
     loadDetails();
   }, [initialInvoice.id]);
+
+  const lrItems = Array.isArray(inv.lr_items)
+    ? inv.lr_items.filter(l => l && (l.lr_no || Number(l.amount) > 0 || Number(l.weight) > 0))
+    : [];
 
   const totals = inv.totals || {
     freight: inv.freight || 0,
@@ -229,14 +234,61 @@ export const InvoiceDetailModal: React.FC<InvoiceDetailModalProps> = ({
 
           {/* Consignment Logistics */}
           <div className="bg-slate-50 p-4 rounded-xl border border-slate-200">
-            <div className="text-[11px] font-bold text-orange-600 uppercase tracking-wider mb-2 flex items-center gap-1.5">
-              <Truck className="w-3.5 h-3.5" />
-              Consignment & LR Tracking Details
+            <div className="text-[11px] font-bold text-orange-600 uppercase tracking-wider mb-2 flex items-center justify-between gap-1.5">
+              <span className="flex items-center gap-1.5">
+                <Truck className="w-3.5 h-3.5" />
+                Consignment & LR Tracking Details
+              </span>
+              {lrItems.length > 1 && (
+                <span className="px-1.5 py-0.5 rounded-md bg-orange-100 text-orange-700 text-[10px] font-bold normal-case tracking-normal">
+                  {lrItems.length} LRs on this bill
+                </span>
+              )}
             </div>
+
+            {lrItems.length > 1 && (
+              <div className="overflow-x-auto mb-3 bg-white rounded-lg border border-slate-200">
+                <table className="w-full text-xs text-left min-w-[560px]">
+                  <thead className="bg-slate-100 text-slate-500 uppercase text-[10px] border-b border-slate-200">
+                    <tr>
+                      <th className="py-2 px-2.5">#</th>
+                      <th className="py-2 px-2.5">LR / Bilty No</th>
+                      <th className="py-2 px-2.5">LR Date</th>
+                      <th className="py-2 px-2.5">Route</th>
+                      <th className="py-2 px-2.5 text-right">Weight (Kg)</th>
+                      <th className="py-2 px-2.5 text-right">Rate / Kg</th>
+                      <th className="py-2 px-2.5 text-right">Freight (₹)</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {lrItems.map((l, i) => (
+                      <tr key={i}>
+                        <td className="py-1.5 px-2.5 text-slate-400 font-mono">{i + 1}</td>
+                        <td className="py-1.5 px-2.5 font-mono font-bold text-slate-900">{l.lr_no || '—'}</td>
+                        <td className="py-1.5 px-2.5 text-slate-600 font-mono">{l.lr_date || '—'}</td>
+                        <td className="py-1.5 px-2.5 text-slate-700">{[l.origin, l.destination].filter(Boolean).join(' → ') || '—'}</td>
+                        <td className="py-1.5 px-2.5 text-right font-mono">{l.weight ? formatINR(l.weight) : '—'}</td>
+                        <td className="py-1.5 px-2.5 text-right font-mono">{l.rate_kg ? formatINR(l.rate_kg) : '—'}</td>
+                        <td className="py-1.5 px-2.5 text-right font-mono font-bold text-slate-900">₹{formatINR(l.amount)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                  <tfoot className="bg-slate-50 border-t border-slate-200 font-semibold">
+                    <tr>
+                      <td colSpan={4} className="py-1.5 px-2.5 text-right text-slate-600">Total ({lrItems.length} LRs)</td>
+                      <td className="py-1.5 px-2.5 text-right font-mono">{formatINR(lrItems.reduce((a, l) => a + (Number(l.weight) || 0), 0))}</td>
+                      <td></td>
+                      <td className="py-1.5 px-2.5 text-right font-mono text-orange-600">₹{formatINR(totals.freight)}</td>
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
+            )}
+
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
               <div>
-                <span className="text-slate-500">LR / Bilty No:</span>
-                <div className="font-mono font-bold text-slate-900">{inv.lr_no || '—'}</div>
+                <span className="text-slate-500">{lrItems.length > 1 ? 'LR Numbers:' : 'LR / Bilty No:'}</span>
+                <div className="font-mono font-bold text-slate-900 break-words">{inv.lr_no || '—'}</div>
               </div>
               <div>
                 <span className="text-slate-500">Route:</span>
@@ -268,7 +320,10 @@ export const InvoiceDetailModal: React.FC<InvoiceDetailModalProps> = ({
               </thead>
               <tbody className="divide-y divide-slate-100">
                 <tr>
-                  <td className="py-2 px-3 text-slate-800">Freight Charges (Logistics / Transportation)</td>
+                  <td className="py-2 px-3 text-slate-800">
+                    Freight Charges (Logistics / Transportation)
+                    {lrItems.length > 1 && <span className="text-slate-500"> — {lrItems.length} LRs as per consignment details</span>}
+                  </td>
                   <td className="py-2 px-3 text-slate-500 font-mono">{inv.sac || '996511'}</td>
                   <td className="py-2 px-3 text-right font-mono font-bold text-slate-900">₹{formatINR(totals.freight)}</td>
                 </tr>

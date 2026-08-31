@@ -10,7 +10,7 @@ import {
    Info
  } from 'lucide-react';
 import { Invoice } from '../types.js';
-import { formatINR } from '../utils/pdfGenerator.js';
+import { formatINR } from '../utils/format.js';
 import { apiRequest } from '../services/api.js';
 
 interface DeleteInvoiceModalProps {

@@ -22,6 +22,50 @@ async function logAudit(userEmail: string, action: string, entityId: string, old
   }
 }
 
+// Human-friendly labels for fields that may not exist as columns in an older Supabase schema.
+const FOLDABLE_FIELDS: Record<string, string> = {
+  contact_person: 'Contact Person',
+  whatsapp: 'WhatsApp',
+  shipping_address: 'Shipping Address',
+  credit_limit: 'Credit Limit',
+};
+
+/**
+ * When the DB schema lacks a column (see db.insertEx), keep the information anyway by
+ * appending it to `notes`, and echo the original values back so the UI stays consistent.
+ */
+async function preserveDroppedFields(table: string, row: any, data: Record<string, any>, dropped: string[]) {
+  if (!row || dropped.length === 0) return row;
+
+  const lines: string[] = [];
+  for (const col of dropped) {
+    const val = data[col];
+    if (val === undefined || val === null || String(val).trim() === '' || Number(val) === 0 && col === 'credit_limit') continue;
+    const label = FOLDABLE_FIELDS[col];
+    if (label) lines.push(`${label}: ${String(val).trim()}`);
+  }
+
+  let merged = { ...row };
+  for (const col of dropped) {
+    if (data[col] !== undefined) merged[col] = data[col];
+  }
+
+  if (lines.length > 0 && !dropped.includes('notes')) {
+    const existing = String(row.notes || '').trim();
+    const missingLines = lines.filter(l => !existing.includes(l));
+    if (missingLines.length > 0) {
+      const notes = [existing, ...missingLines].filter(Boolean).join('\n');
+      try {
+        const updated = await db.update(table, { id: `eq.${row.id}` }, { notes });
+        if (updated) merged = { ...merged, ...updated, notes };
+      } catch (e) {
+        console.warn(`[Customers] Could not fold dropped fields into notes:`, (e as Error).message);
+      }
+    }
+  }
+  return merged;
+}
+
 customerRouter.get('/customers', requireModule('customers'), async (req: Request, res: Response) => {
   try {
     const search = (req.query.search as string || '').trim().toLowerCase();
@@ -32,16 +76,16 @@ customerRouter.get('/customers', requireModule('customers'), async (req: Request
     const page = parseInt(req.query.page as string, 10) || 1;
     const pageSize = parseInt(req.query.page_size as string, 10) || 50;
 
-    let rows = await db.select('customers', {});
-    if (active !== undefined) {
-      rows = rows.filter((r: any) => Boolean(r.is_active ?? true) === active);
-    }
-
-    // Fetch all invoices and payments to compute exact, live financial metrics
-    const [allInvoices, allPayments] = await Promise.all([
+    // Fetch customers, invoices and payments together to compute exact, live financial metrics
+    const [rowsRaw, allInvoices, allPayments] = await Promise.all([
+      db.select('customers', {}),
       db.select('invoices', {}),
       db.select('payments', {}),
     ]);
+    let rows = rowsRaw;
+    if (active !== undefined) {
+      rows = rows.filter((r: any) => Boolean(r.is_active ?? true) === active);
+    }
 
     // Build paid map by invoice_id
     const paidByInvoice: Record<string, number> = {};
@@ -237,7 +281,11 @@ customerRouter.get('/customers/export', requireModule('customers'), async (_req:
 
 // Helper function to build Customer Statement & Ledger with date/month filtering
 async function buildCustomerStatement(custId: string, query: Record<string, any>) {
-  const cust = await db.selectOne('customers', { id: `eq.${custId}` });
+  const [cust, allInvoices, allPayments] = await Promise.all([
+    db.selectOne('customers', { id: `eq.${custId}` }),
+    db.select('invoices', { customer_id: `eq.${custId}`, order: 'invoice_date.asc' }),
+    db.select('payments', { order: 'payment_date.asc' }),
+  ]);
   if (!cust) return null;
 
   const month = query.month as string; // '2026-08'
@@ -253,9 +301,6 @@ async function buildCustomerStatement(custId: string, query: Record<string, any>
     endDate = `${month}-${String(lastDay).padStart(2, '0')}`;
   }
 
-  // Fetch all invoices and payments for customer
-  const allInvoices = await db.select('invoices', { customer_id: `eq.${custId}`, order: 'invoice_date.asc' });
-  const allPayments = await db.select('payments', { order: 'payment_date.asc' });
   const custPayments = allPayments.filter((p: any) => {
     if (p.customer_id === custId) return true;
     const inv = allInvoices.find((i: any) => i.id === p.invoice_id);
@@ -526,7 +571,8 @@ customerRouter.post('/customers', requireModule('customers'), async (req: Reques
       created_at: new Date().toISOString(),
     };
 
-    const row = await db.insert('customers', data);
+    const { row: createdRow, dropped } = await db.insertEx('customers', data);
+    const row = await preserveDroppedFields('customers', createdRow, data, dropped);
     if (user && user.email) {
       await logAudit(user.email, 'Customer created', row.id, null, { name: row.name });
     }
@@ -546,7 +592,9 @@ customerRouter.put('/customers/:customer_id', requireModule('customers'), async 
     }
 
     const data = { ...req.body, updated_at: new Date().toISOString() };
-    const row = await db.update('customers', { id: `eq.${custId}` }, data);
+    delete data.id;
+    const { row: updatedRow, dropped } = await db.updateEx('customers', { id: `eq.${custId}` }, data);
+    const row = await preserveDroppedFields('customers', updatedRow, data, dropped);
 
     const user = (req as any).user;
     await logAudit(user.email, 'Customer modified', custId, { name: old.name }, { name: row.name });

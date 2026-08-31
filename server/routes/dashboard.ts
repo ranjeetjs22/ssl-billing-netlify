@@ -11,10 +11,12 @@ const handleDashboard = async (req: Request, res: Response) => {
     const fromDate = (req.query.from_date || req.query.from) as string;
     const toDate = (req.query.to_date || req.query.to) as string;
 
-    let invoices = await db.select('invoices', { order: 'invoice_date.asc' });
-    let payments = await db.select('payments');
-    let expenses = await db.select('expenses');
-    let customers = await db.select('customers');
+    let [invoices, payments, expenses, customers] = await Promise.all([
+      db.select('invoices', { order: 'invoice_date.asc' }),
+      db.select('payments'),
+      db.select('expenses'),
+      db.select('customers'),
+    ]);
 
     if (fromDate) {
       invoices = invoices.filter((i: any) => (i.invoice_date || '') >= fromDate);

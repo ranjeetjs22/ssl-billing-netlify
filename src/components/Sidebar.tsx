@@ -1,27 +1,41 @@
-import React, { useState } from 'react';
-import { 
-  LayoutDashboard, 
-  FileText, 
-  Users, 
-  CreditCard, 
-  Settings, 
-  UserCheck, 
-  ShieldAlert, 
-  Truck, 
-  ChevronDown, 
-  ChevronRight, 
-  LogOut, 
-  PlusCircle, 
-  Receipt, 
+import React from 'react';
+import {
+  LayoutDashboard,
+  FileText,
+  Users,
+  CreditCard,
+  Settings,
+  UserCheck,
+  ShieldAlert,
+  LogOut,
+  Plus,
   AlertTriangle,
-  Building,
-  Landmark,
-  FileCheck2,
-  X
+  X,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext.js';
 import { CompanySettings } from '../types.js';
 import { SslLogo } from './SslLogo.js';
+import { cx, IconButton } from './ui.js';
+
+export interface NavItem {
+  key: string;
+  label: string;
+  shortLabel: string;
+  icon: React.ComponentType<{ className?: string }>;
+  module: string;
+  adminOnly?: boolean;
+}
+
+/** Single source of truth for navigation — the sidebar and the mobile bottom bar
+ *  both read this, so the two can never drift apart. */
+export const NAV_ITEMS: NavItem[] = [
+  { key: 'dashboard', label: 'Dashboard', shortLabel: 'Home', icon: LayoutDashboard, module: 'dashboard' },
+  { key: 'invoices', label: 'Invoices', shortLabel: 'Invoices', icon: FileText, module: 'invoices' },
+  { key: 'payments', label: 'Payments', shortLabel: 'Payments', icon: CreditCard, module: 'payments' },
+  { key: 'customers', label: 'Customers', shortLabel: 'Customers', icon: Users, module: 'customers' },
+  { key: 'settings', label: 'Settings', shortLabel: 'Settings', icon: Settings, module: 'settings' },
+  { key: 'users', label: 'Users & Roles', shortLabel: 'Users', icon: UserCheck, module: 'users', adminOnly: true },
+];
 
 interface SidebarProps {
   activeTab: string;
@@ -40,8 +54,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
   activeTab,
   setActiveTab,
   onNewInvoice,
-  onNewCustomer,
-  onReceivePayment,
   onViewOverdue,
   onOpenAuditLogs,
   isOpenMobile,
@@ -49,8 +61,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
   companySettings,
 }) => {
   const { user, logout } = useAuth();
-  const [invoicesOpen, setInvoicesOpen] = useState(true);
-  const [settingsOpen, setSettingsOpen] = useState(true);
 
   const hasModule = (mod: string) => {
     if (!user) return false;
@@ -58,269 +68,231 @@ export const Sidebar: React.FC<SidebarProps> = ({
     return user.modules?.includes(mod);
   };
 
+  const visibleItems = NAV_ITEMS.filter(
+    (i) => hasModule(i.module) && (!i.adminOnly || user?.role === 'admin')
+  );
+
   const handleNavClick = (tab: string) => {
     setActiveTab(tab);
     setIsOpenMobile(false);
   };
 
+  // Close the drawer on Escape (mobile)
+  React.useEffect(() => {
+    if (!isOpenMobile) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setIsOpenMobile(false); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [isOpenMobile, setIsOpenMobile]);
+
   return (
     <>
-      {/* Mobile Backdrop */}
+      {/* Backdrop — strong enough to isolate the drawer from the page behind it */}
       {isOpenMobile && (
-        <div 
-          className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-40 lg:hidden"
+        <div
+          className="fixed inset-0 bg-navy-950/60 backdrop-blur-[2px] z-40 lg:hidden animate-fade-in"
           onClick={() => setIsOpenMobile(false)}
+          aria-hidden="true"
         />
       )}
 
-      {/* Sidebar Container */}
-      <aside className={`
-        fixed top-0 bottom-0 left-0 z-50 w-64 bg-[#0B132B] text-slate-300 flex flex-col transition-transform duration-300 ease-in-out border-r border-slate-800/80
-        ${isOpenMobile ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
-      `}>
-        {/* Brand Header */}
-        <div className="h-20 px-3.5 flex items-center justify-between border-b border-slate-800/80 bg-[#0B132B]">
-          <div 
-            className="flex items-center gap-2.5 cursor-pointer select-none overflow-hidden"
+      <aside
+        aria-label="Main navigation"
+        className={cx(
+          'fixed top-0 bottom-0 left-0 z-50 w-[17rem] bg-navy-900 text-navy-100 flex flex-col',
+          'border-r border-white/5 transition-transform duration-300 ease-out pt-safe',
+          isOpenMobile ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'
+        )}
+      >
+        {/* Brand */}
+        <div className="h-16 px-3 flex items-center justify-between border-b border-white/5 shrink-0">
+          <button
             onClick={() => handleNavClick('dashboard')}
+            className="flex items-center gap-2.5 min-w-0 rounded-xl p-1 -m-1 cursor-pointer hover:bg-white/5 transition-colors"
           >
-            <div className="bg-white/95 rounded-xl p-1 shadow-md shadow-orange-600/10 shrink-0 flex items-center justify-center max-w-[65px] max-h-11 overflow-hidden">
-              <SslLogo className="h-9 w-auto max-h-9 max-w-[60px]" customLogoUrl={companySettings?.logo_url} />
-            </div>
-            <div className="min-w-0">
-              <div className="font-extrabold text-[13px] tracking-tight text-white leading-tight truncate">
-                SHREE SANWARIYA
-              </div>
-              <div className="text-[10px] font-bold text-orange-400 tracking-wider flex items-center gap-1">
-                <span>LOGISTICS</span>
-                <span className="w-1 h-1 rounded-full bg-emerald-400"></span>
-                <span className="text-[9px] text-emerald-400 uppercase font-semibold">GST APP</span>
-              </div>
-            </div>
-          </div>
+            <span className="bg-white rounded-lg p-1 shrink-0 flex items-center justify-center w-11 h-9 overflow-hidden">
+              <SslLogo className="h-7 w-auto max-w-[38px]" customLogoUrl={companySettings?.logo_url} />
+            </span>
+            <span className="min-w-0 text-left">
+              <span className="block font-bold text-sm text-white leading-tight truncate">
+                {companySettings?.name?.split(' ').slice(0, 2).join(' ') || 'SHREE SANWARIYA'}
+              </span>
+              <span className="block text-[11px] font-semibold text-brand-400 tracking-wide">GST Billing</span>
+            </span>
+          </button>
 
-          <button 
+          <IconButton
+            label="Close navigation"
             onClick={() => setIsOpenMobile(false)}
-            className="p-1.5 text-slate-400 hover:text-white rounded-lg lg:hidden"
+            className="lg:hidden text-navy-100 hover:bg-white/10 hover:text-white"
           >
             <X className="w-5 h-5" />
-          </button>
+          </IconButton>
         </div>
 
-        {/* Navigation Items */}
-        <div className="flex-1 overflow-y-auto px-3 py-4 space-y-1.5 custom-scrollbar text-xs">
-          {/* Dashboard */}
-          {hasModule('dashboard') && (
+        {/* Primary action — one clear CTA, visually dominant */}
+        {hasModule('invoices') && (
+          <div className="px-3 pt-3 shrink-0">
             <button
-              id="sidebar-dashboard-btn"
-              onClick={() => handleNavClick('dashboard')}
-              className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl font-medium transition-all ${
-                activeTab === 'dashboard'
-                  ? 'bg-orange-600 text-white font-semibold shadow-md shadow-orange-600/20'
-                  : 'text-slate-300 hover:bg-slate-800/60 hover:text-white'
-              }`}
+              onClick={() => { handleNavClick('invoices'); onNewInvoice(); }}
+              className="w-full inline-flex items-center justify-center gap-2 min-h-[44px] rounded-xl bg-accent-strong
+                         text-on-accent font-semibold text-sm cursor-pointer shadow-raised
+                         hover:bg-accent-strong-hover active:scale-[0.98] transition-[background-color,transform] duration-150"
             >
-              <LayoutDashboard className="w-4 h-4 shrink-0" />
-              <span className="text-sm">Dashboard</span>
+              <Plus className="w-4 h-4" aria-hidden="true" />
+              New Invoice
             </button>
-          )}
+          </div>
+        )}
 
-          {/* Invoices Group */}
-          {hasModule('invoices') && (
-            <div className="space-y-1">
-              <div className="flex items-center justify-between">
-                <button
-                  id="sidebar-invoices-btn"
-                  onClick={() => handleNavClick('invoices')}
-                  className={`flex-1 flex items-center gap-3 px-3.5 py-2.5 rounded-xl font-medium transition-all ${
-                    activeTab === 'invoices'
-                      ? 'bg-orange-600 text-white font-semibold shadow-md shadow-orange-600/20'
-                      : 'text-slate-300 hover:bg-slate-800/60 hover:text-white'
-                  }`}
-                >
-                  <FileText className="w-4 h-4 shrink-0" />
-                  <span className="text-sm">Invoices</span>
-                </button>
-                <button
-                  onClick={() => setInvoicesOpen(!invoicesOpen)}
-                  className="p-2 text-slate-400 hover:text-white rounded-lg"
-                >
-                  {invoicesOpen ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
-                </button>
-              </div>
+        {/* Navigation */}
+        <nav className="flex-1 overflow-y-auto px-3 py-3 space-y-1">
+          {visibleItems.map((item) => {
+            const Icon = item.icon;
+            const active = activeTab === item.key;
+            return (
+              <button
+                key={item.key}
+                id={`sidebar-${item.key}-btn`}
+                onClick={() => handleNavClick(item.key)}
+                aria-current={active ? 'page' : undefined}
+                className={cx(
+                  'w-full flex items-center gap-3 px-3 min-h-[44px] rounded-xl text-sm font-medium cursor-pointer',
+                  'transition-colors duration-150',
+                  active
+                    ? 'bg-white/10 text-white font-semibold'
+                    : 'text-navy-100/90 hover:bg-white/5 hover:text-white'
+                )}
+              >
+                {/* Active marker is a shape, not just colour */}
+                <span
+                  className={cx('w-1 h-5 rounded-full shrink-0 -ml-1', active ? 'bg-accent' : 'bg-transparent')}
+                  aria-hidden="true"
+                />
+                <Icon className="w-[18px] h-[18px] shrink-0" aria-hidden="true" />
+                <span className="truncate">{item.label}</span>
+              </button>
+            );
+          })}
 
-              {invoicesOpen && (
-                <div className="pl-9 pr-1 space-y-1 text-xs">
-                  <button
-                    onClick={() => {
-                      handleNavClick('invoices');
-                      onNewInvoice();
-                    }}
-                    className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-slate-400 hover:text-orange-400 hover:bg-slate-800/40 text-left transition"
-                  >
-                    <PlusCircle className="w-3.5 h-3.5 text-orange-500" />
-                    <span>+ New Tax Invoice</span>
-                  </button>
-                  <button
-                    onClick={() => {
-                      handleNavClick('invoices');
-                      onViewOverdue();
-                    }}
-                    className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-slate-400 hover:text-rose-400 hover:bg-slate-800/40 text-left transition"
-                  >
-                    <AlertTriangle className="w-3.5 h-3.5 text-rose-400" />
-                    <span>Overdue Invoices</span>
-                  </button>
-                </div>
+          {(hasModule('invoices') || user?.role === 'admin') && (
+            <div className="pt-3 mt-2 border-t border-white/5 space-y-1">
+              <p className="px-3 pb-1 text-[11px] font-semibold uppercase tracking-wider text-navy-100/70">Tools</p>
+
+              {hasModule('invoices') && (
+                <button
+                  onClick={onViewOverdue}
+                  className="w-full flex items-center gap-3 px-3 min-h-[44px] rounded-xl text-sm font-medium
+                             text-navy-100/90 hover:bg-white/5 hover:text-white cursor-pointer transition-colors duration-150"
+                >
+                  <AlertTriangle className="w-[18px] h-[18px] shrink-0 text-warning" aria-hidden="true" />
+                  <span className="truncate">Overdue &amp; Reminders</span>
+                </button>
+              )}
+
+              {user?.role === 'admin' && (
+                <button
+                  onClick={onOpenAuditLogs}
+                  className="w-full flex items-center gap-3 px-3 min-h-[44px] rounded-xl text-sm font-medium
+                             text-navy-100/90 hover:bg-white/5 hover:text-white cursor-pointer transition-colors duration-150"
+                >
+                  <ShieldAlert className="w-[18px] h-[18px] shrink-0" aria-hidden="true" />
+                  <span className="truncate">Audit Logs</span>
+                </button>
               )}
             </div>
           )}
+        </nav>
 
-          {/* Payments */}
-          {hasModule('payments') && (
-            <div className="flex items-center justify-between">
-              <button
-                id="sidebar-payments-btn"
-                onClick={() => handleNavClick('payments')}
-                className={`flex-1 flex items-center gap-3 px-3.5 py-2.5 rounded-xl font-medium transition-all ${
-                  activeTab === 'payments'
-                    ? 'bg-orange-600 text-white font-semibold shadow-md shadow-orange-600/20'
-                    : 'text-slate-300 hover:bg-slate-800/60 hover:text-white'
-                }`}
-              >
-                <CreditCard className="w-4 h-4 shrink-0" />
-                <span className="text-sm">Payments</span>
-              </button>
-              <button
-                onClick={onReceivePayment}
-                title="Quick Receive Payment"
-                className="p-2 text-slate-400 hover:text-white hover:bg-slate-800/60 rounded-xl transition"
-              >
-                <PlusCircle className="w-3.5 h-3.5" />
-              </button>
-            </div>
-          )}
-
-          {/* Customers */}
-          {hasModule('customers') && (
-            <div className="flex items-center justify-between">
-              <button
-                id="sidebar-customers-btn"
-                onClick={() => handleNavClick('customers')}
-                className={`flex-1 flex items-center gap-3 px-3.5 py-2.5 rounded-xl font-medium transition-all ${
-                  activeTab === 'customers'
-                    ? 'bg-orange-600 text-white font-semibold shadow-md shadow-orange-600/20'
-                    : 'text-slate-300 hover:bg-slate-800/60 hover:text-white'
-                }`}
-              >
-                <Users className="w-4 h-4 shrink-0" />
-                <span className="text-sm">Customers</span>
-              </button>
-              <button
-                onClick={onNewCustomer}
-                title="Quick Add Customer"
-                className="p-2 text-slate-400 hover:text-white hover:bg-slate-800/60 rounded-xl transition"
-              >
-                <PlusCircle className="w-3.5 h-3.5" />
-              </button>
-            </div>
-          )}
-
-          {/* Settings Group */}
-          {hasModule('settings') && (
-            <div className="space-y-1 pt-1">
-              <div className="flex items-center justify-between">
-                <button
-                  id="sidebar-settings-btn"
-                  onClick={() => handleNavClick('settings')}
-                  className={`flex-1 flex items-center gap-3 px-3.5 py-2.5 rounded-xl font-medium transition-all ${
-                    activeTab === 'settings'
-                      ? 'bg-orange-600 text-white font-semibold shadow-md shadow-orange-600/20'
-                      : 'text-slate-300 hover:bg-slate-800/60 hover:text-white'
-                  }`}
-                >
-                  <Settings className="w-4 h-4 shrink-0" />
-                  <span className="text-sm">Settings</span>
-                </button>
-                <button
-                  onClick={() => setSettingsOpen(!settingsOpen)}
-                  className="p-2 text-slate-400 hover:text-white rounded-lg"
-                >
-                  {settingsOpen ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
-                </button>
-              </div>
-
-              {settingsOpen && (
-                <div className="pl-9 pr-1 space-y-1 text-xs">
-                  <button
-                    onClick={() => handleNavClick('settings')}
-                    className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800/40 text-left transition"
-                  >
-                    <Building className="w-3.5 h-3.5" />
-                    <span>Company & GST</span>
-                  </button>
-                  <button
-                    onClick={() => handleNavClick('settings')}
-                    className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800/40 text-left transition"
-                  >
-                    <Landmark className="w-3.5 h-3.5" />
-                    <span>Bank Details</span>
-                  </button>
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* User Management */}
-          {hasModule('users') && user?.role === 'admin' && (
-            <button
-              id="sidebar-users-btn"
-              onClick={() => handleNavClick('users')}
-              className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl font-medium transition-all ${
-                activeTab === 'users'
-                  ? 'bg-orange-600 text-white font-semibold shadow-md shadow-orange-600/20'
-                  : 'text-slate-300 hover:bg-slate-800/60 hover:text-white'
-              }`}
+        {/* Account — sign out kept visually separate from navigation */}
+        <div className="p-3 border-t border-white/5 shrink-0 pb-safe">
+          <div className="flex items-center gap-2 p-2 rounded-xl bg-white/5">
+            <span
+              className="w-9 h-9 rounded-full bg-accent-strong text-on-accent font-bold text-sm flex items-center justify-center shrink-0"
+              aria-hidden="true"
             >
-              <UserCheck className="w-4 h-4 shrink-0" />
-              <span className="text-sm">Users & Permissions</span>
-            </button>
-          )}
-
-          {/* Audit Logs Trigger */}
-          {user?.role === 'admin' && (
-            <button
-              onClick={onOpenAuditLogs}
-              className="w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-slate-400 hover:bg-slate-800/60 hover:text-white font-medium transition-all"
-            >
-              <ShieldAlert className="w-4 h-4 shrink-0 text-orange-400" />
-              <span className="text-sm">Audit & Security Logs</span>
-            </button>
-          )}
-        </div>
-
-        {/* User Profile & Logout Bottom Section */}
-        <div className="p-3 border-t border-slate-800/80 bg-[#0B132B]/80">
-          <div className="flex items-center justify-between p-2 rounded-xl bg-slate-900/60 border border-slate-800/60">
-            <div className="min-w-0 pr-2">
-              <div className="font-semibold text-white text-xs truncate">
+              {(user?.full_name || user?.email || '?').charAt(0).toUpperCase()}
+            </span>
+            <span className="min-w-0 flex-1">
+              <span className="block font-semibold text-white text-sm truncate">
                 {user?.full_name || user?.email}
-              </div>
-              <div className="text-[10px] text-orange-400 uppercase font-medium">
-                {user?.role} · Online
-              </div>
-            </div>
-
-            <button
+              </span>
+              <span className="block text-[11px] text-navy-100/80 capitalize">{user?.role}</span>
+            </span>
+            <IconButton
+              label="Sign out"
               onClick={logout}
-              title="Sign Out"
-              className="p-1.5 bg-slate-800 hover:bg-rose-600 text-slate-300 hover:text-white rounded-lg transition"
+              className="text-navy-100/70 hover:bg-danger hover:text-white shrink-0"
             >
-              <LogOut className="w-4 h-4" />
-            </button>
+              <LogOut className="w-[18px] h-[18px]" />
+            </IconButton>
           </div>
         </div>
       </aside>
     </>
+  );
+};
+
+/**
+ * Mobile bottom navigation — top-level destinations only, max 5 items, icon + label.
+ * Sits above the safe-area inset so it clears the iOS home indicator.
+ */
+export const MobileNav: React.FC<{
+  activeTab: string;
+  setActiveTab: (tab: string) => void;
+  onMore: () => void;
+}> = ({ activeTab, setActiveTab, onMore }) => {
+  const { user } = useAuth();
+  const hasModule = (mod: string) => {
+    if (!user) return false;
+    if (user.role === 'admin') return true;
+    return user.modules?.includes(mod);
+  };
+
+  const items = NAV_ITEMS.filter(
+    (i) => hasModule(i.module) && !i.adminOnly && i.key !== 'settings'
+  ).slice(0, 4);
+
+  return (
+    <nav
+      aria-label="Primary"
+      className="lg:hidden fixed bottom-0 inset-x-0 z-40 bg-surface/95 backdrop-blur border-t border-line pb-safe"
+    >
+      <ul className="flex items-stretch">
+        {items.map((item) => {
+          const Icon = item.icon;
+          const active = activeTab === item.key;
+          return (
+            <li key={item.key} className="flex-1">
+              <button
+                onClick={() => setActiveTab(item.key)}
+                aria-current={active ? 'page' : undefined}
+                className={cx(
+                  'w-full flex flex-col items-center justify-center gap-0.5 min-h-[52px] pt-1.5 pb-1 cursor-pointer',
+                  'transition-colors duration-150',
+                  active ? 'text-accent-ink' : 'text-ink-faint active:bg-surface-sunken'
+                )}
+              >
+                <Icon className={cx('w-[22px] h-[22px]', active && 'stroke-[2.4]')} aria-hidden="true" />
+                <span className={cx('text-[11px] leading-none', active ? 'font-bold' : 'font-medium')}>
+                  {item.shortLabel}
+                </span>
+              </button>
+            </li>
+          );
+        })}
+
+        <li className="flex-1">
+          <button
+            onClick={onMore}
+            className="w-full flex flex-col items-center justify-center gap-0.5 min-h-[52px] pt-1.5 pb-1
+                       text-ink-faint active:bg-surface-sunken cursor-pointer transition-colors duration-150"
+          >
+            <Settings className="w-[22px] h-[22px]" aria-hidden="true" />
+            <span className="text-[11px] leading-none font-medium">More</span>
+          </button>
+        </li>
+      </ul>
+    </nav>
   );
 };

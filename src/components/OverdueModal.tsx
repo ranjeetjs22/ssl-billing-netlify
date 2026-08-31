@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { X, AlertTriangle, MessageSquare, Copy, Check, ExternalLink } from 'lucide-react';
 import { apiRequest } from '../services/api.js';
-import { formatINR } from '../utils/pdfGenerator.js';
+import { formatINR } from '../utils/format.js';
 
 interface OverdueModalProps {
   onClose: () => void;

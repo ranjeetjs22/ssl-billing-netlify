@@ -1,23 +1,17 @@
-import React, { useState, useEffect } from 'react';
-import { 
-  Plus, 
-  Search, 
-  Download, 
-  FileText, 
-  Printer, 
-  CreditCard, 
-  AlertCircle, 
-  Trash2, 
-  ChevronRight,
-  Filter,
-  CheckCircle2,
-  Edit3,
-  X
+import React, { useState, useEffect, useCallback } from 'react';
+import {
+  Plus, Search, Download, FileText, Printer, CreditCard, Trash2,
+  Edit3, ChevronLeft, ChevronRight, Truck,
 } from 'lucide-react';
 import { apiRequest } from '../services/api.js';
 import { Invoice, CompanySettings, BankAccount } from '../types.js';
-import { formatINR, printInvoicePDF } from '../utils/pdfGenerator.js';
+import { formatINR } from '../utils/format.js';
+import { printInvoicePDF } from '../utils/pdf.js';
 import { DeleteInvoiceModal } from './DeleteInvoiceModal.js';
+import {
+  Button, IconButton, Card, StatCard, DataTable, Column, EmptyState, ErrorState,
+  Toast, StatusBadge, Input, cx,
+} from './ui.js';
 
 interface InvoiceListProps {
   onNewInvoice: () => void;
@@ -26,329 +20,333 @@ interface InvoiceListProps {
   onRecordPayment: (inv: Invoice) => void;
   companySettings: CompanySettings;
   defaultBank?: BankAccount;
+  highlightInvoiceId?: string | null;
+  initialToastMessage?: string | null;
 }
 
+const TABS = [
+  { key: 'all', label: 'All' },
+  { key: 'pending', label: 'Unpaid' },
+  { key: 'overdue', label: 'Overdue' },
+  { key: 'paid', label: 'Paid' },
+  { key: 'cancelled', label: 'Cancelled' },
+];
+
+const PAGE_SIZE = 20;
+
 export const InvoiceList: React.FC<InvoiceListProps> = ({
-  onNewInvoice,
-  onSelectInvoice,
-  onEditInvoice,
-  onRecordPayment,
-  companySettings,
-  defaultBank,
+  onNewInvoice, onSelectInvoice, onEditInvoice, onRecordPayment,
+  companySettings, defaultBank, highlightInvoiceId, initialToastMessage,
 }) => {
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState('all');
+  const [searchInput, setSearchInput] = useState('');
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
   const [invoiceToDelete, setInvoiceToDelete] = useState<Invoice | null>(null);
-  const [toastMessage, setToastMessage] = useState<string | null>(null);
-  const [summary, setSummary] = useState({
-    count: 0,
-    grand_total: 0,
-    taxable: 0,
-    gst: 0,
-    balance: 0,
-  });
+  const [toast, setToast] = useState<string | null>(initialToastMessage || null);
+  const [summary, setSummary] = useState({ count: 0, grand_total: 0, taxable: 0, gst: 0, balance: 0 });
 
-  const fetchInvoices = async () => {
+  // Debounce typing so we issue one request per pause, not one per keystroke
+  useEffect(() => {
+    const t = setTimeout(() => { setSearch(searchInput); setPage(1); }, 300);
+    return () => clearTimeout(t);
+  }, [searchInput]);
+
+  const fetchInvoices = useCallback(async () => {
     setLoading(true);
+    setLoadError(null);
     try {
-      let url = `/invoices?page=${page}&page_size=20&sort=invoice_date&order=desc`;
-      if (statusFilter !== 'all') {
-        url += `&status=${statusFilter}`;
-      }
-      if (search) {
-        url += `&search=${encodeURIComponent(search)}`;
-      }
-
-      const res = await apiRequest<{
-        items: Invoice[];
-        total: number;
-        summary: any;
-      }>(url);
-
+      let url = `/invoices?page=${page}&page_size=${PAGE_SIZE}&sort=invoice_date&order=desc`;
+      if (statusFilter !== 'all') url += `&status=${statusFilter}`;
+      if (search) url += `&search=${encodeURIComponent(search)}`;
+      const res = await apiRequest<{ items: Invoice[]; total: number; summary: any }>(url);
       setInvoices(res.items || []);
       setTotal(res.total || 0);
       if (res.summary) setSummary(res.summary);
-    } catch (err) {
-      console.error('Failed to fetch invoices', err);
+    } catch (err: any) {
+      setLoadError(err.message || 'Failed to load invoices');
     } finally {
       setLoading(false);
     }
-  };
-
-  useEffect(() => {
-    fetchInvoices();
   }, [statusFilter, search, page]);
 
-  useEffect(() => {
-    if (toastMessage) {
-      const t = setTimeout(() => setToastMessage(null), 4500);
-      return () => clearTimeout(t);
-    }
-  }, [toastMessage]);
+  useEffect(() => { fetchInvoices(); }, [fetchInvoices]);
+  useEffect(() => { if (initialToastMessage) setToast(initialToastMessage); }, [initialToastMessage]);
 
   const handleExportCSV = async () => {
     try {
       const csv = await apiRequest<string>('/invoices/export');
-      const blob = new Blob([csv], { type: 'text/csv' });
-      const url = window.URL.createObjectURL(blob);
+      const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }));
       const a = document.createElement('a');
       a.href = url;
       a.download = `invoices-${new Date().toISOString().slice(0, 10)}.csv`;
       a.click();
-    } catch (err) {
-      console.error('Export failed', err);
+      URL.revokeObjectURL(url);
+      setToast('Invoice CSV downloaded.');
+    } catch {
+      setToast('Could not export invoices.');
     }
   };
 
-  return (
-    <div className="space-y-6">
-      {/* Toast Notification Banner */}
-      {toastMessage && (
-        <div className="p-4 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-xl flex items-center justify-between shadow-xs animate-in fade-in">
-          <div className="flex items-center gap-2 text-xs font-semibold">
-            <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
-            <span>{toastMessage}</span>
+  const lrLabel = (inv: Invoice) =>
+    inv.lr_items && inv.lr_items.length > 1 ? `${inv.lr_items.length} LRs` : inv.lr_no || '—';
+
+  const columns: Column<Invoice>[] = [
+    {
+      key: 'invoice_no',
+      header: 'Invoice',
+      cell: (inv) => (
+        <div className="min-w-0">
+          <div className="font-mono font-bold text-accent-ink truncate">{inv.invoice_no}</div>
+          <div className="text-xs text-ink-faint">{inv.invoice_date}</div>
+        </div>
+      ),
+    },
+    {
+      key: 'buyer',
+      header: 'Customer',
+      cell: (inv) => (
+        <div className="min-w-0">
+          <div className="font-semibold text-ink truncate max-w-[220px]">{inv.buyer?.name || '—'}</div>
+          <div className="text-xs text-ink-faint truncate">{inv.buyer?.city || inv.place_of_supply || '—'}</div>
+        </div>
+      ),
+    },
+    {
+      key: 'lr',
+      header: 'LR / Route',
+      hideBelow: 'lg',
+      cell: (inv) => (
+        <div className="min-w-0">
+          <div className="font-mono text-ink-soft truncate max-w-[160px]" title={inv.lr_no}>{lrLabel(inv)}</div>
+          <div className="text-xs text-ink-faint truncate">
+            {inv.origin && inv.destination ? `${inv.origin} → ${inv.destination}` : 'Local'}
           </div>
-          <button 
-            onClick={() => setToastMessage(null)}
-            className="text-emerald-600 hover:text-emerald-900 p-1 rounded-lg cursor-pointer"
-          >
-            <X className="w-4 h-4" />
-          </button>
         </div>
-      )}
+      ),
+    },
+    {
+      key: 'total',
+      header: 'Total',
+      align: 'right',
+      cell: (inv) => (
+        <span className="font-mono font-bold text-ink">₹{formatINR(inv.totals?.grand_total ?? inv.grand_total)}</span>
+      ),
+    },
+    {
+      key: 'balance',
+      header: 'Balance',
+      align: 'right',
+      hideBelow: 'md',
+      cell: (inv) => {
+        const bal = inv.balance ?? inv.grand_total ?? 0;
+        return (
+          <span className={cx('font-mono font-semibold', bal > 0.5 ? 'text-warning-ink' : 'text-positive-ink')}>
+            ₹{formatINR(bal)}
+          </span>
+        );
+      },
+    },
+    { key: 'status', header: 'Status', align: 'center', cell: (inv) => <StatusBadge status={inv.display_status} /> },
+    {
+      key: 'actions',
+      header: 'Actions',
+      align: 'right',
+      cell: (inv) => (
+        <div className="flex items-center justify-end gap-0.5" onClick={(e) => e.stopPropagation()}>
+          <IconButton label={`Print invoice ${inv.invoice_no}`} onClick={() => printInvoicePDF(inv, companySettings, defaultBank)}>
+            <Printer className="w-4 h-4" />
+          </IconButton>
+          {inv.display_status !== 'cancelled' && onEditInvoice && (
+            <IconButton label={`Edit invoice ${inv.invoice_no}`} onClick={() => onEditInvoice(inv)}>
+              <Edit3 className="w-4 h-4" />
+            </IconButton>
+          )}
+          {inv.display_status !== 'paid' && inv.display_status !== 'cancelled' && (
+            <IconButton
+              label={`Record payment for ${inv.invoice_no}`}
+              onClick={() => onRecordPayment(inv)}
+              className="text-positive hover:bg-positive-soft"
+            >
+              <CreditCard className="w-4 h-4" />
+            </IconButton>
+          )}
+          <IconButton
+            label={`Delete invoice ${inv.invoice_no}`}
+            onClick={() => setInvoiceToDelete(inv)}
+            className="text-danger hover:bg-danger-soft"
+          >
+            <Trash2 className="w-4 h-4" />
+          </IconButton>
+        </div>
+      ),
+    },
+  ];
 
-      {/* Header & Action Bar */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white border border-slate-200 p-5 rounded-2xl shadow-xs">
-        <div>
-          <h1 className="text-xl font-bold text-slate-900 flex items-center gap-2">
-            <span>Tax Invoices</span>
-            <span className="text-xs bg-orange-50 text-orange-600 font-semibold px-2 py-0.5 rounded-full border border-orange-200">
-              SAC 996511
+  const mobileCard = (inv: Invoice) => {
+    const bal = inv.balance ?? inv.grand_total ?? 0;
+    return (
+      <div className="space-y-2">
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <div className="font-mono font-bold text-accent-ink text-sm truncate">{inv.invoice_no}</div>
+            <div className="font-semibold text-ink truncate">{inv.buyer?.name || '—'}</div>
+          </div>
+          <StatusBadge status={inv.display_status} />
+        </div>
+
+        <div className="flex items-center gap-2 text-xs text-ink-faint">
+          <span>{inv.invoice_date}</span>
+          {(inv.lr_no || inv.lr_items?.length) ? (
+            <>
+              <span aria-hidden="true">·</span>
+              <span className="inline-flex items-center gap-1 truncate">
+                <Truck className="w-3 h-3 shrink-0" aria-hidden="true" />
+                {lrLabel(inv)}
+              </span>
+            </>
+          ) : null}
+        </div>
+
+        <div className="flex items-end justify-between gap-3 pt-2 border-t border-line">
+          <span className="text-xs text-ink-faint">
+            Total{' '}
+            <span className="font-mono font-semibold text-ink">
+              ₹{formatINR(inv.totals?.grand_total ?? inv.grand_total)}
             </span>
-          </h1>
-          <p className="text-xs text-slate-500 mt-1">
-            Freight charges, surcharges, GST breakdown, and client settlement status
-          </p>
-        </div>
-
-        <div className="flex items-center gap-2.5">
-          <button
-            id="export-invoices-csv-btn"
-            onClick={handleExportCSV}
-            className="flex items-center gap-1.5 px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200 rounded-xl text-xs font-medium transition"
-          >
-            <Download className="w-4 h-4 text-slate-500" />
-            <span>Export CSV</span>
-          </button>
-
-          <button
-            id="new-invoice-btn"
-            onClick={onNewInvoice}
-            className="flex items-center gap-1.5 px-3.5 py-2 bg-orange-600 hover:bg-orange-700 text-white rounded-xl text-xs font-semibold shadow-xs transition"
-          >
-            <Plus className="w-4 h-4" />
-            <span>Generate Invoice</span>
-          </button>
+          </span>
+          <span className="text-right">
+            <span className="block text-[11px] text-ink-faint">Balance</span>
+            <span className={cx('font-mono font-bold', bal > 0.5 ? 'text-warning-ink' : 'text-positive-ink')}>
+              ₹{formatINR(bal)}
+            </span>
+          </span>
         </div>
       </div>
+    );
+  };
 
-      {/* Metric Summary Ribbon */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-        <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-xs">
-          <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Filtered Invoices</div>
-          <div className="text-xl font-bold text-slate-900 font-mono mt-1">{summary.count}</div>
-        </div>
-        <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-xs">
-          <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Taxable Value</div>
-          <div className="text-xl font-bold text-slate-900 font-mono mt-1">₹{formatINR(summary.taxable)}</div>
-        </div>
-        <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-xs">
-          <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">GST Liability</div>
-          <div className="text-xl font-bold text-slate-900 font-mono mt-1">₹{formatINR(summary.gst)}</div>
-        </div>
-        <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-xs">
-          <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Outstanding Balance</div>
-          <div className="text-xl font-bold text-orange-600 font-mono mt-1">₹{formatINR(summary.balance)}</div>
-        </div>
+  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+
+  return (
+    <div className="space-y-4 sm:space-y-5">
+      {toast && <Toast message={toast} onDismiss={() => setToast(null)} />}
+
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+        <StatCard label="Invoices" value={summary.count} loading={loading} />
+        <StatCard label="Taxable" value={`₹${formatINR(summary.taxable)}`} loading={loading} />
+        <StatCard label="GST" value={`₹${formatINR(summary.gst)}`} loading={loading} />
+        <StatCard label="Outstanding" value={`₹${formatINR(summary.balance)}`} tone="warning" loading={loading} />
       </div>
 
-      {/* Filter Tabs & Search Bar */}
-      <div className="flex flex-col md:flex-row items-center justify-between gap-4">
-        <div className="flex flex-wrap items-center gap-1.5 bg-white p-1.5 rounded-xl border border-slate-200 w-full md:w-auto shadow-xs">
-          {[
-            { key: 'all', label: 'All Invoices' },
-            { key: 'pending', label: 'Pending & Partial' },
-            { key: 'paid', label: 'Fully Paid' },
-            { key: 'overdue', label: 'Overdue' },
-            { key: 'draft', label: 'Draft' },
-            { key: 'cancelled', label: 'Cancelled' },
-          ].map((tab) => (
+      <div className="flex flex-col lg:flex-row lg:items-center gap-3">
+        <div
+          role="tablist"
+          aria-label="Filter invoices by status"
+          className="flex items-center gap-1 bg-surface border border-line rounded-xl p-1 overflow-x-auto shadow-card"
+        >
+          {TABS.map((tab) => (
             <button
               key={tab.key}
-              onClick={() => {
-                setStatusFilter(tab.key);
-                setPage(1);
-              }}
-              className={`px-3 py-1.5 rounded-lg text-xs font-medium transition ${
+              role="tab"
+              aria-selected={statusFilter === tab.key}
+              onClick={() => { setStatusFilter(tab.key); setPage(1); }}
+              className={cx(
+                'px-3 min-h-[38px] rounded-lg text-sm font-medium whitespace-nowrap cursor-pointer transition-colors duration-150',
                 statusFilter === tab.key
-                  ? 'bg-orange-600 text-white font-semibold shadow-xs'
-                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
-              }`}
+                  ? 'bg-accent-strong text-on-accent font-semibold'
+                  : 'text-ink-soft hover:bg-surface-sunken hover:text-ink'
+              )}
             >
               {tab.label}
             </button>
           ))}
         </div>
 
-        <div className="relative w-full md:w-72">
-          <Search className="w-4 h-4 absolute left-3 top-2.5 text-slate-400" />
-          <input
-            type="text"
-            placeholder="Search invoice, LR, buyer..."
-            value={search}
-            onChange={(e) => {
-              setSearch(e.target.value);
-              setPage(1);
-            }}
-            className="w-full pl-9 pr-3 py-2 bg-white border border-slate-200 rounded-xl text-xs text-slate-900 placeholder-slate-400 focus:outline-none focus:border-orange-500 shadow-xs transition"
+        <div className="relative flex-1 lg:max-w-sm">
+          <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-ink-faint pointer-events-none z-10" aria-hidden="true" />
+          <Input
+            type="search"
+            value={searchInput}
+            onChange={(e) => setSearchInput(e.target.value)}
+            placeholder="Search invoice, LR or customer"
+            aria-label="Search invoices"
+            className="pl-9"
           />
         </div>
-      </div>
 
-      {/* Table Content */}
-      <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-xs">
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs text-slate-600">
-            <thead className="bg-slate-50 text-slate-500 font-semibold border-b border-slate-200 uppercase tracking-wider text-[10px]">
-              <tr>
-                <th className="py-3 px-4">Invoice No</th>
-                <th className="py-3 px-4">Date</th>
-                <th className="py-3 px-4">Buyer Details</th>
-                <th className="py-3 px-4">LR & Route</th>
-                <th className="py-3 px-4 text-right">Grand Total</th>
-                <th className="py-3 px-4 text-right">Balance</th>
-                <th className="py-3 px-4 text-center">Status</th>
-                <th className="py-3 px-4 text-right">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-              {loading ? (
-                <tr>
-                  <td colSpan={8} className="py-12 text-center text-slate-400">
-                    <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-orange-600 mx-auto"></div>
-                  </td>
-                </tr>
-              ) : invoices.length > 0 ? (
-                invoices.map((inv) => (
-                  <tr
-                    key={inv.id}
-                    onClick={() => onSelectInvoice(inv)}
-                    className="hover:bg-slate-50/80 cursor-pointer transition"
-                  >
-                    <td className="py-3 px-4 font-mono font-bold text-orange-600 flex items-center gap-1.5">
-                      <FileText className="w-3.5 h-3.5 text-orange-500" />
-                      <span>{inv.invoice_no}</span>
-                    </td>
-                    <td className="py-3 px-4 text-slate-500 font-mono">{inv.invoice_date}</td>
-                    <td className="py-3 px-4">
-                      <div className="font-semibold text-slate-900">{inv.buyer?.name || '—'}</div>
-                      <div className="text-[11px] text-slate-400">{inv.buyer?.city || inv.place_of_supply || '—'}</div>
-                    </td>
-                    <td className="py-3 px-4">
-                      <div className="font-mono text-slate-700">{inv.lr_no || '—'}</div>
-                      <div className="text-[11px] text-slate-400">
-                        {inv.origin && inv.destination ? `${inv.origin} → ${inv.destination}` : 'Local Freight'}
-                      </div>
-                    </td>
-                    <td className="py-3 px-4 text-right font-mono font-bold text-slate-900">
-                      ₹{formatINR(inv.totals?.grand_total || inv.grand_total)}
-                    </td>
-                    <td className="py-3 px-4 text-right font-mono font-semibold text-orange-600">
-                      ₹{formatINR(inv.balance ?? inv.grand_total)}
-                    </td>
-                    <td className="py-3 px-4 text-center">
-                      <span
-                        className={`inline-block px-2.5 py-0.5 rounded-full text-[10px] font-semibold uppercase ${
-                          inv.display_status === 'paid'
-                            ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
-                            : inv.display_status === 'overdue'
-                            ? 'bg-rose-50 text-rose-700 border border-rose-200'
-                            : inv.display_status === 'partially_paid'
-                            ? 'bg-amber-50 text-amber-700 border border-amber-200'
-                            : inv.display_status === 'cancelled'
-                            ? 'bg-slate-100 text-slate-500 border border-slate-200'
-                            : 'bg-blue-50 text-blue-700 border border-blue-200'
-                        }`}
-                      >
-                        {inv.display_status || 'issued'}
-                      </span>
-                    </td>
-                    <td className="py-3 px-4 text-right">
-                      <div className="flex items-center justify-end gap-1.5" onClick={(e) => e.stopPropagation()}>
-                        <button
-                          onClick={() => printInvoicePDF(inv, companySettings, defaultBank)}
-                          title="Print A4 Tax Invoice PDF"
-                          className="p-1.5 text-slate-400 hover:text-slate-800 hover:bg-slate-100 rounded-lg transition"
-                        >
-                          <Printer className="w-4 h-4" />
-                        </button>
-
-                        {inv.display_status !== 'cancelled' && onEditInvoice && (
-                          <button
-                            onClick={() => onEditInvoice(inv)}
-                            title="Edit Invoice"
-                            className="p-1.5 text-orange-600 hover:text-orange-700 hover:bg-orange-50 rounded-lg transition"
-                          >
-                            <Edit3 className="w-4 h-4" />
-                          </button>
-                        )}
-
-                        {inv.display_status !== 'paid' && inv.display_status !== 'cancelled' && (
-                          <button
-                            onClick={() => onRecordPayment(inv)}
-                            title="Record Payment"
-                            className="p-1.5 text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 rounded-lg transition cursor-pointer"
-                          >
-                            <CreditCard className="w-4 h-4" />
-                          </button>
-                        )}
-
-                        <button
-                          onClick={() => setInvoiceToDelete(inv)}
-                          title="Cancel or Delete Invoice"
-                          className="p-1.5 text-rose-500 hover:text-rose-700 hover:bg-rose-50 rounded-lg transition cursor-pointer"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))
-              ) : (
-                <tr>
-                  <td colSpan={8} className="py-10 text-center text-slate-400 text-xs">
-                    No invoices matching the selected criteria.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
+        <div className="flex items-center gap-2 lg:ml-auto">
+          <Button variant="secondary" size="sm" icon={<Download className="w-4 h-4" />} onClick={handleExportCSV}>
+            Export CSV
+          </Button>
         </div>
       </div>
 
-      {/* Delete / Cancel Invoice Confirmation Modal */}
+      <Card padded={false} className="overflow-hidden">
+        {loadError ? (
+          <ErrorState message={loadError} onRetry={fetchInvoices} />
+        ) : (
+          <DataTable
+            rows={invoices}
+            columns={columns}
+            loading={loading}
+            onRowClick={onSelectInvoice}
+            mobileCard={mobileCard}
+            caption="Tax invoices"
+            rowClassName={(inv) => (highlightInvoiceId && inv.id === highlightInvoiceId ? 'bg-accent-soft' : undefined)}
+            empty={
+              <EmptyState
+                icon={<FileText className="w-6 h-6" />}
+                title={search || statusFilter !== 'all' ? 'No matching invoices' : 'No invoices yet'}
+                message={
+                  search || statusFilter !== 'all'
+                    ? 'Try a different search term or filter.'
+                    : 'Create your first GST tax invoice to get started.'
+                }
+                action={
+                  search || statusFilter !== 'all' ? (
+                    <Button variant="secondary" onClick={() => { setSearchInput(''); setStatusFilter('all'); }}>
+                      Clear filters
+                    </Button>
+                  ) : (
+                    <Button variant="primary" icon={<Plus className="w-4 h-4" />} onClick={onNewInvoice}>
+                      New Invoice
+                    </Button>
+                  )
+                }
+              />
+            }
+          />
+        )}
+
+        {totalPages > 1 && !loadError && (
+          <div className="flex items-center justify-between gap-3 px-4 py-3 border-t border-line bg-surface-muted">
+            <span className="text-xs text-ink-faint">
+              Page <strong className="text-ink">{page}</strong> of {totalPages} · {total} invoices
+            </span>
+            <div className="flex items-center gap-1">
+              <IconButton label="Previous page" disabled={page <= 1} onClick={() => setPage((p) => Math.max(1, p - 1))} variant="secondary">
+                <ChevronLeft className="w-4 h-4" />
+              </IconButton>
+              <IconButton label="Next page" disabled={page >= totalPages} onClick={() => setPage((p) => p + 1)} variant="secondary">
+                <ChevronRight className="w-4 h-4" />
+              </IconButton>
+            </div>
+          </div>
+        )}
+      </Card>
+
       {invoiceToDelete && (
         <DeleteInvoiceModal
           invoice={invoiceToDelete}
           onClose={() => setInvoiceToDelete(null)}
           onSuccess={(msg) => {
             setInvoiceToDelete(null);
-            setToastMessage(msg || 'Invoice updated successfully');
+            setToast(msg || 'Invoice updated.');
             fetchInvoices();
           }}
         />

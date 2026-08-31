@@ -2,79 +2,113 @@ import crypto from 'crypto';
 import fs from 'fs';
 import path from 'path';
 
-const DB_FILE = path.join(process.cwd(), 'data', 'app_db.json');
-
-const SUPABASE_RAW_URL = (process.env.SUPABASE_URL || '').trim();
-const SERVICE_KEY = (process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_KEY || '').trim();
-
-export const hasSupabase = Boolean(
-  SUPABASE_RAW_URL &&
-  SERVICE_KEY &&
-  !SUPABASE_RAW_URL.includes('your-') &&
-  !SUPABASE_RAW_URL.includes('placeholder')
-);
-
-const SUPABASE_REST_URL = hasSupabase
-  ? (SUPABASE_RAW_URL.replace(/\/$/, '').endsWith('/rest/v1')
-      ? SUPABASE_RAW_URL.replace(/\/$/, '')
-      : SUPABASE_RAW_URL.replace(/\/$/, '') + '/rest/v1')
-  : '';
-
-if (hasSupabase) {
-  console.log('[Database] Supabase is configured and ACTIVE as primary database.');
-  // Ensure any app_users are present in auth.users so foreign keys on invoices/customers/payments always resolve
-  syncAuthUsersToSupabase().catch(() => {});
-} else {
-  console.log('[Database] Supabase credentials not detected; running in local offline storage mode.');
+// ===========================================================================
+// Configuration — read lazily. On Cloudflare Workers `process.env` is populated
+// from bindings at request time, so nothing may be captured at module load.
+// ===========================================================================
+interface SupabaseConfig {
+  enabled: boolean;
+  base: string;   // https://<ref>.supabase.co
+  rest: string;   // https://<ref>.supabase.co/rest/v1
+  key: string;    // service-role key (server only, never sent to the browser)
 }
 
-export async function ensureSupabaseAuthUser(userId: string, email: string) {
-  if (!hasSupabase || !userId) return;
-  try {
-    const authAdminUrl = SUPABASE_RAW_URL.replace(/\/$/, '') + '/auth/v1/admin/users';
-    const headers: Record<string, string> = {
-      apikey: SERVICE_KEY,
-      Authorization: `Bearer ${SERVICE_KEY}`,
-      'Content-Type': 'application/json',
-    };
+let cfgCache: SupabaseConfig | null = null;
+let announced = false;
 
-    // Check if user already exists
-    const checkRes = await fetch(`${authAdminUrl}/${userId}`, { headers });
-    if (checkRes.ok) return;
-
-    // Create user in auth.users with the exact same UUID
-    await fetch(authAdminUrl, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify({
-        id: userId,
-        email: email || `${userId}@internal.app`,
-        email_confirm: true,
-        user_metadata: { source: 'app_users' }
-      })
-    });
-  } catch (err: any) {
-    // Non-fatal, just log
-    console.warn(`[Database] ensureSupabaseAuthUser notice for ${userId}:`, err.message || err);
-  }
+function readConfig(): SupabaseConfig {
+  const rawUrl = (process.env.SUPABASE_URL || '').trim().replace(/\/$/, '');
+  const key = (process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_KEY || '').trim();
+  const enabled = Boolean(rawUrl && key && !rawUrl.includes('your-') && !rawUrl.includes('placeholder'));
+  const base = rawUrl.replace(/\/rest\/v1$/, '');
+  return { enabled, base, rest: `${base}/rest/v1`, key };
 }
 
-async function syncAuthUsersToSupabase() {
-  if (!hasSupabase) return;
-  try {
-    const users = await select('app_users');
-    if (Array.isArray(users)) {
-      for (const u of users) {
-        if (u && u.id) {
-          await ensureSupabaseAuthUser(u.id, u.email);
-        }
-      }
+export function config(): SupabaseConfig {
+  // Re-evaluate while disabled in case the environment shows up later (Workers).
+  if (cfgCache && !cfgCache.enabled && process.env.SUPABASE_URL) cfgCache = null;
+  if (!cfgCache) {
+    cfgCache = readConfig();
+    if (!announced) {
+      announced = true;
+      console.log(cfgCache.enabled
+        ? '[Database] Supabase is configured and ACTIVE as primary database.'
+        : '[Database] Supabase credentials not detected; running in local offline storage mode.');
     }
-  } catch (err) {
-    // ignore
+    if (!cfgCache.enabled) loadDiskDb();
   }
+  return cfgCache;
 }
 
+export function hasSupabase(): boolean {
+  return config().enabled;
+}
+
+function authHeaders(extra: Record<string, string> = {}): Record<string, string> {
+  const c = config();
+  return { apikey: c.key, Authorization: `Bearer ${c.key}`, ...extra };
+}
+
+// ===========================================================================
+// Tiny TTL cache for small, hot, rarely-changing tables. Every write to a table
+// invalidates that table's entries, so reads stay consistent within a process.
+// ===========================================================================
+const CACHE_TTL_MS: Record<string, number> = {
+  company_settings: 60_000,
+  bank_accounts: 60_000,
+  app_users: 30_000, // auth middleware looks the user up on every request
+};
+const cache = new Map<string, { exp: number; val: any }>();
+
+function cacheGet(key: string): any | undefined {
+  const hit = cache.get(key);
+  if (!hit) return undefined;
+  if (hit.exp < Date.now()) { cache.delete(key); return undefined; }
+  return JSON.parse(hit.val);
+}
+function cacheSet(key: string, val: any, ttl: number) {
+  cache.set(key, { exp: Date.now() + ttl, val: JSON.stringify(val) });
+}
+export function invalidateTable(table: string) {
+  for (const k of cache.keys()) if (k.startsWith(`${table}|`)) cache.delete(k);
+}
+
+// ===========================================================================
+// Schema-cache resilience
+// ===========================================================================
+// If the hosted schema lags behind the app (missing column), PostgREST rejects the
+// whole write with PGRST204. We drop the unknown column, remember it, retry, and log
+// loudly so supabase/migrations can be applied. insertEx/updateEx report what was dropped.
+const missingColumns: Record<string, Set<string>> = {};
+const MISSING_COLUMN_RE = /Could not find the '([^']+)' column of '([^']+)'/i;
+
+export function knownMissingColumns(table: string): string[] {
+  return Array.from(missingColumns[table] || []);
+}
+
+function missingColumnFromError(err: any): string | null {
+  const body = err?.supabaseError;
+  const msg = String((body && typeof body === 'object' && body.message) || err?.message || '');
+  const m = MISSING_COLUMN_RE.exec(msg);
+  return m ? m[1] : null;
+}
+
+function stripKnownMissing(table: string, json: any, dropped?: string[]): any {
+  const miss = missingColumns[table];
+  if (!miss || miss.size === 0 || !json || typeof json !== 'object' || Array.isArray(json)) return json;
+  const out: Record<string, any> = { ...json };
+  for (const col of miss) {
+    if (Object.prototype.hasOwnProperty.call(out, col)) {
+      delete out[col];
+      if (dropped && !dropped.includes(col)) dropped.push(col);
+    }
+  }
+  return out;
+}
+
+// ===========================================================================
+// Local JSON database (only when Supabase credentials are absent)
+// ===========================================================================
 let memoryDb: Record<string, any[]> = {
   app_users: [],
   password_resets: [],
@@ -86,131 +120,172 @@ let memoryDb: Record<string, any[]> = {
   expenses: [],
   audit_logs: [],
 };
+let diskLoaded = false;
 
-// Load disk database if available (used ONLY when Supabase credentials are absent)
+function dbFile(): string {
+  return path.join(process.cwd(), 'data', 'app_db.json');
+}
+
 function loadDiskDb() {
+  if (diskLoaded) return;
+  diskLoaded = true;
   try {
-    if (fs.existsSync(DB_FILE)) {
-      const raw = fs.readFileSync(DB_FILE, 'utf-8');
-      if (raw) {
-        const parsed = JSON.parse(raw);
-        memoryDb = { ...memoryDb, ...parsed };
-      }
+    const file = dbFile();
+    if (fs.existsSync(file)) {
+      const raw = fs.readFileSync(file, 'utf-8');
+      if (raw) memoryDb = { ...memoryDb, ...JSON.parse(raw) };
     }
   } catch (e) {
     console.warn('Failed to load local DB file:', (e as Error).message);
   }
 }
 
-// Persist to disk (used ONLY when Supabase credentials are absent)
 function saveDiskDb() {
   try {
-    const dir = path.dirname(DB_FILE);
-    if (!fs.existsSync(dir)) {
-      fs.mkdirSync(dir, { recursive: true });
-    }
-    fs.writeFileSync(DB_FILE, JSON.stringify(memoryDb, null, 2), 'utf-8');
+    const file = dbFile();
+    const dir = path.dirname(file);
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(file, JSON.stringify(memoryDb, null, 2), 'utf-8');
   } catch (e) {
     console.warn('Failed to persist local DB file:', (e as Error).message);
   }
 }
 
-// Initialize local DB on startup only if not using Supabase
-if (!hasSupabase) {
-  loadDiskDb();
+// ===========================================================================
+// Request router
+// ===========================================================================
+type RequestOptions = { params?: Record<string, any>; json?: any; prefer?: string; dropped?: string[] };
+
+export async function request(method: string, table: string, options: RequestOptions = {}) {
+  if (!hasSupabase()) {
+    return localRequest(method, table, options);
+  }
+
+  const isWrite = method === 'POST' || method === 'PATCH' || method === 'DELETE';
+  if (isWrite) invalidateTable(table);
+
+  // Read-through cache for small hot tables
+  const ttl = CACHE_TTL_MS[table];
+  const cacheKey = method === 'GET' && ttl ? `${table}|${JSON.stringify(options.params || {})}` : null;
+  if (cacheKey) {
+    const hit = cacheGet(cacheKey);
+    if (hit !== undefined) return hit;
+  }
+
+  let json = isWrite ? stripKnownMissing(table, options.json, options.dropped) : options.json;
+
+  for (let attempt = 0; attempt < 16; attempt++) {
+    if (method === 'PATCH' && json && typeof json === 'object' && Object.keys(json).length === 0) {
+      // Every field was stripped — nothing to update; return the current row(s).
+      return await request('GET', table, { params: { select: '*', ...(options.params || {}) } });
+    }
+    try {
+      const result = await supabaseRequest(method, table, { ...options, json });
+      if (cacheKey) cacheSet(cacheKey, result, ttl);
+      return result;
+    } catch (err: any) {
+      const col = isWrite ? missingColumnFromError(err) : null;
+      if (col && json && typeof json === 'object' && Object.prototype.hasOwnProperty.call(json, col)) {
+        if (!missingColumns[table]) missingColumns[table] = new Set();
+        missingColumns[table].add(col);
+        if (options.dropped && !options.dropped.includes(col)) options.dropped.push(col);
+        console.warn(
+          `[Database] Column '${table}.${col}' does not exist in Supabase — value dropped and request retried. ` +
+          `Apply supabase/migrations/*.sql to persist this field.`
+        );
+        const { [col]: _omit, ...rest } = json;
+        json = rest;
+        continue;
+      }
+      throw err;
+    }
+  }
+  throw new Error(`Supabase request to ${table} failed after stripping unknown columns.`);
 }
 
-export async function request(
-  method: string,
-  table: string,
-  options: { params?: Record<string, any>; json?: any; prefer?: string } = {}
-) {
-  // If Supabase is configured, all operations MUST go to Supabase.
-  // DO NOT fall back to local in-memory DB if Supabase returns an error or fails.
-  if (hasSupabase) {
-    const headers: Record<string, string> = {
-      apikey: SERVICE_KEY,
-      Authorization: `Bearer ${SERVICE_KEY}`,
-      'Content-Type': 'application/json',
-    };
-    if (options.prefer) {
-      headers['Prefer'] = options.prefer;
+const PAGE_SIZE = 1000; // PostgREST's default max-rows; larger tables are fetched in pages
+
+async function supabaseRequest(method: string, table: string, options: RequestOptions = {}) {
+  const c = config();
+  let url = `${c.rest}/${table}`;
+  if (options.params) {
+    const query = new URLSearchParams();
+    for (const [k, v] of Object.entries(options.params)) {
+      if (v !== undefined && v !== null) query.append(k, String(v));
     }
-
-    let url = `${SUPABASE_REST_URL}/${table}`;
-    if (options.params) {
-      const query = new URLSearchParams();
-      for (const [k, v] of Object.entries(options.params)) {
-        if (v !== undefined && v !== null) {
-          query.append(k, String(v));
-        }
-      }
-      const qs = query.toString();
-      if (qs) url += `?${qs}`;
-    }
-
-    let res: Response;
-    try {
-      res = await fetch(url, {
-        method,
-        headers,
-        body: options.json ? JSON.stringify(options.json) : undefined,
-      });
-    } catch (networkErr: any) {
-      // Safe logging: Never log secrets, keys, or auth headers
-      console.error(`[Supabase Connection Error] Method: ${method} | Table: ${table} | Error:`, networkErr.message || networkErr);
-      throw new Error(`Supabase Connection Error (${method} ${table}): ${networkErr.message || 'Network request failed'}`);
-    }
-
-    if (res.ok) {
-      if (res.status === 204) return [];
-      const text = await res.text();
-      return text ? JSON.parse(text) : [];
-    }
-
-    // Supabase HTTP Error response
-    const errorText = await res.text();
-    let errorBody: any = errorText;
-    try {
-      errorBody = JSON.parse(errorText);
-    } catch {
-      // Keep as string if not JSON
-    }
-
-    // Safe server-side logging: Method, Table, HTTP Status, and Error Body.
-    // Secrets like SERVICE_ROLE_KEY and JWT_SECRET are strictly NOT logged.
-    console.error(
-      `[Supabase Error] Method: ${method} | Table: ${table} | Status: ${res.status} | Body:`,
-      typeof errorBody === 'object' ? JSON.stringify(errorBody) : errorBody
-    );
-
-    let detailMessage = `Supabase request failed with status ${res.status}`;
-    if (typeof errorBody === 'object' && errorBody !== null) {
-      const parts = [errorBody.message, errorBody.details, errorBody.hint, errorBody.error].filter(Boolean);
-      if (parts.length > 0) {
-        detailMessage = parts.join(' - ');
-      }
-    } else if (typeof errorText === 'string' && errorText.trim()) {
-      detailMessage = errorText;
-    }
-
-    const err = new Error(`Supabase Error (${res.status}): ${detailMessage}`);
-    (err as any).status = res.status;
-    (err as any).supabaseError = errorBody;
-    throw err;
+    const qs = query.toString();
+    if (qs) url += `?${qs}`;
   }
 
-  // Local Memory + Disk DB Engine (ONLY for local offline development when Supabase credentials are absent)
-  if (!memoryDb[table]) {
-    memoryDb[table] = [];
+  const baseHeaders: Record<string, string> = authHeaders({ 'Content-Type': 'application/json' });
+  if (options.prefer) baseHeaders['Prefer'] = options.prefer;
+
+  // Unbounded GETs page through the table so nothing is silently truncated at 1000 rows.
+  const paged = method === 'GET' && !(options.params && options.params.limit);
+  if (!paged) {
+    return await supabaseFetch(method, table, url, baseHeaders, options.json);
   }
+
+  const all: any[] = [];
+  for (let from = 0; from < 500_000; from += PAGE_SIZE) {
+    const rows = await supabaseFetch(method, table, url, { ...baseHeaders, Range: `${from}-${from + PAGE_SIZE - 1}` }, undefined);
+    if (!Array.isArray(rows)) return rows;
+    all.push(...rows);
+    if (rows.length < PAGE_SIZE) break;
+  }
+  return all;
+}
+
+async function supabaseFetch(method: string, table: string, url: string, headers: Record<string, string>, json: any) {
+  let res: Response;
+  try {
+    res = await fetch(url, { method, headers, body: json ? JSON.stringify(json) : undefined });
+  } catch (networkErr: any) {
+    // Never log secrets, keys, or auth headers.
+    console.error(`[Supabase Connection Error] Method: ${method} | Table: ${table} | Error:`, networkErr.message || networkErr);
+    throw new Error(`Supabase Connection Error (${method} ${table}): ${networkErr.message || 'Network request failed'}`);
+  }
+
+  if (res.ok) {
+    if (res.status === 204) return [];
+    const text = await res.text();
+    return text ? JSON.parse(text) : [];
+  }
+
+  const errorText = await res.text();
+  let errorBody: any = errorText;
+  try { errorBody = JSON.parse(errorText); } catch { /* keep string */ }
+
+  console.error(
+    `[Supabase Error] Method: ${method} | Table: ${table} | Status: ${res.status} | Body:`,
+    typeof errorBody === 'object' ? JSON.stringify(errorBody) : errorBody
+  );
+
+  let detailMessage = `Supabase request failed with status ${res.status}`;
+  if (typeof errorBody === 'object' && errorBody !== null) {
+    const parts = [errorBody.message, errorBody.details, errorBody.hint, errorBody.error].filter(Boolean);
+    if (parts.length > 0) detailMessage = parts.join(' - ');
+  } else if (typeof errorText === 'string' && errorText.trim()) {
+    detailMessage = errorText;
+  }
+
+  const err = new Error(`Supabase Error (${res.status}): ${detailMessage}`);
+  (err as any).status = res.status;
+  (err as any).supabaseError = errorBody;
+  throw err;
+}
+
+// ---------------------------------------------------------------------------
+// Local Memory + Disk DB Engine
+// ---------------------------------------------------------------------------
+function localRequest(method: string, table: string, options: RequestOptions = {}) {
+  if (!memoryDb[table]) memoryDb[table] = [];
   const items = memoryDb[table];
 
   if (method === 'GET') {
     let result = [...items];
     const params = options.params || {};
 
-    // 1. Apply filters first
     for (const [key, val] of Object.entries(params)) {
       if (val === undefined || val === null) continue;
       if (key === 'limit' || key === 'order' || key === 'select') continue;
@@ -239,9 +314,8 @@ export async function request(
       }
     }
 
-    // 2. Apply sorting
     if (params.order) {
-      const [col, dir] = String(params.order).split('.');
+      const [col, dir] = String(params.order).split(',')[0].split('.');
       result.sort((a, b) => {
         const va = a[col] ?? '';
         const vb = b[col] ?? '';
@@ -249,45 +323,36 @@ export async function request(
           if (dir === 'desc') return va > vb ? -1 : 1;
           return va > vb ? 1 : -1;
         }
-        // Tie-breaker: created_at desc
         const ca = a.created_at || '';
         const cb = b.created_at || '';
         return ca > cb ? -1 : ca < cb ? 1 : 0;
       });
     }
 
-    // 3. Apply limit last
     if (params.limit) {
       const lim = parseInt(String(params.limit), 10);
-      if (!isNaN(lim) && lim > 0) {
-        result = result.slice(0, lim);
-      }
+      if (!isNaN(lim) && lim > 0) result = result.slice(0, lim);
     }
-
     return result;
   }
 
   if (method === 'POST') {
     const data = { ...options.json };
-    if (!data.id) {
-      data.id = crypto.randomUUID();
-    }
-    if (!data.created_at) {
-      data.created_at = new Date().toISOString();
-    }
+    if (!data.id) data.id = crypto.randomUUID();
+    if (!data.created_at) data.created_at = new Date().toISOString();
     items.push(data);
     saveDiskDb();
     return [data];
   }
 
-  if (method === 'PATCH') {
-    const params = options.params || {};
-    let targetId = '';
-    for (const [k, v] of Object.entries(params)) {
-      if (k === 'id' && String(v).startsWith('eq.')) {
-        targetId = String(v).slice(3);
-      }
+  const targetId = (() => {
+    for (const [k, v] of Object.entries(options.params || {})) {
+      if (k === 'id' && String(v).startsWith('eq.')) return String(v).slice(3);
     }
+    return '';
+  })();
+
+  if (method === 'PATCH') {
     const idx = items.findIndex(item => item.id === targetId);
     if (idx !== -1) {
       items[idx] = { ...items[idx], ...options.json, updated_at: new Date().toISOString() };
@@ -298,13 +363,6 @@ export async function request(
   }
 
   if (method === 'DELETE') {
-    const params = options.params || {};
-    let targetId = '';
-    for (const [k, v] of Object.entries(params)) {
-      if (k === 'id' && String(v).startsWith('eq.')) {
-        targetId = String(v).slice(3);
-      }
-    }
     const idx = items.findIndex(item => item.id === targetId);
     if (idx !== -1) {
       items.splice(idx, 1);
@@ -316,9 +374,11 @@ export async function request(
   return [];
 }
 
+// ===========================================================================
+// Public helpers
+// ===========================================================================
 export async function select(table: string, params: Record<string, any> = {}) {
-  const p = { select: '*', ...params };
-  return await request('GET', table, { params: p });
+  return await request('GET', table, { params: { select: '*', ...params } });
 }
 
 export async function selectOne(table: string, params: Record<string, any> = {}) {
@@ -326,20 +386,65 @@ export async function selectOne(table: string, params: Record<string, any> = {})
   return rows && rows.length > 0 ? rows[0] : null;
 }
 
+/** Insert and report which columns (if any) had to be dropped because the DB schema lacks them. */
+export async function insertEx(table: string, data: any): Promise<{ row: any; dropped: string[] }> {
+  const dropped: string[] = [];
+  const rows = await request('POST', table, { json: data, prefer: 'return=representation', dropped });
+  return { row: rows && rows.length > 0 ? rows[0] : null, dropped };
+}
+
 export async function insert(table: string, data: any) {
-  const rows = await request('POST', table, { json: data, prefer: 'return=representation' });
-  const created = rows && rows.length > 0 ? rows[0] : null;
-  if (created && table === 'app_users' && created.id) {
-    ensureSupabaseAuthUser(created.id, created.email).catch(() => {});
-  }
-  return created;
+  return (await insertEx(table, data)).row;
+}
+
+/** Update and report which columns (if any) had to be dropped because the DB schema lacks them. */
+export async function updateEx(table: string, params: Record<string, any>, data: any): Promise<{ row: any; dropped: string[] }> {
+  const dropped: string[] = [];
+  const rows = await request('PATCH', table, { params, json: data, prefer: 'return=representation', dropped });
+  return { row: rows && rows.length > 0 ? rows[0] : null, dropped };
 }
 
 export async function update(table: string, params: Record<string, any>, data: any) {
-  const rows = await request('PATCH', table, { params, json: data, prefer: 'return=representation' });
-  return rows && rows.length > 0 ? rows[0] : null;
+  return (await updateEx(table, params, data)).row;
 }
 
 export async function remove(table: string, params: Record<string, any>) {
   return await request('DELETE', table, { params, prefer: 'return=representation' });
+}
+
+// ===========================================================================
+// Supabase Storage (public buckets, e.g. company logo)
+// ===========================================================================
+const bucketsReady = new Set<string>();
+
+async function ensureBucket(bucket: string) {
+  if (bucketsReady.has(bucket)) return;
+  const c = config();
+  const res = await fetch(`${c.base}/storage/v1/bucket`, {
+    method: 'POST',
+    headers: authHeaders({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify({ id: bucket, name: bucket, public: true }),
+  });
+  // 409 = already exists — fine
+  if (!res.ok && res.status !== 409) {
+    const txt = await res.text();
+    if (!/already exists/i.test(txt)) throw new Error(`Could not create storage bucket '${bucket}' (${res.status}): ${txt}`);
+  }
+  bucketsReady.add(bucket);
+}
+
+/** Upload bytes to a public bucket and return the public URL. */
+export async function uploadPublicFile(bucket: string, objectPath: string, body: Uint8Array, contentType: string): Promise<string> {
+  const c = config();
+  if (!c.enabled) throw new Error('Supabase storage is not configured.');
+  await ensureBucket(bucket);
+  const res = await fetch(`${c.base}/storage/v1/object/${bucket}/${objectPath}`, {
+    method: 'POST',
+    headers: authHeaders({ 'Content-Type': contentType, 'x-upsert': 'true', 'Cache-Control': 'public, max-age=31536000' }),
+    body: body as any,
+  });
+  if (!res.ok) {
+    throw new Error(`Storage upload failed (${res.status}): ${await res.text()}`);
+  }
+  return `${c.base}/storage/v1/object/public/${bucket}/${objectPath}`;
 }

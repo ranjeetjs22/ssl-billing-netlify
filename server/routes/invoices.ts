@@ -40,6 +40,42 @@ async function nextInvoiceNumber(invoiceDate: string): Promise<string> {
   return `${prefix}/${fy}/${seq.toString().padStart(4, '0')}`;
 }
 
+/**
+ * Multi-LR support: an invoice may carry several LR / consignment lines (`lr_items`).
+ * Derive the legacy scalar columns (lr_no, weight, rate_kg, origin, destination, shipment_date,
+ * freight) from the lines so that lists, search, statements and old PDFs keep working.
+ */
+function deriveConsignment(body: Record<string, any>, fallback: Record<string, any> = {}) {
+  const lrItems = calc.lrItemsList(body.lr_items);
+  if (lrItems.length === 0) {
+    return {
+      lr_items: [] as calc.LrItem[],
+      lr_no: body.lr_no !== undefined ? String(body.lr_no || '') : (fallback.lr_no || ''),
+      shipment_date: body.shipment_date !== undefined ? (body.shipment_date || null) : (fallback.shipment_date ?? null),
+      origin: body.origin !== undefined ? body.origin : (fallback.origin || ''),
+      destination: body.destination !== undefined ? body.destination : (fallback.destination || ''),
+      weight: body.weight !== undefined ? calc.num(body.weight) : calc.num(fallback.weight),
+      rate_kg: body.rate_kg !== undefined ? calc.num(body.rate_kg) : calc.num(fallback.rate_kg),
+    };
+  }
+
+  const first = lrItems[0];
+  const last = lrItems[lrItems.length - 1];
+  const totalWeight = calc.r2(lrItems.reduce((acc, l) => acc + l.weight, 0));
+  const rates = Array.from(new Set(lrItems.map(l => l.rate_kg).filter(r => r > 0)));
+
+  return {
+    lr_items: lrItems,
+    lr_no: calc.lrNumbersLabel(lrItems),
+    shipment_date: first.lr_date || body.shipment_date || fallback.shipment_date || null,
+    origin: body.origin || first.origin || fallback.origin || '',
+    destination: body.destination || last.destination || first.destination || fallback.destination || '',
+    weight: totalWeight,
+    // A single common rate is meaningful; mixed rates are per-line only.
+    rate_kg: rates.length === 1 ? rates[0] : 0,
+  };
+}
+
 invoiceRouter.get('/invoices/next-number', requireModule('invoices'), async (req: Request, res: Response) => {
   try {
     const invDate = (req.query.invoice_date as string) || new Date().toISOString().slice(0, 10);
@@ -74,8 +110,12 @@ invoiceRouter.get('/invoices', requireModule('invoices'), async (req: Request, r
     const page = parseInt(req.query.page as string, 10) || 1;
     const pageSize = parseInt(req.query.page_size as string, 10) || 20;
 
-    let rows = await db.select('invoices', { order: `${sort}.${order}` });
-    
+    const [rowsRaw, payments] = await Promise.all([
+      db.select('invoices', { order: `${sort}.${order}` }),
+      db.select('payments'),
+    ]);
+    let rows = rowsRaw;
+
     // Explicit secondary tie-break sort to guarantee newest invoices appear on top
     rows.sort((a: any, b: any) => {
       if (sort === 'invoice_date') {
@@ -98,8 +138,6 @@ invoiceRouter.get('/invoices', requireModule('invoices'), async (req: Request, r
       return va > vb ? 1 : va < vb ? -1 : 0;
     });
 
-    const payments = await db.select('payments');
-
     const paidMap: Record<string, number> = {};
     for (const p of payments) {
       paidMap[p.invoice_id] = (paidMap[p.invoice_id] || 0) + calc.num(p.amount);
@@ -119,6 +157,7 @@ invoiceRouter.get('/invoices', requireModule('invoices'), async (req: Request, r
       rows = rows.filter((r: any) =>
         (r.invoice_no || '').toLowerCase().includes(s) ||
         String(r.lr_no || '').toLowerCase().includes(s) ||
+        (Array.isArray(r.lr_items) && r.lr_items.some((l: any) => String(l?.lr_no || '').toLowerCase().includes(s))) ||
         ((r.buyer || {}).name || '').toLowerCase().includes(s)
       );
     }
@@ -169,8 +208,10 @@ invoiceRouter.get('/invoices', requireModule('invoices'), async (req: Request, r
 
 invoiceRouter.get('/invoices/export', requireModule('invoices'), async (_req: Request, res: Response) => {
   try {
-    const rows = await db.select('invoices', { order: 'invoice_date.desc' });
-    const payments = await db.select('payments');
+    const [rows, payments] = await Promise.all([
+      db.select('invoices', { order: 'invoice_date.desc' }),
+      db.select('payments'),
+    ]);
     const paidMap: Record<string, number> = {};
     for (const p of payments) {
       paidMap[p.invoice_id] = (paidMap[p.invoice_id] || 0) + calc.num(p.amount);
@@ -218,15 +259,18 @@ invoiceRouter.get('/invoices/export', requireModule('invoices'), async (_req: Re
 
 invoiceRouter.get('/invoices/overdue', requireModule('invoices'), async (_req: Request, res: Response) => {
   try {
-    const company = (await db.selectOne('company_settings')) || {};
-    const rows = await db.select('invoices', { order: 'invoice_date.asc' });
-    const payments = await db.select('payments');
+    const [companyRow, rows, payments, customers] = await Promise.all([
+      db.selectOne('company_settings'),
+      db.select('invoices', { order: 'invoice_date.asc' }),
+      db.select('payments'),
+      db.select('customers'),
+    ]);
+    const company = companyRow || {};
     const paidMap: Record<string, number> = {};
     for (const p of payments) {
       paidMap[p.invoice_id] = (paidMap[p.invoice_id] || 0) + calc.num(p.amount);
     }
 
-    const customers = await db.select('customers');
     const custMap: Record<string, any> = {};
     for (const c of customers) {
       custMap[c.id] = c;
@@ -281,11 +325,13 @@ invoiceRouter.get('/invoices/overdue', requireModule('invoices'), async (_req: R
 
 invoiceRouter.get('/invoices/:invoice_id', requireModule('invoices'), async (req: Request, res: Response) => {
   try {
-    const inv = await db.selectOne('invoices', { id: `eq.${req.params.invoice_id}` });
+    const [inv, payments] = await Promise.all([
+      db.selectOne('invoices', { id: `eq.${req.params.invoice_id}` }),
+      db.select('payments', { invoice_id: `eq.${req.params.invoice_id}` }),
+    ]);
     if (!inv) {
       return res.status(404).json({ detail: 'This invoice could not be found.' });
     }
-    const payments = await db.select('payments', { invoice_id: `eq.${inv.id}` });
     const paid = calc.r2(payments.reduce((acc: number, p: any) => acc + calc.num(p.amount), 0));
     const t = calc.compute(inv);
     const balance = calc.r2(Math.max(0, t.grand_total - paid));
@@ -306,17 +352,27 @@ invoiceRouter.get('/invoices/:invoice_id', requireModule('invoices'), async (req
 invoiceRouter.post('/invoices', requireModule('invoices'), async (req: Request, res: Response) => {
   try {
     const body = req.body;
-    const cust = await db.selectOne('customers', { id: `eq.${body.customer_id}` });
+    const [cust, companyRow] = await Promise.all([
+      db.selectOne('customers', { id: `eq.${body.customer_id}` }),
+      db.selectOne('company_settings'),
+    ]);
     if (!cust) {
       return res.status(400).json({ detail: 'Please select a valid customer before saving the invoice.' });
     }
 
-    const company = (await db.selectOne('company_settings')) || {};
+    const company = companyRow || {};
     const invoiceDate = body.invoice_date || new Date().toISOString().slice(0, 10);
-    const invoiceNo = body.invoice_no || (await nextInvoiceNumber(invoiceDate));
+    const invoiceNo = String(body.invoice_no || (await nextInvoiceNumber(invoiceDate))).trim();
+    if (body.invoice_no) {
+      const dup = await db.selectOne('invoices', { invoice_no: `eq.${invoiceNo}` });
+      if (dup) {
+        return res.status(400).json({ detail: `Invoice number ${invoiceNo} already exists. Please use a different number.` });
+      }
+    }
 
     const extras = calc.extrasList(body.extra_charges);
-    const totals = calc.compute({ ...body, extra_charges: extras });
+    const consignment = deriveConsignment(body);
+    const totals = calc.compute({ ...body, extra_charges: extras, lr_items: consignment.lr_items });
 
     const buyer = {
       name: cust.name,
@@ -368,12 +424,14 @@ invoiceRouter.post('/invoices', requireModule('invoices'), async (req: Request, 
       buyer,
       ship_to: shipTo,
       same_as_buyer: body.same_as_buyer ?? true,
-      lr_no: body.lr_no || '',
-      shipment_date: body.shipment_date || null,
-      origin: body.origin || '',
-      destination: body.destination || '',
-      weight: calc.num(body.weight),
-      rate_kg: calc.num(body.rate_kg),
+      lr_no: consignment.lr_no,
+      lr_items: consignment.lr_items,
+      shipment_date: consignment.shipment_date,
+      origin: consignment.origin,
+      destination: consignment.destination,
+      vehicle_no: body.vehicle_no || '',
+      weight: consignment.weight,
+      rate_kg: consignment.rate_kg,
       dimensions: body.dimensions || '',
       sac: body.sac || '996511',
       place_of_supply: effectivePlaceOfSupply,
@@ -410,7 +468,12 @@ invoiceRouter.post('/invoices', requireModule('invoices'), async (req: Request, 
       updated_at: new Date().toISOString(),
     };
 
-    const created = await db.insert('invoices', row);
+    const { row: created, dropped } = await db.insertEx('invoices', row);
+    if (dropped.length > 0) {
+      console.warn(`[Invoices] Supabase schema is missing column(s): ${dropped.join(', ')} — invoice saved without them.`);
+    }
+    // Keep the API response complete even when the DB could not persist a column.
+    if (dropped.includes('lr_items')) created.lr_items = consignment.lr_items;
 
     // Increment next_number in company settings if sequence number matched
     const seqPart = invoiceNo.split('/').pop();
@@ -457,6 +520,12 @@ invoiceRouter.put('/invoices/:invoice_id', requireModule('invoices'), async (req
     const body = req.body;
     const customerId = body.customer_id || old.customer_id;
     const cust = await db.selectOne('customers', { id: `eq.${customerId}` });
+    if (body.invoice_no && String(body.invoice_no).trim() !== String(old.invoice_no)) {
+      const dup = await db.selectOne('invoices', { invoice_no: `eq.${String(body.invoice_no).trim()}` });
+      if (dup && dup.id !== invId) {
+        return res.status(400).json({ detail: `Invoice number ${String(body.invoice_no).trim()} already exists. Please use a different number.` });
+      }
+    }
 
     let buyer = old.buyer;
     if (cust) {
@@ -489,7 +558,12 @@ invoiceRouter.put('/invoices/:invoice_id', requireModule('invoices'), async (req
     }
 
     const extras = calc.extrasList(body.extra_charges);
-    const totals = calc.compute({ ...body, extra_charges: extras });
+    // If the client did not send lr_items at all, keep whatever lines the invoice already has.
+    const consignment = deriveConsignment(
+      body.lr_items === undefined ? { ...body, lr_items: old.lr_items } : body,
+      old
+    );
+    const totals = calc.compute({ ...body, extra_charges: extras, lr_items: consignment.lr_items });
 
     const data: any = {
       customer_id: customerId,
@@ -498,12 +572,14 @@ invoiceRouter.put('/invoices/:invoice_id', requireModule('invoices'), async (req
       buyer,
       ship_to: shipTo,
       same_as_buyer: sameAsBuyer,
-      lr_no: body.lr_no !== undefined ? body.lr_no : old.lr_no,
-      shipment_date: body.shipment_date !== undefined ? body.shipment_date : old.shipment_date,
-      origin: body.origin !== undefined ? body.origin : old.origin,
-      destination: body.destination !== undefined ? body.destination : old.destination,
-      weight: body.weight !== undefined ? calc.num(body.weight) : old.weight,
-      rate_kg: body.rate_kg !== undefined ? calc.num(body.rate_kg) : old.rate_kg,
+      lr_no: consignment.lr_no,
+      lr_items: consignment.lr_items,
+      shipment_date: consignment.shipment_date,
+      origin: consignment.origin,
+      destination: consignment.destination,
+      vehicle_no: body.vehicle_no !== undefined ? body.vehicle_no : (old.vehicle_no || ''),
+      weight: consignment.weight,
+      rate_kg: consignment.rate_kg,
       dimensions: body.dimensions !== undefined ? body.dimensions : old.dimensions,
       sac: body.sac || old.sac || '996511',
       place_of_supply: body.place_of_supply || shipTo?.state || (cust ? cust.state : 'Gujarat') || old.place_of_supply,
@@ -528,7 +604,11 @@ invoiceRouter.put('/invoices/:invoice_id', requireModule('invoices'), async (req
       updated_at: new Date().toISOString(),
     };
 
-    const updated = await db.update('invoices', { id: `eq.${invId}` }, data);
+    const { row: updated, dropped } = await db.updateEx('invoices', { id: `eq.${invId}` }, data);
+    if (dropped.length > 0) {
+      console.warn(`[Invoices] Supabase schema is missing column(s): ${dropped.join(', ')} — invoice updated without them.`);
+    }
+    if (dropped.includes('lr_items')) updated.lr_items = consignment.lr_items;
     const payments = await db.select('payments', { invoice_id: `eq.${invId}` });
     const paid = calc.r2(payments.reduce((acc: number, p: any) => acc + calc.num(p.amount), 0));
 

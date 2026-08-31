@@ -58,6 +58,7 @@ export interface Customer {
   pin?: string;
   gstin?: string;
   pan?: string;
+  contact_person?: string;
   phone?: string;
   whatsapp?: string;
   email?: string;
@@ -129,10 +130,25 @@ export interface ChargeItem {
   amount: number;
 }
 
+/** One LR / consignment line on a (possibly multi-LR) bill. */
+export interface LrItem {
+  lr_no: string;
+  lr_date?: string;
+  origin?: string;
+  destination?: string;
+  description?: string;
+  packages?: number;
+  weight: number;
+  rate_kg: number;
+  amount: number;
+}
+
 export interface InvoiceTotals {
   freight: number;
   fuel_surcharge: number;
   fuel_hike: number;
+  lr_items?: LrItem[];
+  lr_count?: number;
   additional_items: ChargeItem[];
   additional_total: number;
   gross_amount: number;
@@ -176,6 +192,7 @@ export interface Invoice {
   };
   same_as_buyer: boolean;
   lr_no?: string;
+  lr_items?: LrItem[];
   vehicle_no?: string;
   shipment_date?: string;
   origin?: string;
@@ -215,6 +232,10 @@ export interface Invoice {
   totals?: InvoiceTotals;
   created_at?: string;
   updated_at?: string;
+  /** Convenience fields added by GET /dashboard for the "recent invoices" list. */
+  buyer_name?: string;
+  from_city?: string;
+  to_city?: string;
 }
 
 export interface Payment {

@@ -24,7 +24,8 @@ import {
   Trash2
 } from 'lucide-react';
 import { Customer, Invoice, Payment, CompanySettings, BankAccount, CustomerStatementResponse, CustomerLedgerEntry } from '../types.js';
-import { formatINR, printStatementPDF, printInvoicePDF } from '../utils/pdfGenerator.js';
+import { formatINR } from '../utils/format.js';
+import { printStatementPDF, printInvoicePDF } from '../utils/pdf.js';
 import { apiRequest } from '../services/api.js';
 import { DeleteInvoiceModal } from './DeleteInvoiceModal.js';
 

@@ -2,13 +2,25 @@ import React, { useState, useEffect } from 'react';
 import { X, CreditCard, Save, Receipt, Building2 } from 'lucide-react';
 import { apiRequest } from '../services/api.js';
 import { Invoice, BankAccount } from '../types.js';
-import { formatINR } from '../utils/pdfGenerator.js';
+import { formatINR } from '../utils/format.js';
 
 interface PaymentModalProps {
   initialInvoice?: Invoice | null;
   onClose: () => void;
   onSuccess: () => void;
 }
+
+/**
+ * Values MUST match the server's accepted list (server/routes/payments.ts → METHODS).
+ * Labels are what the user sees.
+ */
+const PAYMENT_METHODS: { value: string; label: string }[] = [
+  { value: 'Bank Transfer', label: 'Bank Transfer (NEFT / RTGS / IMPS)' },
+  { value: 'UPI', label: 'UPI / QR' },
+  { value: 'Cheque', label: 'Cheque / DD' },
+  { value: 'Cash', label: 'Cash' },
+  { value: 'Other', label: 'Other' },
+];
 
 export const PaymentModal: React.FC<PaymentModalProps> = ({
   initialInvoice,
@@ -20,7 +32,8 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
   const [selectedInvoiceId, setSelectedInvoiceId] = useState(initialInvoice?.id || '');
   const [amount, setAmount] = useState<number>(initialInvoice?.balance ?? initialInvoice?.grand_total ?? 0);
   const [paymentDate, setPaymentDate] = useState(new Date().toISOString().slice(0, 10));
-  const [method, setMethod] = useState('NEFT / RTGS');
+  const [method, setMethod] = useState(PAYMENT_METHODS[0].value);
+  const [methods, setMethods] = useState(PAYMENT_METHODS);
   const [reference, setReference] = useState('');
   const [bankAccountId, setBankAccountId] = useState('');
   const [notes, setNotes] = useState('');
@@ -30,7 +43,7 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
   useEffect(() => {
     const init = async () => {
       try {
-        const invRes = await apiRequest<{ items: Invoice[] }>('/invoices?status=pending&page_size=100');
+        const invRes = await apiRequest<{ items: Invoice[] }>('/invoices?status=pending&page_size=500');
         let list = invRes.items || [];
         if (initialInvoice && !list.find(i => i.id === initialInvoice.id)) {
           list = [initialInvoice, ...list];
@@ -42,13 +55,31 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
           setAmount(list[0].balance ?? list[0].grand_total);
         }
 
-        const bankRes = await apiRequest<{ accounts: BankAccount[] }>('/settings/bank-accounts');
-        setBankAccounts(bankRes.accounts || []);
-        if (bankRes.accounts && bankRes.accounts.length > 0) {
-          setBankAccountId(bankRes.accounts[0].id);
-        }
       } catch (err) {
         console.error('Init error in payment modal', err);
+      }
+
+      // Bank accounts (endpoint returns a plain array; tolerate {accounts}/{items} too)
+      try {
+        const bankRes = await apiRequest<any>('/settings/banks');
+        const list: BankAccount[] = Array.isArray(bankRes) ? bankRes : (bankRes?.accounts || bankRes?.items || []);
+        setBankAccounts(list);
+        const def = list.find(b => b.is_default) || list[0];
+        if (def?.id) setBankAccountId(def.id);
+      } catch (err) {
+        console.warn('Bank accounts unavailable in payment modal', err);
+      }
+
+      // Keep the method list in sync with whatever the server accepts
+      try {
+        const m = await apiRequest<{ methods: string[] }>('/payments/methods');
+        if (Array.isArray(m?.methods) && m.methods.length > 0) {
+          const merged = m.methods.map(v => PAYMENT_METHODS.find(x => x.value === v) || { value: v, label: v });
+          setMethods(merged);
+          if (!m.methods.includes(PAYMENT_METHODS[0].value)) setMethod(m.methods[0]);
+        }
+      } catch {
+        // keep defaults
       }
     };
     init();
@@ -62,6 +93,9 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
     }
   };
 
+  const curInvoice = invoices.find(i => i.id === selectedInvoiceId);
+  const curBalance = curInvoice ? (curInvoice.balance ?? curInvoice.grand_total ?? 0) : 0;
+
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedInvoiceId) {
@@ -72,11 +106,17 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
       setError('Payment amount must be greater than 0.');
       return;
     }
+    const outstanding = curInvoice ? (curInvoice.balance ?? curInvoice.grand_total ?? 0) : 0;
+    if (curInvoice && amount > outstanding + 0.5) {
+      setError(`Amount exceeds the outstanding balance of ₹${formatINR(outstanding)}.`);
+      return;
+    }
 
     setSaving(true);
     setError(null);
 
     try {
+      const bank = bankAccounts.find(b => b.id === bankAccountId);
       await apiRequest('/payments', {
         method: 'POST',
         body: JSON.stringify({
@@ -86,6 +126,7 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
           method,
           reference,
           bank_account_id: bankAccountId || undefined,
+          bank: bank ? `${bank.bank_name} (A/C ••${String(bank.account_number || '').slice(-4)})` : undefined,
           notes,
         }),
       });
@@ -98,8 +139,6 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
       setSaving(false);
     }
   };
-
-  const curInvoice = invoices.find(i => i.id === selectedInvoiceId);
 
   return (
     <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 overflow-y-auto">
@@ -166,12 +205,22 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
           {/* Amount & Date */}
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-slate-700 font-semibold mb-1">Received Amount (₹) *</label>
+              <div className="flex items-center justify-between mb-1">
+                <label className="text-slate-700 font-semibold">Received Amount (₹) *</label>
+                {curInvoice && (
+                  <div className="flex items-center gap-1.5 text-[10px] font-semibold">
+                    <button type="button" onClick={() => setAmount(Math.round(curBalance * 50) / 100)} className="text-slate-500 hover:text-emerald-700 cursor-pointer">50%</button>
+                    <span className="text-slate-300">·</span>
+                    <button type="button" onClick={() => setAmount(curBalance)} className="text-emerald-600 hover:text-emerald-700 cursor-pointer">Full balance</button>
+                  </div>
+                )}
+              </div>
               <input
                 type="number"
                 step="any"
                 required
-                min="1"
+                min="0.01"
+                max={curInvoice ? curBalance + 0.5 : undefined}
                 value={amount || ''}
                 onChange={(e) => setAmount(parseFloat(e.target.value) || 0)}
                 className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 font-mono font-bold text-emerald-600 text-sm focus:outline-none focus:border-emerald-500"
@@ -200,12 +249,9 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
                 onChange={(e) => setMethod(e.target.value)}
                 className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-900 text-xs focus:outline-none focus:border-emerald-500"
               >
-                <option value="NEFT / RTGS">NEFT / RTGS</option>
-                <option value="IMPS">IMPS</option>
-                <option value="UPI / QR">UPI / QR</option>
-                <option value="Cheque">Cheque</option>
-                <option value="Cash">Cash</option>
-                <option value="Bank Transfer">Bank Transfer</option>
+                {methods.map((m) => (
+                  <option key={m.value} value={m.value}>{m.label}</option>
+                ))}
               </select>
             </div>
 
@@ -265,7 +311,13 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
               className="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-semibold shadow-xs transition flex items-center gap-2 disabled:opacity-50"
             >
               <Save className="w-4 h-4" />
-              <span>{saving ? 'Processing...' : 'Record Payment'}</span>
+              <span>
+                {saving
+                  ? 'Processing...'
+                  : curInvoice && amount > 0 && amount < curBalance - 0.5
+                  ? 'Record Partial Payment'
+                  : 'Record Payment'}
+              </span>
             </button>
           </div>
         </form>

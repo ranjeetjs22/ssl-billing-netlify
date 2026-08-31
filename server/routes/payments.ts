@@ -8,6 +8,79 @@ paymentRouter.use(authMiddleware);
 
 export const METHODS = ['Bank Transfer', 'UPI', 'Cash', 'Cheque', 'Other'];
 
+// Accept the many ways people label a payment mode and map to the canonical METHODS list.
+const METHOD_ALIASES: Record<string, string> = {
+  'bank transfer': 'Bank Transfer',
+  'bank': 'Bank Transfer',
+  'neft': 'Bank Transfer',
+  'rtgs': 'Bank Transfer',
+  'imps': 'Bank Transfer',
+  'neft / rtgs': 'Bank Transfer',
+  'neft/rtgs': 'Bank Transfer',
+  'neft / rtgs / imps': 'Bank Transfer',
+  'net banking': 'Bank Transfer',
+  'netbanking': 'Bank Transfer',
+  'online': 'Bank Transfer',
+  'wire': 'Bank Transfer',
+  'upi': 'UPI',
+  'upi / qr': 'UPI',
+  'upi/qr': 'UPI',
+  'qr': 'UPI',
+  'gpay': 'UPI',
+  'google pay': 'UPI',
+  'phonepe': 'UPI',
+  'paytm': 'UPI',
+  'bhim': 'UPI',
+  'cash': 'Cash',
+  'cheque': 'Cheque',
+  'check': 'Cheque',
+  'chq': 'Cheque',
+  'dd': 'Cheque',
+  'demand draft': 'Cheque',
+  'other': 'Other',
+  'others': 'Other',
+};
+
+/** Returns the canonical method name, or null when nothing usable was supplied. */
+export function normaliseMethod(raw: any): string | null {
+  const s = String(raw ?? '').trim();
+  if (!s) return null;
+  const key = s.toLowerCase();
+  if (METHOD_ALIASES[key]) return METHOD_ALIASES[key];
+  const exact = METHODS.find(m => m.toLowerCase() === key);
+  if (exact) return exact;
+  if (/neft|rtgs|imps|bank|transfer|net ?banking/.test(key)) return 'Bank Transfer';
+  if (/upi|qr|gpay|phonepe|paytm/.test(key)) return 'UPI';
+  if (/cheque|check|draft|\bdd\b/.test(key)) return 'Cheque';
+  if (/cash/.test(key)) return 'Cash';
+  return 'Other';
+}
+
+async function resolveBankLabel(body: any): Promise<string> {
+  if (body.bank) return String(body.bank);
+  if (body.bank_account_id) {
+    try {
+      const acct = await db.selectOne('bank_accounts', { id: `eq.${body.bank_account_id}` });
+      if (acct) {
+        const last4 = String(acct.account_number || '').slice(-4);
+        return `${acct.bank_name || 'Bank'}${last4 ? ` (A/C ••${last4})` : ''}`;
+      }
+    } catch {
+      // non-fatal
+    }
+  }
+  return '';
+}
+
+function buildNotes(body: any, bankLabel: string, rawMethod: any, method: string): string {
+  const parts: string[] = [];
+  if (bankLabel) parts.push(`Bank: ${bankLabel}`);
+  const rawStr = String(rawMethod ?? '').trim();
+  if (method === 'Other' && rawStr && rawStr.toLowerCase() !== 'other') parts.push(`Mode: ${rawStr}`);
+  if (body.notes) parts.push(String(body.notes));
+  return parts.join(' · ');
+}
+
 async function paidTotal(invoiceId: string, excludePaymentId?: string): Promise<number> {
   const rows = await db.select('payments', { invoice_id: `eq.${invoiceId}` });
   const filtered = excludePaymentId ? rows.filter((r: any) => r.id !== excludePaymentId) : rows;
@@ -33,8 +106,7 @@ async function syncInvoiceStatus(invoiceId: string) {
 }
 
 async function enrichPayments(payments: any[]) {
-  const invoices = await db.select('invoices');
-  const customers = await db.select('customers');
+  const [invoices, customers] = await Promise.all([db.select('invoices'), db.select('customers')]);
   const invMap = new Map<string, any>(invoices.map((i: any) => [i.id, i]));
   const custMap = new Map<string, any>(customers.map((c: any) => [c.id, c]));
 
@@ -60,11 +132,14 @@ paymentRouter.get('/payments/methods', requireModule('payments'), (_req: Request
 paymentRouter.get('/payments/open-invoices', requireModule('payments'), async (req: Request, res: Response) => {
   try {
     const customerId = req.query.customer_id as string;
-    let invoices = await db.select('invoices', { order: 'invoice_date.desc' });
+    const [invoicesRaw, payments] = await Promise.all([
+      db.select('invoices', { order: 'invoice_date.desc' }),
+      db.select('payments'),
+    ]);
+    let invoices = invoicesRaw;
     if (customerId) {
       invoices = invoices.filter((i: any) => i.customer_id === customerId);
     }
-    const payments = await db.select('payments');
     const paidMap: Record<string, number> = {};
     for (const p of payments) {
       paidMap[p.invoice_id] = (paidMap[p.invoice_id] || 0) + calc.num(p.amount);
@@ -205,8 +280,14 @@ paymentRouter.post('/payments', requireModule('payments'), async (req: Request, 
     if (status === 'draft') {
       return res.status(400).json({ detail: 'Please issue this draft invoice before recording a payment.' });
     }
-    if (!METHODS.includes(body.method)) {
-      return res.status(400).json({ detail: `Payment method must be one of: ${METHODS.join(', ')}.` });
+    const method = normaliseMethod(body.method);
+    if (!method) {
+      return res.status(400).json({ detail: `Please select a payment method (${METHODS.join(', ')}).` });
+    }
+
+    const amount = calc.r2(calc.num(body.amount));
+    if (amount <= 0) {
+      return res.status(400).json({ detail: 'Payment amount must be greater than 0.' });
     }
 
     const totals = calc.compute(inv);
@@ -216,14 +297,12 @@ paymentRouter.post('/payments', requireModule('payments'), async (req: Request, 
     if (balance <= 0) {
       return res.status(400).json({ detail: 'This invoice is already fully paid.' });
     }
-    if (body.amount > balance + 0.5) {
+    if (amount > balance + 0.5) {
       return res.status(400).json({ detail: `The amount is more than the outstanding balance of Rs. ${balance.toFixed(2)}.` });
     }
 
-    let notes = body.notes || '';
-    if (body.bank) {
-      notes = `Bank: ${body.bank}` + (notes ? ` · ${notes}` : '');
-    }
+    const bankLabel = await resolveBankLabel(body);
+    const notes = buildNotes(body, bankLabel, body.method, method);
 
     const paymentDate = String(body.payment_date || new Date().toISOString()).slice(0, 10);
     const user = (req as any).user;
@@ -233,8 +312,8 @@ paymentRouter.post('/payments', requireModule('payments'), async (req: Request, 
       user_id: userId,
       invoice_id: body.invoice_id,
       payment_date: paymentDate,
-      amount: calc.r2(body.amount),
-      method: body.method,
+      amount,
+      method,
       reference: body.reference || '',
       notes,
       created_at: new Date().toISOString(),
@@ -280,25 +359,31 @@ paymentRouter.put('/payments/:payment_id', requireModule('payments'), async (req
       return res.status(404).json({ detail: 'That invoice could not be found.' });
     }
 
+    const method = normaliseMethod(body.method ?? old.method) || 'Other';
+    const amount = calc.r2(calc.num(body.amount ?? old.amount));
+    if (amount <= 0) {
+      return res.status(400).json({ detail: 'Payment amount must be greater than 0.' });
+    }
+
     const totals = calc.compute(inv);
     const others = await paidTotal(inv.id, payId);
     const room = calc.r2(totals.grand_total - others);
 
-    if (body.amount > room + 0.5) {
+    if (amount > room + 0.5) {
       return res.status(400).json({ detail: `The amount is more than the outstanding balance of Rs. ${room.toFixed(2)}.` });
     }
 
-    let notes = body.notes || '';
-    if (body.bank) {
-      notes = `Bank: ${body.bank}` + (notes ? ` · ${notes}` : '');
-    }
+    const bankLabel = await resolveBankLabel(body);
+    const notes = body.notes !== undefined || bankLabel
+      ? buildNotes(body, bankLabel, body.method, method)
+      : (old.notes || '');
 
     const updated = await db.update('payments', { id: `eq.${payId}` }, {
       invoice_id: body.invoice_id,
-      payment_date: String(body.payment_date).slice(0, 10),
-      amount: calc.r2(body.amount),
-      method: body.method,
-      reference: body.reference || '',
+      payment_date: String(body.payment_date || old.payment_date || new Date().toISOString()).slice(0, 10),
+      amount,
+      method,
+      reference: body.reference ?? old.reference ?? '',
       notes,
     });
 

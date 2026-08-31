@@ -1,0 +1,28 @@
+{
+  // Cloudflare Workers deployment: static SPA (dist/) + the Express API running on
+  // the Workers Node.js HTTP server support. Deploy: npm run cf:deploy
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "ssl-billing",
+  "main": "worker/index.ts",
+  "compatibility_date": "2025-10-01",
+  "compatibility_flags": ["nodejs_compat"],
+  "assets": {
+    "directory": "./dist",
+    "binding": "ASSETS",
+    "not_found_handling": "single-page-application",
+    // API paths go to the Worker; everything else is served straight from the edge cache
+    "run_worker_first": ["/api/*"]
+  },
+  // Runs the Worker close to Supabase instead of close to the visitor — every request
+  // makes several round-trips to the database, so this is the biggest latency win.
+  "placement": { "mode": "smart" },
+  "observability": { "enabled": true },
+  // iconv-lite@0.4 calls a module as a function (`require("./streams")(iconv)`), which
+  // esbuild's CJS interop breaks -> the Worker fails to boot with
+  // "require_streams(...) is not a function". Express only needs three functions from it,
+  // so swap in a TextDecoder-based shim for the Workers build. See worker/iconv-lite-shim.cjs.
+  "alias": { "iconv-lite": "./worker/iconv-lite-shim.cjs" },
+  "vars": { "NODE_ENV": "production" }
+  // Secrets (set once with `wrangler secret put <NAME>` or in the dashboard):
+  //   SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, JWT_SECRET, ADMIN_EMAIL, ADMIN_PASSWORD, ADMIN_NAME, GSTVERIFY_API_KEY
+}

@@ -1,9 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { AuthProvider, useAuth } from './context/AuthContext.js';
-import { Sidebar } from './components/Sidebar.js';
+import { Sidebar, MobileNav } from './components/Sidebar.js';
 import { TopHeader } from './components/TopHeader.js';
 import { LoginView } from './components/LoginView.js';
-import { Dashboard } from './components/Dashboard.js';
 import { InvoiceList } from './components/InvoiceList.js';
 import { InvoiceModal } from './components/InvoiceModal.js';
 import { InvoiceDetailModal } from './components/InvoiceDetailModal.js';
@@ -18,6 +17,15 @@ import { UserManagementView } from './components/UserManagement.js';
 import { AuditLogsModal } from './components/AuditLogsModal.js';
 import { Invoice, Customer, CompanySettings, BankAccount } from './types.js';
 import { apiRequest } from './services/api.js';
+
+// The dashboard (charts) is the heaviest screen — load it on demand.
+const Dashboard = React.lazy(() => import('./components/Dashboard.js').then(m => ({ default: m.Dashboard })));
+const ScreenLoader = () => (
+  <div className="py-16 flex items-center justify-center" role="status" aria-live="polite">
+    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-accent" />
+    <span className="sr-only">Loading…</span>
+  </div>
+);
 
 function MainApp() {
   const { user, loading } = useAuth();
@@ -82,8 +90,9 @@ function MainApp() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-slate-100 flex items-center justify-center">
-        <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-orange-600"></div>
+      <div className="min-h-dvh bg-canvas flex items-center justify-center" role="status" aria-live="polite">
+        <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-accent" />
+        <span className="sr-only">Loading…</span>
       </div>
     );
   }
@@ -93,7 +102,15 @@ function MainApp() {
   }
 
   return (
-    <div className="min-h-screen bg-[#F4F6F9] text-slate-800 flex font-sans selection:bg-orange-500 selection:text-white">
+    <div className="min-h-dvh bg-canvas text-ink flex selection:bg-accent selection:text-white">
+      <a
+        href="#main-content"
+        className="sr-only focus:not-sr-only focus:absolute focus:top-3 focus:left-3 focus:z-[100]
+                   focus:px-4 focus:py-2 focus:rounded-xl focus:bg-accent focus:text-white focus:font-semibold"
+      >
+        Skip to main content
+      </a>
+
       {/* Left Dark Sidebar */}
       <Sidebar
         activeTab={activeTab}
@@ -115,7 +132,7 @@ function MainApp() {
       />
 
       {/* Main Content Area on the right */}
-      <div className="flex-1 flex flex-col min-w-0 lg:pl-64">
+      <div className="flex-1 flex flex-col min-w-0 lg:pl-[17rem]">
         {/* Top Header */}
         <TopHeader
           activeTab={activeTab}
@@ -134,8 +151,12 @@ function MainApp() {
         />
 
         {/* Main Body View */}
-        <main className="flex-1 p-4 sm:p-6 max-w-7xl w-full mx-auto">
+        <main
+          id="main-content"
+          className="flex-1 px-3 py-4 sm:px-6 sm:py-6 max-w-[1600px] w-full mx-auto pb-24 lg:pb-6"
+        >
           {activeTab === 'dashboard' && (
+            <React.Suspense fallback={<ScreenLoader />}>
             <Dashboard
               key={refreshKey}
               onNewInvoice={() => {
@@ -151,6 +172,7 @@ function MainApp() {
               onSelectInvoice={(inv) => setSelectedInvoice(inv)}
               companySettings={companySettings}
             />
+            </React.Suspense>
           )}
 
           {activeTab === 'invoices' && (
@@ -204,16 +226,22 @@ function MainApp() {
         </main>
 
         {/* Footer */}
-        <footer className="border-t border-slate-200 bg-white py-4 text-center text-xs text-slate-500 mt-auto">
-          <div className="max-w-7xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-2">
-            <div className="font-medium">
-              &copy; {new Date().getFullYear()} {companySettings.name} · GST Transport & Freight Billing
-            </div>
-            <div className="font-mono text-[11px] text-slate-600 bg-slate-100 px-2.5 py-0.5 rounded border border-slate-200">
-              GSTIN: {companySettings.gstin} · SAC: 996511
-            </div>
+        <footer className="hidden lg:block border-t border-line bg-surface py-4 text-center text-xs text-ink-faint mt-auto">
+          <div className="max-w-[1600px] mx-auto px-6 flex flex-col sm:flex-row items-center justify-between gap-2">
+            <span className="font-medium">
+              &copy; {new Date().getFullYear()} {companySettings.name} · GST Transport &amp; Freight Billing
+            </span>
+            <span className="font-mono text-[11px] text-ink-soft bg-surface-sunken px-2.5 py-0.5 rounded border border-line">
+              GSTIN: {companySettings.gstin} · SAC 996511
+            </span>
           </div>
         </footer>
+
+        <MobileNav
+          activeTab={activeTab}
+          setActiveTab={setActiveTab}
+          onMore={() => setSidebarOpenMobile(true)}
+        />
       </div>
 
       {/* Modals */}
