@@ -11,3 +11,5 @@ coverage/
 
 # local offline DB (may contain real customer data)
 data/
+.env.migrate
+backups/

@@ -77,7 +77,8 @@ export function extrasList(extra: any): { label: string; amount: number }[] {
     for (const e of extra) {
       if (typeof e === 'object' && e !== null) {
         out.push({
-          label: e.label || e.name || 'Additional charge',
+          // `desc` is the key the predecessor app used for its extra charges
+          label: e.label || e.name || e.desc || 'Additional charge',
           amount: num(e.amount ?? e.value ?? e.amt),
         });
       } else {
@@ -114,6 +115,47 @@ export function compute(inv: Record<string, any>) {
   const extrasSum = extras.reduce((acc, e) => acc + e.amount, 0);
   const lrItems = lrItemsList(inv.lr_items);
   const lrFreight = lrItemsFreight(lrItems);
+
+  // ------------------------------------------------------------------
+  // Persisted rows are the billing truth.
+  // A row that already carries complete stored totals (grand_total + taxable_amount)
+  // is an invoice that was actually issued — display exactly what was billed instead
+  // of re-deriving it. Invoices written by the current app store the same numbers this
+  // function computes, so this changes nothing for them; it protects migrated invoices
+  // whose issuing app used a different formula. Live previews and create/update paths
+  // pass raw form fields (no grand_total), so they always take the derivation below.
+  // ------------------------------------------------------------------
+  if (num(inv.grand_total) > 0 && inv.taxable_amount !== null && inv.taxable_amount !== undefined) {
+    const taxable = r2(num(inv.taxable_amount));
+    const discount = r2(num(inv.discount_amount));
+    const additional = num(inv.additional_total) > 0
+      ? r2(num(inv.additional_total))
+      : r2(extrasSum + num(inv.processing) + num(inv.insurance_amt));
+    const gstType = normaliseGstType(inv.gst_type);
+    const dtype = String(inv.discount_type || 'percent').toLowerCase();
+    return {
+      freight: num(inv.freight) > 0 ? r2(num(inv.freight)) : (lrFreight > 0 ? lrFreight : r2(taxable + discount - additional)),
+      fuel_surcharge: 0,
+      fuel_hike: 0,
+      lr_items: lrItems,
+      lr_count: lrItems.length,
+      additional_items: extras,
+      additional_total: additional,
+      gross_amount: r2(taxable + discount),
+      discount_type: (dtype === 'fixed' ? 'fixed' : 'percent') as 'fixed' | 'percent',
+      discount_value: r2(num(inv.discount_value)),
+      discount_amount: discount,
+      taxable_amount: taxable,
+      gst_type: gstType,
+      gst_rate: gstType === 'exempt' ? 0 : num(inv.gst_rate ?? 18),
+      gst_amount: r2(num(inv.gst_amount)),
+      cgst: r2(num(inv.cgst)),
+      sgst: r2(num(inv.sgst)),
+      igst: r2(num(inv.igst)),
+      round_off: r2(num(inv.round_off)),
+      grand_total: r2(num(inv.grand_total)),
+    };
+  }
 
   let freight = 0;
   let fuel = 0;
