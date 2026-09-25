@@ -19,6 +19,7 @@ const TAB_TITLES: Record<string, { title: string; hint: string }> = {
   invoices: { title: 'Invoices', hint: 'GST tax invoices and consignment billing' },
   customers: { title: 'Customers', hint: 'Consignees, statements and outstanding balances' },
   payments: { title: 'Payments', hint: 'Receipts recorded against invoices' },
+  rates: { title: 'Rate Calculator', hint: 'Zone-wise freight pricing from the SSL rate card' },
   settings: { title: 'Settings', hint: 'Company profile, GST and bank details' },
   users: { title: 'Users', hint: 'Staff accounts and permissions' },
 };

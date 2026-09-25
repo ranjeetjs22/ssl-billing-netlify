@@ -18,6 +18,7 @@ import { paymentRouter } from './routes/payments.js';
 import { settingsRouter } from './routes/settings.js';
 import { dashboardRouter } from './routes/dashboard.js';
 import { lookupRouter } from './routes/lookup.js';
+import { rateRouter } from './routes/rates.js';
 
 dotenv.config();
 
@@ -392,6 +393,7 @@ app.use('/api', paymentRouter);
 app.use('/api', settingsRouter);
 app.use('/api', dashboardRouter);
 app.use('/api', lookupRouter);
+app.use('/api', rateRouter);
 
 // ---------------- API 404 Handler (Guarantees JSON response for unmatched API routes) ----------------
 app.all('/api/*', (req: Request, res: Response) => {

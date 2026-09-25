@@ -5,6 +5,7 @@ import {
   Users,
   CreditCard,
   Settings,
+  Calculator,
   UserCheck,
   ShieldAlert,
   LogOut,
@@ -33,6 +34,7 @@ export const NAV_ITEMS: NavItem[] = [
   { key: 'invoices', label: 'Invoices', shortLabel: 'Invoices', icon: FileText, module: 'invoices' },
   { key: 'payments', label: 'Payments', shortLabel: 'Payments', icon: CreditCard, module: 'payments' },
   { key: 'customers', label: 'Customers', shortLabel: 'Customers', icon: Users, module: 'customers' },
+  { key: 'rates', label: 'Rate Calculator', shortLabel: 'Rates', icon: Calculator, module: 'invoices' },
   { key: 'settings', label: 'Settings', shortLabel: 'Settings', icon: Settings, module: 'settings' },
   { key: 'users', label: 'Users & Roles', shortLabel: 'Users', icon: UserCheck, module: 'users', adminOnly: true },
 ];

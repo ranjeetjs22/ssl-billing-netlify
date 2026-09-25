@@ -20,6 +20,7 @@ import { apiRequest } from './services/api.js';
 
 // The dashboard (charts) is the heaviest screen — load it on demand.
 const Dashboard = React.lazy(() => import('./components/Dashboard.js').then(m => ({ default: m.Dashboard })));
+const RateCalculator = React.lazy(() => import('./components/RateCalculator.js').then(m => ({ default: m.RateCalculator })));
 const ScreenLoader = () => (
   <div className="py-16 flex items-center justify-center" role="status" aria-live="polite">
     <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-accent" />
@@ -205,6 +206,12 @@ function MainApp() {
               onSelectCustomer={(cust) => setSelectedCustomer(cust)}
               companySettings={companySettings}
             />
+          )}
+
+          {activeTab === 'rates' && (
+            <React.Suspense fallback={<ScreenLoader />}>
+              <RateCalculator />
+            </React.Suspense>
           )}
 
           {activeTab === 'payments' && (
