@@ -202,43 +202,43 @@ export const CompanySettingsView: React.FC<CompanySettingsProps> = ({ onRefreshS
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="bg-white border border-slate-200 p-5 rounded-2xl shadow-xs">
-        <h1 className="text-xl font-bold text-slate-900 flex items-center gap-2">
+      <div className="bg-surface border border-line p-5 rounded-card shadow-card">
+        <h1 className="text-xl font-bold text-ink flex items-center gap-2">
           <span>Enterprise & GST Billing Settings</span>
-          <span className="text-xs bg-orange-50 text-orange-600 font-semibold px-2 py-0.5 rounded-full border border-orange-200">
+          <span className="text-xs bg-accent-soft text-accent-ink font-semibold px-2 py-0.5 rounded-full border border-accent-line">
             SHREE SANWARIYA LOGISTICS
           </span>
         </h1>
-        <p className="text-xs text-slate-500 mt-1">
+        <p className="text-xs text-ink-faint mt-1">
           Configure company identity, GSTIN registration, invoice numbering prefixes, and bank settlement accounts.
         </p>
       </div>
 
       {msg && (
-        <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl text-emerald-700 text-xs flex items-center gap-2">
-          <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+        <div className="p-3 bg-positive-soft border border-positive-line rounded-card text-positive-ink text-xs flex items-center gap-2">
+          <CheckCircle2 className="w-4 h-4 text-positive-ink" />
           <span>{msg}</span>
         </div>
       )}
 
       {/* Main Settings Form */}
-      <form onSubmit={handleSaveSettings} className="bg-white border border-slate-200 rounded-2xl p-6 space-y-6 text-xs shadow-xs">
+      <form onSubmit={handleSaveSettings} className="bg-surface border border-line rounded-card p-6 space-y-6 text-xs shadow-card">
         {/* Brand & Logo Identity Box */}
-        <div className="bg-slate-50 border border-slate-200/80 rounded-2xl p-5 flex flex-col md:flex-row items-center justify-between gap-5">
+        <div className="bg-surface-muted border border-line rounded-card p-5 flex flex-col md:flex-row items-center justify-between gap-5">
           <div className="flex items-center gap-4">
-            <div className="bg-white p-3 rounded-2xl border border-slate-200 shadow-sm flex items-center justify-center shrink-0 min-w-[120px] max-h-[80px]">
+            <div className="bg-surface p-3 rounded-card border border-line shadow-card flex items-center justify-center shrink-0 min-w-[120px] max-h-[80px]">
               <SslLogo className="h-16 w-auto max-h-16 max-w-[140px]" customLogoUrl={settings.logo_url} />
             </div>
             <div>
               <div className="flex items-center gap-2 flex-wrap">
-                <h3 className="font-extrabold text-sm text-slate-900">
+                <h3 className="font-extrabold text-sm text-ink">
                   {settings.logo_url ? 'Custom Uploaded Logo' : 'Official Brand Logo (SSL Emblem)'}
                 </h3>
-                <span className="px-2 py-0.5 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-full text-[10px] font-bold">
+                <span className="px-2 py-0.5 bg-positive-soft text-positive-ink border border-positive-line rounded-full text-[10px] font-bold">
                   {settings.logo_url ? 'Active (Custom File)' : 'Active (Official Vector)'}
                 </span>
               </div>
-              <p className="text-slate-500 text-xs mt-1">
+              <p className="text-ink-faint text-xs mt-1">
                 Used across Dashboard, Top Header, Navigation Sidebar, A4 Tax Invoices, and Statements.
               </p>
             </div>
@@ -255,7 +255,7 @@ export const CompanySettingsView: React.FC<CompanySettingsProps> = ({ onRefreshS
             />
             <label
               htmlFor="company-logo-upload-input"
-              className="cursor-pointer flex items-center gap-1.5 px-3 py-2 bg-orange-500 hover:bg-orange-600 text-white rounded-xl text-xs font-semibold shadow-xs transition"
+              className="cursor-pointer flex items-center gap-1.5 px-3 py-2 bg-accent-soft text-accent-ink border border-accent-line hover:border-accent rounded-card text-xs font-semibold shadow-card transition"
             >
               <Upload className="w-3.5 h-3.5" />
               <span>{settings.logo_url ? 'Change Logo Image' : 'Upload Logo File'}</span>
@@ -265,7 +265,7 @@ export const CompanySettingsView: React.FC<CompanySettingsProps> = ({ onRefreshS
               <button
                 type="button"
                 onClick={handleResetLogo}
-                className="flex items-center gap-1.5 px-3 py-2 bg-white border border-rose-200 text-rose-600 hover:bg-rose-50 rounded-xl text-xs font-semibold shadow-2xs transition"
+                className="flex items-center gap-1.5 px-3 py-2 bg-surface border border-danger-line text-danger-ink hover:bg-danger-soft rounded-card text-xs font-semibold shadow-card transition"
                 title="Reset to official built-in vector logo"
               >
                 <RotateCcw className="w-3.5 h-3.5" />
@@ -276,181 +276,181 @@ export const CompanySettingsView: React.FC<CompanySettingsProps> = ({ onRefreshS
             <a
               href="/logo.svg"
               download="SHREE_SANWARIYA_LOGISTICS_LOGO.svg"
-              className="flex items-center gap-1.5 px-3 py-2 bg-white border border-slate-300 text-slate-700 hover:bg-slate-50 rounded-xl text-xs font-semibold shadow-2xs transition"
+              className="flex items-center gap-1.5 px-3 py-2 bg-surface border border-line-strong text-ink-soft hover:bg-surface-muted rounded-card text-xs font-semibold shadow-card transition"
             >
-              <Download className="w-3.5 h-3.5 text-slate-500" />
+              <Download className="w-3.5 h-3.5 text-ink-faint" />
               <span>Download SVG</span>
             </a>
           </div>
         </div>
 
-        <div className="border-b border-slate-100 pb-3 flex items-center gap-2">
-          <Building className="w-4 h-4 text-orange-600" />
-          <h2 className="text-sm font-bold text-slate-900 uppercase tracking-wider">Company & Legal Information</h2>
+        <div className="border-b border-line pb-3 flex items-center gap-2">
+          <Building className="w-4 h-4 text-accent-ink" />
+          <h2 className="text-sm font-bold text-ink uppercase tracking-wider">Company & Legal Information</h2>
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           <div className="sm:col-span-2">
-            <label className="block text-slate-700 font-semibold mb-1">Company Trade Name *</label>
+            <label className="block text-ink-soft font-semibold mb-1">Company Trade Name *</label>
             <input
               type="text"
               required
               value={settings.name}
               onChange={(e) => setSettings({ ...settings, name: e.target.value })}
-              className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-900 font-semibold focus:outline-none focus:border-orange-500"
+              className="w-full bg-surface-muted border border-line rounded-card px-3 py-2 text-ink font-semibold focus:outline-none focus:border-accent"
             />
           </div>
 
           <div>
-            <label className="block text-slate-700 font-semibold mb-1">Invoice Prefix</label>
+            <label className="block text-ink-soft font-semibold mb-1">Invoice Prefix</label>
             <input
               type="text"
               required
               value={settings.invoice_prefix || 'SSL'}
               onChange={(e) => setSettings({ ...settings, invoice_prefix: e.target.value })}
-              className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 font-mono text-orange-600 font-bold uppercase focus:outline-none focus:border-orange-500"
+              className="w-full bg-surface-muted border border-line rounded-card px-3 py-2 font-mono text-accent-ink font-bold uppercase focus:outline-none focus:border-accent"
               placeholder="SSL"
             />
           </div>
 
           <div>
-            <label className="block text-slate-700 font-semibold mb-1">GSTIN Number (15 Characters) *</label>
+            <label className="block text-ink-soft font-semibold mb-1">GSTIN Number (15 Characters) *</label>
             <input
               type="text"
               required
               maxLength={15}
               value={settings.gstin}
               onChange={(e) => setSettings({ ...settings, gstin: e.target.value.toUpperCase() })}
-              className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 font-mono text-slate-900 uppercase focus:outline-none focus:border-orange-500"
+              className="w-full bg-surface-muted border border-line rounded-card px-3 py-2 font-mono text-ink uppercase focus:outline-none focus:border-accent"
             />
           </div>
 
           <div>
-            <label className="block text-slate-700 font-semibold mb-1">PAN Number *</label>
+            <label className="block text-ink-soft font-semibold mb-1">PAN Number *</label>
             <input
               type="text"
               required
               maxLength={10}
               value={settings.pan}
               onChange={(e) => setSettings({ ...settings, pan: e.target.value.toUpperCase() })}
-              className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 font-mono text-slate-900 uppercase focus:outline-none focus:border-orange-500"
+              className="w-full bg-surface-muted border border-line rounded-card px-3 py-2 font-mono text-ink uppercase focus:outline-none focus:border-accent"
             />
           </div>
 
           <div>
-            <label className="block text-slate-700 font-semibold mb-1">Billing Email</label>
+            <label className="block text-ink-soft font-semibold mb-1">Billing Email</label>
             <input
               type="email"
               value={settings.email || ''}
               onChange={(e) => setSettings({ ...settings, email: e.target.value })}
-              className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-900 focus:outline-none focus:border-orange-500"
+              className="w-full bg-surface-muted border border-line rounded-card px-3 py-2 text-ink focus:outline-none focus:border-accent"
             />
           </div>
 
           <div>
-            <label className="block text-slate-700 font-semibold mb-1">Official Phone</label>
+            <label className="block text-ink-soft font-semibold mb-1">Official Phone</label>
             <input
               type="text"
               value={settings.phone || ''}
               onChange={(e) => setSettings({ ...settings, phone: e.target.value })}
-              className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-900 focus:outline-none focus:border-orange-500"
+              className="w-full bg-surface-muted border border-line rounded-card px-3 py-2 text-ink focus:outline-none focus:border-accent"
             />
           </div>
 
           <div>
-            <label className="block text-slate-700 font-semibold mb-1">WhatsApp for Invoices</label>
+            <label className="block text-ink-soft font-semibold mb-1">WhatsApp for Invoices</label>
             <input
               type="text"
               value={settings.whatsapp || ''}
               onChange={(e) => setSettings({ ...settings, whatsapp: e.target.value })}
-              className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-900 focus:outline-none focus:border-orange-500"
+              className="w-full bg-surface-muted border border-line rounded-card px-3 py-2 text-ink focus:outline-none focus:border-accent"
             />
           </div>
 
           <div className="sm:col-span-2">
-            <label className="block text-slate-700 font-semibold mb-1">Registered Address</label>
+            <label className="block text-ink-soft font-semibold mb-1">Registered Address</label>
             <input
               type="text"
               value={settings.address || ''}
               onChange={(e) => setSettings({ ...settings, address: e.target.value })}
-              className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-900 focus:outline-none focus:border-orange-500"
+              className="w-full bg-surface-muted border border-line rounded-card px-3 py-2 text-ink focus:outline-none focus:border-accent"
             />
           </div>
 
           <div>
-            <label className="block text-slate-700 font-semibold mb-1">City</label>
+            <label className="block text-ink-soft font-semibold mb-1">City</label>
             <input
               type="text"
               value={settings.city || ''}
               onChange={(e) => setSettings({ ...settings, city: e.target.value })}
-              className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-900 focus:outline-none focus:border-orange-500"
+              className="w-full bg-surface-muted border border-line rounded-card px-3 py-2 text-ink focus:outline-none focus:border-accent"
             />
           </div>
 
           <div>
-            <label className="block text-slate-700 font-semibold mb-1">State</label>
+            <label className="block text-ink-soft font-semibold mb-1">State</label>
             <input
               type="text"
               value={settings.state || ''}
               onChange={(e) => setSettings({ ...settings, state: e.target.value })}
-              className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-900 focus:outline-none focus:border-orange-500"
+              className="w-full bg-surface-muted border border-line rounded-card px-3 py-2 text-ink focus:outline-none focus:border-accent"
             />
           </div>
 
           <div>
-            <label className="block text-slate-700 font-semibold mb-1">Postal PIN Code</label>
+            <label className="block text-ink-soft font-semibold mb-1">Postal PIN Code</label>
             <input
               type="text"
               value={settings.pin || ''}
               onChange={(e) => setSettings({ ...settings, pin: e.target.value })}
-              className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-900 focus:outline-none focus:border-orange-500"
+              className="w-full bg-surface-muted border border-line rounded-card px-3 py-2 text-ink focus:outline-none focus:border-accent"
             />
           </div>
 
           <div className="sm:col-span-3">
-            <label className="block text-slate-700 font-semibold mb-1">Standard Invoice Terms & Conditions</label>
+            <label className="block text-ink-soft font-semibold mb-1">Standard Invoice Terms & Conditions</label>
             <textarea
               rows={3}
               value={settings.terms || ''}
               onChange={(e) => setSettings({ ...settings, terms: e.target.value })}
-              className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-900 focus:outline-none focus:border-orange-500"
+              className="w-full bg-surface-muted border border-line rounded-card px-3 py-2 text-ink focus:outline-none focus:border-accent"
             />
           </div>
         </div>
 
         {/* GSTIN Verification Information */}
-        <div className="border-t border-slate-200 pt-6 mt-6 space-y-4">
+        <div className="border-t border-line pt-6 mt-6 space-y-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <div className="p-2 bg-orange-100 text-orange-700 rounded-xl font-bold">GST</div>
+              <div className="p-2 bg-accent-soft text-accent-ink rounded-card font-bold">GST</div>
               <div>
-                <h3 className="font-bold text-slate-900 text-sm">Authoritative GSTVerify Integration</h3>
-                <p className="text-slate-500 text-[11px]">
-                  Powered by official GSTVerify API (<code className="text-orange-600 font-mono">gstverify.co.in/api/v1/verify/:gstin</code>).
+                <h3 className="font-bold text-ink text-sm">Authoritative GSTVerify Integration</h3>
+                <p className="text-ink-faint text-[11px]">
+                  Powered by official GSTVerify API (<code className="text-accent-ink font-mono">gstverify.co.in/api/v1/verify/:gstin</code>).
                 </p>
               </div>
             </div>
-            <span className="text-[10px] font-bold px-2.5 py-1 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-full flex items-center gap-1">
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+            <span className="text-[10px] font-bold px-2.5 py-1 bg-positive-soft text-positive-ink border border-positive-line rounded-full flex items-center gap-1">
+              <span className="w-1.5 h-1.5 rounded-full bg-positive animate-pulse"></span>
               <span>GSTVerify Active</span>
             </span>
           </div>
 
-          <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 text-slate-600 text-xs space-y-2">
-            <div className="font-medium text-slate-800">
+          <div className="bg-surface-muted p-4 rounded-card border border-line text-ink-soft text-xs space-y-2">
+            <div className="font-medium text-ink">
               Server-Side API Security:
             </div>
-            <p className="text-slate-500 leading-relaxed">
-              Live GSTIN verification credentials are stored strictly in backend environment variables (<code className="font-mono text-slate-800 bg-slate-200/70 px-1 py-0.5 rounded">GSTVERIFY_API_KEY</code>). All lookups are sanitized and normalized on the server before reaching the client.
+            <p className="text-ink-faint leading-relaxed">
+              Live GSTIN verification credentials are stored strictly in backend environment variables (<code className="font-mono text-ink bg-surface-sunken/70 px-1 py-0.5 rounded">GSTVERIFY_API_KEY</code>). All lookups are sanitized and normalized on the server before reaching the client.
             </p>
           </div>
         </div>
 
-        <div className="flex justify-end pt-3 border-t border-slate-100">
+        <div className="flex justify-end pt-3 border-t border-line">
           <button
             type="submit"
             disabled={saving}
-            className="px-5 py-2 bg-orange-600 hover:bg-orange-700 text-white rounded-xl text-xs font-semibold shadow-xs transition flex items-center gap-2 disabled:opacity-50"
+            className="px-5 py-2 bg-accent-strong hover:bg-accent-strong-hover text-on-accent rounded-card text-xs font-semibold shadow-card transition flex items-center gap-2 disabled:opacity-50"
           >
             <Save className="w-4 h-4" />
             <span>{saving ? 'Saving...' : 'Update Settings'}</span>
@@ -459,38 +459,38 @@ export const CompanySettingsView: React.FC<CompanySettingsProps> = ({ onRefreshS
       </form>
 
       {/* Bank Accounts Section */}
-      <div className="bg-white border border-slate-200 rounded-2xl p-6 space-y-5 text-xs shadow-xs">
-        <div className="border-b border-slate-100 pb-3 flex items-center justify-between">
+      <div className="bg-surface border border-line rounded-card p-6 space-y-5 text-xs shadow-card">
+        <div className="border-b border-line pb-3 flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <CreditCard className="w-4 h-4 text-emerald-600" />
-            <h2 className="text-sm font-bold text-slate-900 uppercase tracking-wider">Settlement Bank Accounts</h2>
+            <CreditCard className="w-4 h-4 text-positive-ink" />
+            <h2 className="text-sm font-bold text-ink uppercase tracking-wider">Settlement Bank Accounts</h2>
           </div>
-          <span className="text-[11px] text-slate-500 font-medium">Printed on A4 Tax Invoices</span>
+          <span className="text-[11px] text-ink-faint font-medium">Printed on A4 Tax Invoices</span>
         </div>
 
         {/* Existing Accounts List */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {(Array.isArray(bankAccounts) ? bankAccounts : []).map((b) => (
-            <div key={b.id} className="bg-slate-50 p-4 rounded-xl border border-slate-200 relative">
+            <div key={b.id} className="bg-surface-muted p-4 rounded-card border border-line relative">
               <div className="flex items-start justify-between">
                 <div>
-                  <div className="font-bold text-sm text-slate-900 flex items-center gap-2">
+                  <div className="font-bold text-sm text-ink flex items-center gap-2">
                     <span>{b.bank_name}</span>
                     {b.is_default && (
-                      <span className="text-[10px] bg-emerald-100 text-emerald-700 font-semibold px-2 py-0.5 rounded-full border border-emerald-200">
+                      <span className="text-[10px] bg-positive-soft text-positive-ink font-semibold px-2 py-0.5 rounded-full border border-positive-line">
                         Default
                       </span>
                     )}
                   </div>
-                  <div className="text-slate-500 mt-1">A/C: <span className="font-mono text-slate-800 font-semibold">{b.account_number}</span></div>
-                  <div className="text-slate-500">IFSC: <span className="font-mono text-slate-800 font-semibold">{b.ifsc || '—'}</span> | Branch: {b.branch || '—'}</div>
-                  <div className="text-slate-500">Holder: {b.account_holder}</div>
-                  {b.upi_id && <div className="text-slate-500">UPI: <span className="font-mono text-emerald-600 font-semibold">{b.upi_id}</span></div>}
+                  <div className="text-ink-faint mt-1">A/C: <span className="font-mono text-ink font-semibold">{b.account_number}</span></div>
+                  <div className="text-ink-faint">IFSC: <span className="font-mono text-ink font-semibold">{b.ifsc || '-'}</span> | Branch: {b.branch || '-'}</div>
+                  <div className="text-ink-faint">Holder: {b.account_holder}</div>
+                  {b.upi_id && <div className="text-ink-faint">UPI: <span className="font-mono text-positive-ink font-semibold">{b.upi_id}</span></div>}
                 </div>
 
                 <button
                   onClick={() => handleDeleteBank(b.id)}
-                  className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition"
+                  className="p-1.5 text-ink-faint hover:text-danger-ink hover:bg-danger-soft rounded-control transition"
                   title="Remove account"
                 >
                   <Trash2 className="w-4 h-4" />
@@ -501,68 +501,68 @@ export const CompanySettingsView: React.FC<CompanySettingsProps> = ({ onRefreshS
         </div>
 
         {/* Add New Bank Account Form */}
-        <form onSubmit={handleAddBankAccount} className="bg-slate-50 p-5 rounded-xl border border-slate-200 space-y-3">
-          <div className="font-bold text-slate-900">Add New Bank Account</div>
+        <form onSubmit={handleAddBankAccount} className="bg-surface-muted p-5 rounded-card border border-line space-y-3">
+          <div className="font-bold text-ink">Add New Bank Account</div>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <div>
-              <label className="block text-slate-600 font-medium mb-1">Bank Name *</label>
+              <label className="block text-ink-soft font-medium mb-1">Bank Name *</label>
               <input
                 type="text"
                 required
                 value={newBank.bank_name}
                 onChange={(e) => setNewBank({ ...newBank, bank_name: e.target.value })}
-                className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-slate-900 focus:outline-none focus:border-orange-500"
+                className="w-full bg-surface border border-line rounded-control px-3 py-2 text-ink focus:outline-none focus:border-accent"
                 placeholder="e.g. HDFC Bank"
               />
             </div>
             <div>
-              <label className="block text-slate-600 font-medium mb-1">Account Number *</label>
+              <label className="block text-ink-soft font-medium mb-1">Account Number *</label>
               <input
                 type="text"
                 required
                 value={newBank.account_number}
                 onChange={(e) => setNewBank({ ...newBank, account_number: e.target.value })}
-                className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 font-mono text-slate-900 focus:outline-none focus:border-orange-500"
+                className="w-full bg-surface border border-line rounded-control px-3 py-2 font-mono text-ink focus:outline-none focus:border-accent"
                 placeholder="50200012345678"
               />
             </div>
             <div>
-              <label className="block text-slate-600 font-medium mb-1">IFSC Code</label>
+              <label className="block text-ink-soft font-medium mb-1">IFSC Code</label>
               <input
                 type="text"
                 value={newBank.ifsc}
                 onChange={(e) => setNewBank({ ...newBank, ifsc: e.target.value.toUpperCase() })}
-                className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 font-mono text-slate-900 uppercase focus:outline-none focus:border-orange-500"
+                className="w-full bg-surface border border-line rounded-control px-3 py-2 font-mono text-ink uppercase focus:outline-none focus:border-accent"
                 placeholder="HDFC0001234"
               />
             </div>
             <div>
-              <label className="block text-slate-600 font-medium mb-1">Branch</label>
+              <label className="block text-ink-soft font-medium mb-1">Branch</label>
               <input
                 type="text"
                 value={newBank.branch}
                 onChange={(e) => setNewBank({ ...newBank, branch: e.target.value })}
-                className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-slate-900 focus:outline-none focus:border-orange-500"
+                className="w-full bg-surface border border-line rounded-control px-3 py-2 text-ink focus:outline-none focus:border-accent"
                 placeholder="Transport Nagar"
               />
             </div>
             <div>
-              <label className="block text-slate-600 font-medium mb-1">UPI ID</label>
+              <label className="block text-ink-soft font-medium mb-1">UPI ID</label>
               <input
                 type="text"
                 value={newBank.upi_id}
                 onChange={(e) => setNewBank({ ...newBank, upi_id: e.target.value })}
-                className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-slate-900 font-mono focus:outline-none focus:border-orange-500"
+                className="w-full bg-surface border border-line rounded-control px-3 py-2 text-ink font-mono focus:outline-none focus:border-accent"
                 placeholder="shreesanwariya@hdfcbank"
               />
             </div>
             <div className="flex items-center gap-2 pt-6">
-              <label className="flex items-center gap-2 text-slate-700 cursor-pointer font-medium">
+              <label className="flex items-center gap-2 text-ink-soft cursor-pointer font-medium">
                 <input
                   type="checkbox"
                   checked={newBank.is_default}
                   onChange={(e) => setNewBank({ ...newBank, is_default: e.target.checked })}
-                  className="rounded border-slate-300 text-orange-600 focus:ring-0"
+                  className="rounded border-line-strong text-accent-ink focus:ring-0"
                 />
                 <span>Set as Default Account</span>
               </label>
@@ -572,7 +572,7 @@ export const CompanySettingsView: React.FC<CompanySettingsProps> = ({ onRefreshS
           <div className="flex justify-end pt-2">
             <button
               type="submit"
-              className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-semibold transition flex items-center gap-1.5 shadow-xs"
+              className="px-4 py-2 bg-surface text-ink border border-line hover:border-line-strong hover:bg-surface-muted rounded-control text-xs font-medium transition flex items-center gap-1.5"
             >
               <Plus className="w-4 h-4" />
               <span>Save Bank Account</span>

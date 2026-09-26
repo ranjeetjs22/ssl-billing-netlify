@@ -100,15 +100,15 @@ export const UserManagementView: React.FC = () => {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white border border-slate-200 p-5 rounded-2xl shadow-xs">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-surface border border-line p-5 rounded-card shadow-card">
         <div>
-          <h1 className="text-xl font-bold text-slate-900 flex items-center gap-2">
+          <h1 className="text-xl font-bold text-ink flex items-center gap-2">
             <span>Staff & User Administration</span>
-            <span className="text-xs bg-orange-50 text-orange-600 font-semibold px-2 py-0.5 rounded-full border border-orange-200">
+            <span className="text-xs bg-accent-soft text-accent-ink font-semibold px-2 py-0.5 rounded-full border border-accent-line">
               Role-Based Access
             </span>
           </h1>
-          <p className="text-xs text-slate-500 mt-1">
+          <p className="text-xs text-ink-faint mt-1">
             Manage administrative credentials, operators, accountants, and functional module permissions
           </p>
         </div>
@@ -116,7 +116,7 @@ export const UserManagementView: React.FC = () => {
         {currentUser?.role === 'admin' && (
           <button
             onClick={() => setShowAdd(true)}
-            className="flex items-center gap-1.5 px-3.5 py-2 bg-orange-600 hover:bg-orange-700 text-white rounded-xl text-xs font-semibold shadow-xs transition"
+            className="flex items-center gap-1.5 px-3.5 py-2 bg-accent-strong hover:bg-accent-strong-hover text-on-accent rounded-card text-xs font-semibold shadow-card transition"
           >
             <UserPlus className="w-4 h-4" />
             <span>Create New User</span>
@@ -125,10 +125,10 @@ export const UserManagementView: React.FC = () => {
       </div>
 
       {/* User Table */}
-      <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-xs">
+      <div className="bg-surface border border-line rounded-card overflow-hidden shadow-card">
         <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs text-slate-600">
-            <thead className="bg-slate-50 text-slate-500 font-semibold border-b border-slate-200 uppercase tracking-wider text-[10px]">
+          <table className="w-full text-left text-xs text-ink-soft">
+            <thead className="bg-surface-muted text-ink-faint font-semibold border-b border-line uppercase tracking-wider text-[10px]">
               <tr>
                 <th className="py-3 px-4">User</th>
                 <th className="py-3 px-4">Role</th>
@@ -137,27 +137,27 @@ export const UserManagementView: React.FC = () => {
                 <th className="py-3 px-4 text-right">Actions</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-100">
+            <tbody className="divide-y divide-line">
               {loading ? (
                 <tr>
-                  <td colSpan={5} className="py-12 text-center text-slate-400">
-                    <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-orange-600 mx-auto"></div>
+                  <td colSpan={5} className="py-12 text-center text-ink-faint">
+                    <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-accent mx-auto"></div>
                   </td>
                 </tr>
               ) : (
                 users.map((u) => (
-                  <tr key={u.id} className="hover:bg-slate-50/80 transition">
+                  <tr key={u.id} className="hover:bg-surface-muted/80 transition">
                     <td className="py-3 px-4">
-                      <div className="font-bold text-slate-900">{u.full_name || 'Staff Member'}</div>
-                      <div className="text-slate-400 font-mono text-[11px]">{u.email}</div>
+                      <div className="font-bold text-ink">{u.full_name || 'Staff Member'}</div>
+                      <div className="text-ink-faint font-mono text-[11px]">{u.email}</div>
                     </td>
                     <td className="py-3 px-4">
                       <span className={`inline-block px-2.5 py-0.5 rounded-full text-[10px] font-semibold uppercase ${
                         u.role === 'admin'
-                          ? 'bg-orange-50 text-orange-700 border border-orange-200'
+                          ? 'bg-accent-soft text-accent-ink border border-accent-line'
                           : u.role === 'accountant'
-                          ? 'bg-purple-50 text-purple-700 border border-purple-200'
-                          : 'bg-blue-50 text-blue-700 border border-blue-200'
+                          ? 'bg-info-soft text-info-ink border border-info-line'
+                          : 'bg-info-soft text-info-ink border border-info-line'
                       }`}>
                         {u.role}
                       </span>
@@ -165,20 +165,20 @@ export const UserManagementView: React.FC = () => {
                     <td className="py-3 px-4">
                       <div className="flex flex-wrap gap-1">
                         {(u.modules || []).map((m) => (
-                          <span key={m} className="px-2 py-0.5 bg-slate-100 text-slate-700 text-[10px] rounded-md border border-slate-200">
+                          <span key={m} className="px-2 py-0.5 bg-surface-sunken text-ink-soft text-[10px] rounded-md border border-line">
                             {m}
                           </span>
                         ))}
                       </div>
                     </td>
-                    <td className="py-3 px-4 text-slate-500 text-[11px]">
+                    <td className="py-3 px-4 text-ink-faint text-[11px]">
                       {u.last_login ? new Date(u.last_login).toLocaleString() : 'Never'}
                     </td>
                     <td className="py-3 px-4 text-right">
                       {currentUser?.role === 'admin' && u.id !== currentUser?.id && (
                         <button
                           onClick={() => handleDeleteUser(u.id)}
-                          className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition"
+                          className="p-1.5 text-ink-faint hover:text-danger-ink hover:bg-danger-soft rounded-control transition"
                           title="Delete User"
                         >
                           <Trash2 className="w-4 h-4" />
@@ -195,65 +195,65 @@ export const UserManagementView: React.FC = () => {
 
       {/* Add User Modal */}
       {showAdd && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 overflow-y-auto">
-          <div className="bg-white border border-slate-200 rounded-2xl max-w-lg w-full p-6 shadow-2xl text-slate-800">
+        <div className="fixed inset-0 bg-scrim backdrop-blur-[6px] flex items-center justify-center p-4 z-50 overflow-y-auto">
+          <div className="sheet border border-line rounded-overlay max-w-lg w-full p-6 shadow-overlay text-ink">
             <div className="flex items-center justify-between mb-2">
-              <h3 className="text-base font-bold text-slate-900">Create User Account</h3>
+              <h3 className="text-base font-bold text-ink">Create User Account</h3>
               <button 
                 onClick={() => setShowAdd(false)}
-                className="p-1.5 text-slate-400 hover:text-slate-700 rounded-lg"
+                className="p-1.5 text-ink-faint hover:text-ink rounded-control"
               >
                 <X className="w-4 h-4" />
               </button>
             </div>
-            <p className="text-xs text-slate-500 mb-4">Grant role-based credentials for staff members</p>
+            <p className="text-xs text-ink-faint mb-4">Grant role-based credentials for staff members</p>
 
             {error && (
-              <div className="p-3 mb-4 bg-rose-50 border border-rose-200 rounded-xl text-rose-700 text-xs">
+              <div className="p-3 mb-4 bg-danger-soft border border-danger-line rounded-card text-danger-ink text-xs">
                 {error}
               </div>
             )}
 
             <form onSubmit={handleCreateUser} className="space-y-4 text-xs">
               <div>
-                <label className="block text-slate-700 font-semibold mb-1">Full Name</label>
+                <label className="block text-ink-soft font-semibold mb-1">Full Name</label>
                 <input
                   type="text"
                   required
                   value={fullName}
                   onChange={(e) => setFullName(e.target.value)}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-900 focus:outline-none focus:border-orange-500"
+                  className="w-full bg-surface-muted border border-line rounded-card px-3 py-2 text-ink focus:outline-none focus:border-accent"
                   placeholder="e.g. Mukesh Sharma"
                 />
               </div>
 
               <div>
-                <label className="block text-slate-700 font-semibold mb-1">Email Address (Username)</label>
+                <label className="block text-ink-soft font-semibold mb-1">Email Address (Username)</label>
                 <input
                   type="email"
                   required
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-900 focus:outline-none focus:border-orange-500"
+                  className="w-full bg-surface-muted border border-line rounded-card px-3 py-2 text-ink focus:outline-none focus:border-accent"
                   placeholder="mukesh@shreesanwariya.com"
                 />
               </div>
 
               <div>
-                <label className="block text-slate-700 font-semibold mb-1">Password</label>
+                <label className="block text-ink-soft font-semibold mb-1">Password</label>
                 <input
                   type="password"
                   required
                   minLength={6}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-900 focus:outline-none focus:border-orange-500"
+                  className="w-full bg-surface-muted border border-line rounded-card px-3 py-2 text-ink focus:outline-none focus:border-accent"
                   placeholder="••••••••"
                 />
               </div>
 
               <div>
-                <label className="block text-slate-700 font-semibold mb-1">User Role</label>
+                <label className="block text-ink-soft font-semibold mb-1">User Role</label>
                 <select
                   value={role}
                   onChange={(e) => {
@@ -267,7 +267,7 @@ export const UserManagementView: React.FC = () => {
                       setModules(['dashboard', 'invoices', 'customers', 'payments']);
                     }
                   }}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-900 focus:outline-none focus:border-orange-500"
+                  className="w-full bg-surface-muted border border-line rounded-card px-3 py-2 text-ink focus:outline-none focus:border-accent"
                 >
                   <option value="staff">Staff Operator (Invoices & Logistics)</option>
                   <option value="accountant">Accountant (Billing & Payments)</option>
@@ -276,33 +276,33 @@ export const UserManagementView: React.FC = () => {
               </div>
 
               <div>
-                <label className="block text-slate-700 font-semibold mb-2">Module Access Permissions</label>
+                <label className="block text-ink-soft font-semibold mb-2">Module Access Permissions</label>
                 <div className="grid grid-cols-2 gap-2">
                   {ALL_MODULES.map((m) => (
-                    <label key={m.key} className="flex items-center gap-2 p-2.5 bg-slate-50 rounded-xl border border-slate-200 cursor-pointer">
+                    <label key={m.key} className="flex items-center gap-2 p-2.5 bg-surface-muted rounded-card border border-line cursor-pointer">
                       <input
                         type="checkbox"
                         checked={modules.includes(m.key)}
                         onChange={() => handleModuleToggle(m.key)}
-                        className="rounded border-slate-300 text-orange-600 focus:ring-0"
+                        className="rounded border-line-strong text-accent-ink focus:ring-0"
                       />
-                      <span className="text-slate-800 text-[11px] font-medium">{m.label}</span>
+                      <span className="text-ink text-[11px] font-medium">{m.label}</span>
                     </label>
                   ))}
                 </div>
               </div>
 
-              <div className="flex justify-end gap-2 pt-3 border-t border-slate-100">
+              <div className="flex justify-end gap-2 pt-3 border-t border-line">
                 <button
                   type="button"
                   onClick={() => setShowAdd(false)}
-                  className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium rounded-xl"
+                  className="px-4 py-2 bg-surface-sunken hover:bg-surface-sunken text-ink-soft font-medium rounded-card"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2 bg-orange-600 hover:bg-orange-700 text-white font-semibold rounded-xl shadow-xs"
+                  className="px-5 py-2 bg-accent-strong hover:bg-accent-strong-hover text-on-accent font-semibold rounded-card shadow-card"
                 >
                   Create User
                 </button>

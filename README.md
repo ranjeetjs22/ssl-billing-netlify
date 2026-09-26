@@ -1,4 +1,4 @@
-# SSL Billing — GST Freight Invoicing
+# SSL Billing - GST Freight Invoicing
 
 Tax invoicing, multi-LR consignment billing, payment receipts and customer statements
 for Shree Sanwariya Logistics.
@@ -36,7 +36,7 @@ export CLOUDFLARE_ACCOUNT_ID=xxxxxxxx   # only needed if the token covers severa
 npx wrangler whoami                      # confirm it works
 ```
 
-**2. Push the secrets** (reads `.env`, pipes each value on stdin — nothing is echoed):
+**2. Push the secrets** (reads `.env`, pipes each value on stdin - nothing is echoed):
 
 ```bash
 ./scripts/cf-secrets.sh --dry-run   # see what will be sent
@@ -67,7 +67,7 @@ near the visitor, which matters because each API request makes several DB round-
 
 ### Troubleshooting
 
-**"The request to Cloudflare's API timed out."** — usually not a network problem. Wrangler
+**"The request to Cloudflare's API timed out."** - usually not a network problem. Wrangler
 prints that when the *asset upload* is slow on a weak uplink, and it can also mask the real
 error. Re-run with debug logging to see the actual API response:
 
@@ -78,7 +78,7 @@ WRANGLER_LOG=debug WRANGLER_SEND_METRICS=false npx wrangler deploy
 The first deploy uploads every asset (~170 s on a slow link); later deploys only send changed
 files, so they take seconds.
 
-**"Uncaught TypeError: require_streams(...) is not a function" (error 10021)** — already fixed,
+**"Uncaught TypeError: require_streams(...) is not a function" (error 10021)** - already fixed,
 but here is why. `iconv-lite@0.4` ends with `require("./streams")(iconv)`, calling a module as a
 function; esbuild's CJS interop breaks that and the Worker fails to boot. Express reaches
 iconv-lite only through body-parser/raw-body, which use three functions, so
@@ -108,7 +108,7 @@ primitives (Button, Modal, DataTable, Field, StatCard…). Rules baked in:
 - touch targets ≥ 44px, focus rings never removed, `prefers-reduced-motion` respected
 - text contrast verified at ≥ 4.5:1 in **both** themes (accent fills use a darker shade
   because `#EA580C` only reaches 3.55:1 against white)
-- `DataTable` renders a real table on desktop and stacked cards on phones — no horizontal
+- `DataTable` renders a real table on desktop and stacked cards on phones - no horizontal
   scrolling, and a bottom tab bar replaces the sidebar below `lg`
 
 ## Supabase schema (production database)
@@ -116,7 +116,7 @@ primitives (Button, Modal, DataTable, Field, StatCard…). Rules baked in:
 The app talks to Supabase via PostgREST. If the hosted tables are missing a column the app
 writes (for example `customers.contact_person` or `invoices.lr_items`), Supabase answers
 `PGRST204 … column … in the schema cache`. The server now **drops the unknown column, retries,
-and logs a warning** so saving keeps working — but the value is not persisted (for customers it
+and logs a warning** so saving keeps working - but the value is not persisted (for customers it
 is folded into `notes`).
 
 To store every field properly, run the idempotent migration once in the Supabase SQL editor:

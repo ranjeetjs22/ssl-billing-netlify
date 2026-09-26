@@ -57,7 +57,7 @@ rateRouter.get('/rates/card', requireRates, async (_req: Request, res: Response)
   }
 });
 
-/** Server-side quote — same engine the browser uses, for API callers and stored quotes. */
+/** Server-side quote - same engine the browser uses, for API callers and stored quotes. */
 rateRouter.post('/rates/quote', requireRates, async (req: Request, res: Response) => {
   try {
     const d = await loadRateCard();
@@ -96,7 +96,7 @@ rateRouter.get('/rates/settings', requireRates, async (_req: Request, res: Respo
   }
 });
 
-/** Update a charge setting (admin only — it changes every future quote). */
+/** Update a charge setting (admin only - it changes every future quote). */
 rateRouter.put('/rates/settings/:key', requireModule('settings'), async (req: Request, res: Response) => {
   try {
     const key = req.params.key;
@@ -153,7 +153,7 @@ rateRouter.put('/rates/matrix', requireModule('settings'), async (req: Request, 
   }
 });
 
-/** Save many matrix cells at once — what the editable rate chart posts. */
+/** Save many matrix cells at once - what the editable rate chart posts. */
 rateRouter.put('/rates/matrix/bulk', requireModule('settings'), async (req: Request, res: Response) => {
   try {
     const cells = Array.isArray(req.body?.cells) ? req.body.cells : [];
@@ -233,7 +233,7 @@ rateRouter.post('/rates/special', requireModule('settings'), async (req: Request
   }
 });
 
-/** Save many special-rate edits at once — what the editable SPR table posts. */
+/** Save many special-rate edits at once - what the editable SPR table posts. */
 rateRouter.put('/rates/special/bulk', requireModule('settings'), async (req: Request, res: Response) => {
   try {
     const rows = Array.isArray(req.body?.rows) ? req.body.rows : [];
@@ -272,7 +272,7 @@ rateRouter.put('/rates/special/bulk', requireModule('settings'), async (req: Req
   }
 });
 
-// NOTE: keep every literal sub-path (e.g. /bulk) ABOVE this one — Express matches in
+// NOTE: keep every literal sub-path (e.g. /bulk) ABOVE this one - Express matches in
 // order and ':id' would otherwise capture the literal segment.
 rateRouter.put('/rates/special/:id', requireModule('settings'), async (req: Request, res: Response) => {
   try {

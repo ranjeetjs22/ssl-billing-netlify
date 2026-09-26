@@ -19,6 +19,8 @@ import { settingsRouter } from './routes/settings.js';
 import { dashboardRouter } from './routes/dashboard.js';
 import { lookupRouter } from './routes/lookup.js';
 import { rateRouter } from './routes/rates.js';
+import { reportRouter } from './routes/reports.js';
+import { expenseRouter } from './routes/expenses.js';
 
 dotenv.config();
 
@@ -83,7 +85,7 @@ export async function seedData(): Promise<void> {
       console.log('Seeded default bank account');
     }
 
-    // Demo customers/invoices only in local mode (or when explicitly requested) — never
+    // Demo customers/invoices only in local mode (or when explicitly requested) - never
     // pollute a production database with sample data.
     const seedSamples = !db.hasSupabase() || process.env.SEED_SAMPLE_DATA === 'true';
     const customers = seedSamples ? await db.select('customers') : [{}];
@@ -267,6 +269,16 @@ app.use(cors());
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
+// API responses are live data and must never be served from a browser or edge
+// cache. Without this, a GET with no Cache-Control is heuristically cacheable,
+// which is how a screen kept showing figures from before the last payment.
+app.use('/api', (_req: Request, res: Response, next: NextFunction) => {
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
+  res.setHeader('Pragma', 'no-cache');
+  res.setHeader('Expires', '0');
+  next();
+});
+
 // Path Normalization Middleware for Netlify Functions routing
 app.use((req: Request, _res: Response, next: NextFunction) => {
   // Strip Netlify Functions prefix if invoked directly or via raw URL
@@ -386,6 +398,13 @@ app.post('/api/auth/reset-password', async (req: Request, res: Response) => {
   }
 });
 
+// Drops the server-side read cache (settings, bank accounts, users). Anyone
+// signed in may call it: the worst it can do is force a fresh read.
+app.post('/api/admin/clear-cache', authMiddleware, (_req: Request, res: Response) => {
+  const cleared = db.invalidateAll();
+  res.json({ cleared, at: new Date().toISOString() });
+});
+
 // ---------------- Feature Routers ----------------
 app.use('/api', customerRouter);
 app.use('/api', invoiceRouter);
@@ -394,6 +413,8 @@ app.use('/api', settingsRouter);
 app.use('/api', dashboardRouter);
 app.use('/api', lookupRouter);
 app.use('/api', rateRouter);
+app.use('/api', reportRouter);
+app.use('/api', expenseRouter);
 
 // ---------------- API 404 Handler (Guarantees JSON response for unmatched API routes) ----------------
 app.all('/api/*', (req: Request, res: Response) => {

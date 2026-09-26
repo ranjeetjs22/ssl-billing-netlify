@@ -124,7 +124,7 @@ const LocationPicker: React.FC<{
             onChange={(e) => { setQuery(e.target.value); setHighlight(0); setOpen(true); }}
             onKeyDown={onKeyDown}
             placeholder={placeholder || 'Search city, state or zone'}
-            className="w-full bg-surface-muted border border-line rounded-xl pl-9 pr-9 py-2.5 min-h-[44px] text-sm text-ink
+            className="w-full bg-surface-muted border border-line rounded-card pl-9 pr-9 py-2.5 min-h-[44px] text-sm text-ink
                        placeholder:text-ink-faint transition-colors duration-150 hover:border-line-strong
                        focus:border-accent focus:bg-surface focus:outline-none"
           />
@@ -143,8 +143,8 @@ const LocationPicker: React.FC<{
         <ul
           id={listId}
           role="listbox"
-          className="absolute z-30 mt-1 w-full max-h-72 overflow-y-auto overscroll-contain bg-surface border border-line
-                     rounded-xl shadow-overlay py-1 animate-rise"
+          className="sheet absolute z-50 mt-1 w-full max-h-72 overflow-y-auto overscroll-contain border border-line-strong
+                     rounded-card shadow-overlay py-1 animate-rise"
         >
           {matches.length === 0 && (
             <li className="px-3 py-3 text-sm text-ink-faint">No location matches “{query}”.</li>
@@ -311,11 +311,11 @@ const RateChart: React.FC<{
                 </th>
                 {zones.map(col => {
                   const v = baseGrid[row.code]?.[col.code];
-                  if (v === undefined) return <td key={col.code} className="py-2 px-3 text-center text-ink-faint">—</td>;
+                  if (v === undefined) return <td key={col.code} className="py-2 px-3 text-center text-ink-faint"> - </td>;
                   if (!editing) {
                     return (
                       <td key={col.code} className="py-2 px-3 text-center">
-                        <span className={cx('inline-block min-w-[3.25rem] rounded-lg py-1 font-mono font-semibold', toneFor(v))}>
+                        <span className={cx('inline-block min-w-[3.25rem] rounded-control py-1 font-mono font-semibold', toneFor(v))}>
                           {v}
                         </span>
                       </td>
@@ -333,7 +333,7 @@ const RateChart: React.FC<{
                         value={valueOf(row.code, col.code)}
                         onChange={e => setDraft(d => ({ ...d, [laneKey(row.code, col.code)]: e.target.value }))}
                         className={cx(
-                          'w-[4.5rem] text-center font-mono font-semibold rounded-lg py-1.5 min-h-[40px] text-sm',
+                          'w-[4.5rem] text-center font-mono font-semibold rounded-control py-1.5 min-h-[40px] text-sm',
                           'border bg-surface text-ink focus:outline-none focus:border-accent transition-colors',
                           dirty ? 'border-accent ring-2 ring-accent/30' : 'border-line hover:border-line-strong'
                         )}
@@ -354,7 +354,7 @@ const RateChart: React.FC<{
         <span className="inline-block w-8 h-3 rounded bg-warning-soft border border-warning-line" />
         <span className="inline-block w-8 h-3 rounded bg-danger-soft border border-danger-line" />
         <span className="font-semibold text-ink-soft">Costliest</span>
-        <span className="ml-auto">₹{lo}/kg – ₹{hi}/kg</span>
+        <span className="ml-auto">₹{lo}/kg - ₹{hi}/kg</span>
       </div>
     </Card>
   );
@@ -603,7 +603,7 @@ const SpecialRates: React.FC<{
                           value={valueOf(r)}
                           onChange={e => setDraft(d => ({ ...d, [r.id!]: e.target.value }))}
                           className={cx(
-                            'w-[5rem] text-right font-mono font-semibold rounded-lg py-1.5 px-2 min-h-[40px] text-sm',
+                            'w-[5rem] text-right font-mono font-semibold rounded-control py-1.5 px-2 min-h-[40px] text-sm',
                             'border bg-surface text-ink focus:outline-none focus:border-accent transition-colors',
                             isDirty(r) ? 'border-accent ring-2 ring-accent/30' : 'border-line hover:border-line-strong'
                           )}
@@ -637,7 +637,7 @@ type Tab = 'calculator' | 'chart' | 'special';
 
 export const RateCalculator: React.FC<{ onCreateInvoice?: (q: Quote) => void }> = ({ onCreateInvoice }) => {
   const { user } = useAuth();
-  // The API guards rate edits with the `settings` module — mirror that here so the
+  // The API guards rate edits with the `settings` module - mirror that here so the
   // buttons only appear for someone who can actually save.
   const canEditRates = user?.role === 'admin' || Boolean(user?.modules?.includes('settings'));
 
@@ -657,6 +657,8 @@ export const RateCalculator: React.FC<{ onCreateInvoice?: (q: Quote) => void }> 
   const [showPrefs, setShowPrefs] = useState(false);
   const [appointment, setAppointment] = useState(false);
   const [oda, setOda] = useState(false);
+  // undefined = follow the Delhi rule; true/false = the user forced it
+  const [greenTax, setGreenTax] = useState<boolean | undefined>(undefined);
   const [toPay, setToPay] = useState(false);
   const [cheque, setCheque] = useState(false);
   const [insurance, setInsurance] = useState<'none' | 'owner' | 'carrier'>('none');
@@ -679,14 +681,14 @@ export const RateCalculator: React.FC<{ onCreateInvoice?: (q: Quote) => void }> 
 
   const options = useMemo(() => (card ? buildOptions(card) : []), [card]);
 
-  // Default the pickup to Ahmedabad — that is where SSL books from.
+  // Default the pickup to Ahmedabad - that is where SSL books from.
   useEffect(() => {
     if (!origin && options.length) {
       setOrigin(options.find(o => o.key === 'city:Ahmedabad') || options[0]);
     }
   }, [options, origin]);
 
-  /** Live quote, computed with the same engine the server uses — no network round-trip. */
+  /** Live quote, computed with the same engine the server uses - no network round-trip. */
   const quote: Quote | null = useMemo(() => {
     if (!card || !origin || !dest) return null;
     if (weight <= 0 && !boxes.some(b => b.count > 0 && b.length_cm > 0)) return null;
@@ -699,6 +701,7 @@ export const RateCalculator: React.FC<{ onCreateInvoice?: (q: Quote) => void }> 
           declared_value: declaredValue,
           appointment_delivery: appointment,
           oda, to_pay: toPay, cheque_payment: cheque,
+          green_tax: greenTax,
           insurance,
         },
         card.settings, card.specials, card.matrix, card.oda
@@ -706,7 +709,14 @@ export const RateCalculator: React.FC<{ onCreateInvoice?: (q: Quote) => void }> 
     } catch {
       return null;
     }
-  }, [card, origin, dest, weight, boxes, declaredValue, appointment, oda, toPay, cheque, insurance]);
+  }, [card, origin, dest, weight, boxes, declaredValue, appointment, oda, toPay, cheque, greenTax, insurance]);
+
+  // Green tax is a Delhi levy: ticked automatically for a Delhi delivery, but the
+  // user can force it on or off for any lane.
+  const destIsDelhi = Boolean(
+    dest && [dest.city, dest.state].some(v => ['delhi', 'new delhi'].includes(String(v || '').trim().toLowerCase()))
+  );
+  const greenTaxOn = greenTax === undefined ? destIsDelhi : greenTax;
 
   const updateBox = (i: number, patch: Partial<Box>) =>
     setBoxes(prev => prev.map((b, idx) => (idx === i ? { ...b, ...patch } : b)));
@@ -720,7 +730,7 @@ export const RateCalculator: React.FC<{ onCreateInvoice?: (q: Quote) => void }> 
         body: JSON.stringify({
           origin, dest, dead_weight: weight, boxes: boxes.filter(b => b.count > 0),
           declared_value: declaredValue, appointment_delivery: appointment,
-          oda, to_pay: toPay, cheque_payment: cheque, insurance,
+          oda, to_pay: toPay, cheque_payment: cheque, green_tax: greenTax, insurance,
         }),
       });
       setToast('Quote saved.');
@@ -745,7 +755,7 @@ export const RateCalculator: React.FC<{ onCreateInvoice?: (q: Quote) => void }> 
       {toast && <Toast message={toast} onDismiss={() => setToast(null)} />}
 
       <div role="tablist" aria-label="Rate calculator views"
-        className="flex items-center gap-1 bg-surface border border-line rounded-xl p-1 overflow-x-auto shadow-card w-full sm:w-fit">
+        className="flex items-center gap-1 bg-surface border border-line rounded-card p-1 overflow-x-auto shadow-card w-full sm:w-fit">
         {TABS.map(t => (
           <button
             key={t.key}
@@ -753,7 +763,7 @@ export const RateCalculator: React.FC<{ onCreateInvoice?: (q: Quote) => void }> 
             aria-selected={tab === t.key}
             onClick={() => setTab(t.key)}
             className={cx(
-              'inline-flex items-center gap-2 px-3 min-h-[40px] rounded-lg text-sm font-medium whitespace-nowrap cursor-pointer transition-colors duration-150',
+              'inline-flex items-center gap-2 px-3 min-h-[40px] rounded-control text-sm font-medium whitespace-nowrap cursor-pointer transition-colors duration-150',
               tab === t.key ? 'bg-accent-strong text-on-accent font-semibold' : 'text-ink-soft hover:bg-surface-sunken hover:text-ink'
             )}
           >
@@ -786,6 +796,13 @@ export const RateCalculator: React.FC<{ onCreateInvoice?: (q: Quote) => void }> 
                 </div>
                 <LocationPicker id="rc-dest" label="Delivery location" value={dest} options={options} onChange={setDest} />
               </div>
+
+              {destIsDelhi && greenTaxOn && (
+                <p className="mt-3 text-xs text-ink-faint flex items-center gap-1">
+                  <Info className="w-3 h-3 shrink-0" aria-hidden="true" />
+                  Delhi delivery - green tax is included. Turn it off under Service preferences.
+                </p>
+              )}
 
               {quote && (
                 <div className="mt-4 flex flex-wrap items-center gap-2 text-sm">
@@ -880,7 +897,7 @@ export const RateCalculator: React.FC<{ onCreateInvoice?: (q: Quote) => void }> 
                   <p className="col-span-3 text-xs text-ink-faint flex items-center justify-center gap-1">
                     <Info className="w-3 h-3 shrink-0" aria-hidden="true" />
                     {quote.weight.basis === 'minimum'
-                      ? `Below the ${card.settings.min_chg_wt?.value} kg minimum — billed at the minimum`
+                      ? `Below the ${card.settings.min_chg_wt?.value} kg minimum - billed at the minimum`
                       : quote.weight.basis === 'volumetric'
                         ? `Volumetric is higher (L×W×H ÷ ${card.settings.divisor?.value})`
                         : 'Billed on actual weight'}
@@ -910,7 +927,7 @@ export const RateCalculator: React.FC<{ onCreateInvoice?: (q: Quote) => void }> 
                       ] as const).map(o => (
                         <button key={o.v} type="button" onClick={() => setInsurance(o.v as any)}
                           aria-pressed={insurance === o.v}
-                          className={cx('text-left p-3 rounded-xl border min-h-[44px] cursor-pointer transition-colors',
+                          className={cx('text-left p-3 rounded-card border min-h-[44px] cursor-pointer transition-colors',
                             insurance === o.v ? 'border-accent bg-accent-soft' : 'border-line hover:bg-surface-muted')}>
                           <span className="flex items-center justify-between gap-2">
                             <span className="text-sm font-semibold text-ink">{o.l}</span>
@@ -928,11 +945,19 @@ export const RateCalculator: React.FC<{ onCreateInvoice?: (q: Quote) => void }> 
                       {([
                         { on: appointment, set: setAppointment, l: 'Appointment based delivery', s: `₹${card.settings.apt_handling?.value}/kg · min ₹${card.settings.apt_handling?.min_value}` },
                         { on: oda, set: setOda, l: 'Out of delivery area (ODA)', s: `₹${card.oda[0]?.per_kg}/kg · min ₹${card.oda[0]?.min_amount}` },
+                        {
+                          on: greenTaxOn,
+                          set: (v: boolean) => setGreenTax(v === destIsDelhi ? undefined : v),
+                          l: 'Green tax',
+                          s: destIsDelhi
+                            ? `Auto-applied for Delhi · ₹${card.settings.green_tax?.value}/kg · min ₹${card.settings.green_tax?.min_value}`
+                            : `₹${card.settings.green_tax?.value}/kg · min ₹${card.settings.green_tax?.min_value} (Delhi levy)`,
+                        },
                         { on: toPay, set: setToPay, l: 'To-pay shipment', s: `₹${card.settings.to_pay?.value} per LR` },
                         { on: cheque, set: setCheque, l: 'Cheque payment', s: `₹${card.settings.cheque_handling?.value} per LR` },
                       ]).map((o, i) => (
                         <label key={i}
-                          className={cx('flex items-start gap-3 p-3 rounded-xl border min-h-[44px] cursor-pointer transition-colors',
+                          className={cx('flex items-start gap-3 p-3 rounded-card border min-h-[44px] cursor-pointer transition-colors',
                             o.on ? 'border-accent bg-accent-soft' : 'border-line hover:bg-surface-muted')}>
                           <input type="checkbox" checked={o.on} onChange={e => o.set(e.target.checked)}
                             className="mt-0.5 w-4 h-4 accent-[var(--color-accent-strong)] shrink-0" />

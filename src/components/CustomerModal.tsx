@@ -203,21 +203,21 @@ export const CustomerModal: React.FC<CustomerModalProps> = ({ onClose, onSuccess
   };
 
   return (
-    <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 overflow-y-auto">
-      <div className="bg-white border border-slate-200 rounded-2xl max-w-2xl w-full max-h-[92vh] flex flex-col shadow-2xl text-slate-800 my-auto">
+    <div className="fixed inset-0 bg-scrim backdrop-blur-[6px] flex items-center justify-center p-4 z-50 overflow-y-auto">
+      <div className="sheet border border-line rounded-overlay max-w-2xl w-full max-h-[92vh] flex flex-col shadow-overlay text-ink my-auto">
         {/* Header */}
-        <div className="p-4 border-b border-slate-200 flex items-center justify-between">
+        <div className="p-4 border-b border-line flex items-center justify-between">
           <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-xl bg-orange-50 border border-orange-200 flex items-center justify-center text-orange-600">
+            <div className="w-8 h-8 rounded-card bg-accent-soft border border-accent-line flex items-center justify-center text-accent-ink">
               <Building2 className="w-4 h-4" />
             </div>
             <div>
-              <h2 className="text-base font-bold text-slate-900">Register Consignee / Customer</h2>
-              <p className="text-[11px] text-slate-500">Authoritative GSTVerify Integration & PIN Lookup</p>
+              <h2 className="text-base font-bold text-ink">Register Consignee / Customer</h2>
+              <p className="text-[11px] text-ink-faint">Authoritative GSTVerify Integration & PIN Lookup</p>
             </div>
           </div>
 
-          <button onClick={onClose} className="p-1 text-slate-400 hover:text-slate-700 rounded-lg transition cursor-pointer">
+          <button onClick={onClose} className="p-1 text-ink-faint hover:text-ink rounded-control transition cursor-pointer">
             <X className="w-5 h-5" />
           </button>
         </div>
@@ -225,7 +225,7 @@ export const CustomerModal: React.FC<CustomerModalProps> = ({ onClose, onSuccess
         {/* Form */}
         <form onSubmit={handleSave} className="flex-1 overflow-y-auto p-6 space-y-4 text-xs">
           {error && (
-            <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl text-rose-700 flex items-center gap-2">
+            <div className="p-3 bg-danger-soft border border-danger-line rounded-card text-danger-ink flex items-center gap-2">
               <AlertCircle className="w-4 h-4 shrink-0" />
               <span>{error}</span>
             </div>
@@ -234,20 +234,20 @@ export const CustomerModal: React.FC<CustomerModalProps> = ({ onClose, onSuccess
           {/* Dynamic Verification Badge */}
           {lookupFeedback && (
             <div
-              className={`p-3 rounded-xl border flex items-start gap-2.5 text-xs transition ${
+              className={`p-3 rounded-card border flex items-start gap-2.5 text-xs transition ${
                 lookupFeedback.type === 'verified'
-                  ? 'bg-emerald-50 border-emerald-200 text-emerald-800'
+                  ? 'bg-positive-soft border-positive-line text-positive-ink'
                   : lookupFeedback.type === 'unavailable'
-                  ? 'bg-amber-50 border-amber-200 text-amber-800'
-                  : 'bg-rose-50 border-rose-200 text-rose-800'
+                  ? 'bg-warning-soft border-warning-line text-warning-ink'
+                  : 'bg-danger-soft border-danger-line text-danger-ink'
               }`}
             >
               {lookupFeedback.type === 'verified' ? (
-                <ShieldCheck className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
+                <ShieldCheck className="w-4 h-4 text-positive-ink shrink-0 mt-0.5" />
               ) : lookupFeedback.type === 'unavailable' ? (
-                <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                <AlertTriangle className="w-4 h-4 text-warning-ink shrink-0 mt-0.5" />
               ) : (
-                <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+                <AlertCircle className="w-4 h-4 text-danger-ink shrink-0 mt-0.5" />
               )}
               <div className="flex-1">
                 <div className="font-semibold">{lookupFeedback.text}</div>
@@ -261,12 +261,12 @@ export const CustomerModal: React.FC<CustomerModalProps> = ({ onClose, onSuccess
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <div className="flex items-center justify-between mb-1">
-                <label className="text-slate-700 font-semibold">GSTIN (15 chars)</label>
+                <label className="text-ink-soft font-semibold">GSTIN (15 chars)</label>
                 <button
                   type="button"
                   disabled={fetchingGst || gstin.length !== 15}
                   onClick={() => fetchGST(gstin, true)}
-                  className="text-[11px] text-orange-600 hover:text-orange-700 font-semibold flex items-center gap-1 cursor-pointer disabled:opacity-40"
+                  className="text-[11px] text-accent-ink hover:text-accent-ink font-semibold flex items-center gap-1 cursor-pointer disabled:opacity-40"
                 >
                   {fetchingGst ? (
                     <>
@@ -275,7 +275,7 @@ export const CustomerModal: React.FC<CustomerModalProps> = ({ onClose, onSuccess
                     </>
                   ) : (
                     <>
-                      <Sparkles className="w-3 h-3 text-orange-500" />
+                      <Sparkles className="w-3 h-3 text-accent" />
                       <span>Auto Fetch</span>
                     </>
                   )}
@@ -286,121 +286,121 @@ export const CustomerModal: React.FC<CustomerModalProps> = ({ onClose, onSuccess
                 maxLength={15}
                 value={gstin}
                 onChange={(e) => handleGSTINChange(e.target.value)}
-                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 font-mono text-slate-900 text-xs uppercase focus:outline-none focus:border-orange-500"
+                className="w-full bg-surface-muted border border-line rounded-card px-3 py-2 font-mono text-ink text-xs uppercase focus:outline-none focus:border-accent"
                 placeholder="24AABCS1429B1Z8"
               />
             </div>
 
             <div>
-              <label className="block text-slate-700 font-semibold mb-1">PAN Number</label>
+              <label className="block text-ink-soft font-semibold mb-1">PAN Number</label>
               <input
                 type="text"
                 maxLength={10}
                 value={pan}
                 onChange={(e) => setPan(e.target.value.toUpperCase())}
-                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 font-mono text-slate-900 text-xs uppercase focus:outline-none focus:border-orange-500"
+                className="w-full bg-surface-muted border border-line rounded-card px-3 py-2 font-mono text-ink text-xs uppercase focus:outline-none focus:border-accent"
                 placeholder="AABCS1429B"
               />
             </div>
 
             <div className="sm:col-span-2">
-              <label className="block text-slate-700 font-semibold mb-1">Company / Customer Name *</label>
+              <label className="block text-ink-soft font-semibold mb-1">Company / Customer Name *</label>
               <input
                 type="text"
                 required
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-900 text-xs focus:outline-none focus:border-orange-500 font-medium"
+                className="w-full bg-surface-muted border border-line rounded-card px-3 py-2 text-ink text-xs focus:outline-none focus:border-accent font-medium"
                 placeholder="e.g. Reliance Logistics Hub"
               />
             </div>
 
             {legalName && legalName !== name && (
               <div className="sm:col-span-2">
-                <label className="block text-slate-500 font-medium mb-1">Registered Legal Name (from GSTVerify)</label>
+                <label className="block text-ink-faint font-medium mb-1">Registered Legal Name (from GSTVerify)</label>
                 <input
                   type="text"
                   readOnly
                   value={legalName}
-                  className="w-full bg-slate-100/70 border border-slate-200 rounded-xl px-3 py-2 text-slate-700 text-xs focus:outline-none cursor-default"
+                  className="w-full bg-surface-sunken border border-line rounded-card px-3 py-2 text-ink-soft text-xs focus:outline-none cursor-default"
                 />
               </div>
             )}
 
             <div>
-              <label className="block text-slate-700 font-semibold mb-1">Contact Person</label>
+              <label className="block text-ink-soft font-semibold mb-1">Contact Person</label>
               <input
                 type="text"
                 value={contactPerson}
                 onChange={(e) => setContactPerson(e.target.value)}
-                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-900 text-xs focus:outline-none focus:border-orange-500"
+                className="w-full bg-surface-muted border border-line rounded-card px-3 py-2 text-ink text-xs focus:outline-none focus:border-accent"
                 placeholder="e.g. Ramesh Patel"
               />
             </div>
 
             <div>
-              <label className="block text-slate-700 font-semibold mb-1">Phone Number</label>
+              <label className="block text-ink-soft font-semibold mb-1">Phone Number</label>
               <input
                 type="text"
                 value={phone}
                 onChange={(e) => setPhone(e.target.value)}
-                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-900 text-xs focus:outline-none focus:border-orange-500"
+                className="w-full bg-surface-muted border border-line rounded-card px-3 py-2 text-ink text-xs focus:outline-none focus:border-accent"
                 placeholder="+91 98765 43210"
               />
             </div>
 
             <div>
-              <label className="block text-slate-700 font-semibold mb-1">WhatsApp for Invoices</label>
+              <label className="block text-ink-soft font-semibold mb-1">WhatsApp for Invoices</label>
               <input
                 type="text"
                 value={whatsapp}
                 onChange={(e) => setWhatsapp(e.target.value)}
-                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-900 text-xs focus:outline-none focus:border-orange-500"
+                className="w-full bg-surface-muted border border-line rounded-card px-3 py-2 text-ink text-xs focus:outline-none focus:border-accent"
                 placeholder="+91 98765 43210"
               />
             </div>
 
             <div>
-              <label className="block text-slate-700 font-semibold mb-1">Email Address</label>
+              <label className="block text-ink-soft font-semibold mb-1">Email Address</label>
               <input
                 type="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-900 text-xs focus:outline-none focus:border-orange-500"
+                className="w-full bg-surface-muted border border-line rounded-card px-3 py-2 text-ink text-xs focus:outline-none focus:border-accent"
                 placeholder="accounts@customer.com"
               />
             </div>
 
             <div className="sm:col-span-2">
-              <label className="block text-slate-700 font-semibold mb-1">Billing Address (Principal Place of Business)</label>
+              <label className="block text-ink-soft font-semibold mb-1">Billing Address (Principal Place of Business)</label>
               <textarea
                 rows={2}
                 value={address}
                 onChange={(e) => setAddress(e.target.value)}
-                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-900 text-xs focus:outline-none focus:border-orange-500"
+                className="w-full bg-surface-muted border border-line rounded-card px-3 py-2 text-ink text-xs focus:outline-none focus:border-accent"
                 placeholder="Plot No. 42, GIDC Industrial Estate..."
               />
             </div>
 
             <div className="sm:col-span-2">
-              <label className="block text-slate-700 font-semibold mb-1">Shipping / Delivery Address (Optional, if different from billing)</label>
+              <label className="block text-ink-soft font-semibold mb-1">Shipping / Delivery Address (Optional, if different from billing)</label>
               <textarea
                 rows={2}
                 value={shippingAddress}
                 onChange={(e) => setShippingAddress(e.target.value)}
-                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-900 text-xs focus:outline-none focus:border-orange-500"
+                className="w-full bg-surface-muted border border-line rounded-card px-3 py-2 text-ink text-xs focus:outline-none focus:border-accent"
                 placeholder="Warehouse / Plant delivery location (leave blank if same as billing)"
               />
             </div>
 
             <div>
               <div className="flex items-center justify-between mb-1">
-                <label className="text-slate-700 font-semibold">PIN Code (6 digits)</label>
+                <label className="text-ink-soft font-semibold">PIN Code (6 digits)</label>
                 <button
                   type="button"
                   disabled={fetchingPin || pin.length !== 6}
                   onClick={() => fetchPIN(pin)}
-                  className="text-[11px] text-orange-600 hover:text-orange-700 font-semibold flex items-center gap-1 cursor-pointer disabled:opacity-40"
+                  className="text-[11px] text-accent-ink hover:text-accent-ink font-semibold flex items-center gap-1 cursor-pointer disabled:opacity-40"
                 >
                   {fetchingPin ? (
                     <>
@@ -409,7 +409,7 @@ export const CustomerModal: React.FC<CustomerModalProps> = ({ onClose, onSuccess
                     </>
                   ) : (
                     <>
-                      <Sparkles className="w-3 h-3 text-orange-500" />
+                      <Sparkles className="w-3 h-3 text-accent" />
                       <span>Fetch City/State</span>
                     </>
                   )}
@@ -420,68 +420,68 @@ export const CustomerModal: React.FC<CustomerModalProps> = ({ onClose, onSuccess
                 maxLength={6}
                 value={pin}
                 onChange={(e) => handlePinChange(e.target.value)}
-                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-900 text-xs focus:outline-none focus:border-orange-500"
+                className="w-full bg-surface-muted border border-line rounded-card px-3 py-2 text-ink text-xs focus:outline-none focus:border-accent"
                 placeholder="382443"
               />
             </div>
 
             <div>
-              <label className="block text-slate-700 font-semibold mb-1">City / District</label>
+              <label className="block text-ink-soft font-semibold mb-1">City / District</label>
               <input
                 type="text"
                 value={city}
                 onChange={(e) => setCity(e.target.value)}
-                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-900 text-xs focus:outline-none focus:border-orange-500"
+                className="w-full bg-surface-muted border border-line rounded-card px-3 py-2 text-ink text-xs focus:outline-none focus:border-accent"
                 placeholder="Ahmedabad"
               />
             </div>
 
             <div>
-              <label className="block text-slate-700 font-semibold mb-1">State</label>
+              <label className="block text-ink-soft font-semibold mb-1">State</label>
               <input
                 type="text"
                 value={state}
                 onChange={(e) => setState(e.target.value)}
-                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-900 text-xs focus:outline-none focus:border-orange-500"
+                className="w-full bg-surface-muted border border-line rounded-card px-3 py-2 text-ink text-xs focus:outline-none focus:border-accent"
                 placeholder="Gujarat"
               />
             </div>
 
             <div>
-              <label className="block text-slate-700 font-semibold mb-1">Credit Days</label>
+              <label className="block text-ink-soft font-semibold mb-1">Credit Days</label>
               <input
                 type="number"
                 value={creditDays}
                 onChange={(e) => setCreditDays(parseInt(e.target.value) || 0)}
-                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-900 text-xs focus:outline-none focus:border-orange-500"
+                className="w-full bg-surface-muted border border-line rounded-card px-3 py-2 text-ink text-xs focus:outline-none focus:border-accent"
               />
             </div>
 
             <div>
-              <label className="block text-slate-700 font-semibold mb-1">Payment Terms</label>
+              <label className="block text-ink-soft font-semibold mb-1">Payment Terms</label>
               <input
                 type="text"
                 value={paymentTerms}
                 onChange={(e) => setPaymentTerms(e.target.value)}
-                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-900 text-xs focus:outline-none focus:border-orange-500"
+                className="w-full bg-surface-muted border border-line rounded-card px-3 py-2 text-ink text-xs focus:outline-none focus:border-accent"
                 placeholder="Net 15 Days"
               />
             </div>
           </div>
 
           {/* Footer */}
-          <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-100">
+          <div className="flex items-center justify-end gap-3 pt-4 border-t border-line">
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-medium transition cursor-pointer"
+              className="px-4 py-2 bg-surface-sunken hover:bg-surface-sunken text-ink-soft rounded-card text-xs font-medium transition cursor-pointer"
             >
               Cancel
             </button>
             <button
               type="submit"
               disabled={saving}
-              className="px-5 py-2 bg-orange-600 hover:bg-orange-700 text-white rounded-xl text-xs font-semibold shadow-xs transition flex items-center gap-2 disabled:opacity-50 cursor-pointer"
+              className="px-5 py-2 bg-accent-strong hover:bg-accent-strong-hover text-on-accent rounded-card text-xs font-semibold shadow-card transition flex items-center gap-2 disabled:opacity-50 cursor-pointer"
             >
               <Save className="w-4 h-4" />
               <span>{saving ? 'Saving...' : 'Register Customer'}</span>

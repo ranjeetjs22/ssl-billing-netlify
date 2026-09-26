@@ -9,14 +9,14 @@
  *   - The OLD project is only ever read. Nothing is written or deleted there.
  *   - Before any write, EVERY table of BOTH projects is dumped to backups/<timestamp>/.
  *   - Inserts preserve original row ids and use on_conflict=id + ignore-duplicates,
- *     so the script is idempotent — re-running it never duplicates rows.
+ *     so the script is idempotent - re-running it never duplicates rows.
  *   - The only deletions in the NEW project are two known seeded/duplicate rows,
  *     each guarded by an exact-match check and included in the backup:
  *       1. the seeded fake "HDFC Bank" account (replaced by the real KOTAK account)
  *       2. the duplicate SORG customer created in the new app (merged into the old
  *          record, and only deleted if it has zero invoices and zero payments)
  *
- * Credentials come from .env (new) and .env.migrate (old) — both gitignored.
+ * Credentials come from .env (new) and .env.migrate (old) - both gitignored.
  */
 import fs from 'node:fs';
 import path from 'node:path';
@@ -178,18 +178,18 @@ async function main() {
 
   // ---------- report the plan ----------
   console.log('PLAN');
-  console.log(`  users     : insert ${usersToInsert.length} (${usersToInsert.map(u => u.email).join(', ') || '—'})`);
+  console.log(`  users     : insert ${usersToInsert.length} (${usersToInsert.map(u => u.email).join(', ') || ' - '})`);
   console.log(`              map ${userIdMap.size} colliding email(s) to existing new account(s)`);
   console.log(`  company   : update ${Object.keys(companyPatch).length} field(s) on the new row -> real business data; next_number=${companyPatch.next_number}`);
   console.log(`  logo      : ${logoIsDataUrl ? `upload ${(logoData.length / 1024).toFixed(0)} KB base64 -> storage file + URL` : 'keep as is'}`);
-  console.log(`  bank      : insert real account (${old.bank_accounts.map(b => b.bank_name).join(', ') || '—'}); delete seeded fake ${seededBank ? `"${seededBank.bank_name}"` : '(already gone)'}`);
-  console.log(`  customers : insert ${old.customers.length}; merge ${dupes.length} duplicate(s): ${dupes.map(d => `"${d.newRow.name}" (+${Object.keys(d.mergedFields).length} fields, then delete new copy)`).join('; ') || '—'}`);
+  console.log(`  bank      : insert real account (${old.bank_accounts.map(b => b.bank_name).join(', ') || ' - '}); delete seeded fake ${seededBank ? `"${seededBank.bank_name}"` : '(already gone)'}`);
+  console.log(`  customers : insert ${old.customers.length}; merge ${dupes.length} duplicate(s): ${dupes.map(d => `"${d.newRow.name}" (+${Object.keys(d.mergedFields).length} fields, then delete new copy)`).join('; ') || ' - '}`);
   console.log(`  invoices  : insert ${old.invoices.length}   (sum grand_total = ${sum(old.invoices, 'grand_total')})`);
   console.log(`  payments  : insert ${old.payments.length}   (sum amount = ${sum(old.payments, 'amount')})`);
   console.log(`  expenses  : insert ${old.expenses.length}`);
   console.log(`  aux tables: create businesses (${old.businesses.length} rows) and expense_categories (${old.expense_categories.length} rows)`);
   console.log(`  audit_logs: append ${old.audit_logs.length} historical entries`);
-  console.log(`  password_resets: NOT migrated (stale one-time tokens) — preserved in the backup file\n`);
+  console.log(`  password_resets: NOT migrated (stale one-time tokens) - preserved in the backup file\n`);
 
   if (MODE === 'plan') { console.log('Read-only plan complete. Run with --apply to execute.'); return; }
 
@@ -234,7 +234,7 @@ async function main() {
           companyPatch.logo_url = `${NEW.url}/storage/v1/object/public/logos/${objectPath}`;
           console.log(`✔ logo: ${(bytes.length / 1024).toFixed(0)} KB uploaded to storage -> logo_url now a URL`);
         } else {
-          console.warn(`▲ logo upload failed (${up.status}) — keeping the inline data URL`);
+          console.warn(`▲ logo upload failed (${up.status}) - keeping the inline data URL`);
         }
       }
     }
@@ -267,7 +267,7 @@ async function main() {
       await rest(NEW, 'DELETE', `/rest/v1/customers?id=eq.${d.newRow.id}`);
       console.log(`✔ merged duplicate customer "${d.newRow.name}" into the historical record (+${Object.keys(d.mergedFields).length} contact fields)`);
     } else {
-      console.log(`▲ kept duplicate "${d.newRow.name}" — it has linked records`);
+      console.log(`▲ kept duplicate "${d.newRow.name}" - it has linked records`);
     }
   }
 
@@ -298,7 +298,7 @@ async function main() {
     prefer: 'return=minimal',
   });
 
-  console.log('\nAPPLY complete — running verification…\n');
+  console.log('\nAPPLY complete - running verification…\n');
   await verify(old);
 }
 
@@ -308,7 +308,7 @@ async function createAuxTables() {
   const require_ = createRequire('/tmp/claude-1000/-home-knull-Desktop-ssl-billing-netlify/4881c6a8-1f7d-4b8d-aca3-01a798249ed9/scratchpad/pgtool/');
   let pg;
   try { pg = require_('pg'); } catch {
-    console.warn('▲ pg client unavailable — skipping businesses/expense_categories table creation');
+    console.warn('▲ pg client unavailable - skipping businesses/expense_categories table creation');
     return;
   }
   const c = new pg.Client({
@@ -393,7 +393,7 @@ async function verify(old) {
     console.log(`  ${ok ? '✔' : '✘'} ${name}: ${detail}`);
     if (ok) pass++;
   }
-  console.log(`\n${pass}/${checks.length} checks passed${pass === checks.length ? ' — migration is consistent ✅' : ' — INVESTIGATE FAILURES ⚠'}`);
+  console.log(`\n${pass}/${checks.length} checks passed${pass === checks.length ? ' - migration is consistent ✅' : ' - INVESTIGATE FAILURES ⚠'}`);
   if (pass !== checks.length) process.exitCode = 1;
 }
 

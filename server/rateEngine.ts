@@ -1,7 +1,7 @@
 /**
  * SSL freight rate engine.
  *
- * Pure and dependency-free so the browser can import it too (see src/utils/rates.ts) —
+ * Pure and dependency-free so the browser can import it too (see src/utils/rates.ts) - 
  * the live quote in the UI and the number the server stores are produced by the same code.
  *
  * Source of truth: SSL_Rate_card.pdf
@@ -78,6 +78,12 @@ export interface QuoteInput {
   /** Optional service add-ons, mirroring the rate card's charge list. */
   appointment_delivery?: boolean;
   oda?: boolean;
+  /**
+   * Green tax (Delhi's environment compensation charge on commercial vehicles).
+   * Leave undefined to follow the default rule - charged only when the shipment is
+   * delivered into Delhi. Set true/false to force it on or off for a one-off quote.
+   */
+  green_tax?: boolean;
   to_pay?: boolean;
   cheque_payment?: boolean;
   insurance?: 'none' | 'owner' | 'carrier';
@@ -104,6 +110,12 @@ const setting = (s: RateSettings, key: string, fallback = 0): number => {
 const settingMin = (s: RateSettings, key: string): number => num(s[key]?.min_value);
 const settingText = (s: RateSettings, key: string, fallback = ''): string =>
   (s[key]?.text_value ?? fallback) as string;
+
+/** Green tax is a Delhi levy - it applies when the consignment is delivered into Delhi. */
+export function isGreenTaxArea(place: Place): boolean {
+  const names = [place.city, place.state].map(v => String(v || '').trim().toLowerCase());
+  return names.some(n => n === 'delhi' || n === 'new delhi');
+}
 
 /** Apply a "per unit, but at least X" rule. A zero rate means the charge is switched off. */
 function withMinimum(computed: number, min: number): number {
@@ -262,7 +274,7 @@ export function odaCharge(weight: number, slabs: OdaSlab[]): number {
 
 // ---------------------------------------------------------------- handling
 /**
- * Package handling only applies to a SINGLE heavy package — one box that needs a
+ * Package handling only applies to a SINGLE heavy package - one box that needs a
  * forklift/crane to move. A shipment split across several boxes is handled manually
  * however heavy the total is, so it attracts no handling charge.
  */
@@ -349,8 +361,14 @@ export function buildQuote(
   push('processing', 'Processing Charge', setting(settings, 'processing', 0), 'Per LR');
   const handPerKg = handlingPerKg(cw, weight.total_boxes, settings);
   push('handling', 'Package Handling', r2(cw * handPerKg),
-    handPerKg ? `Single package over 400 kg — ${cw} kg × ₹${handPerKg}/kg` : undefined);
-  push('green_tax', 'Green Tax', withMinimum(r2(cw * setting(settings, 'green_tax', 0)), settingMin(settings, 'green_tax')));
+    handPerKg ? `Single package over 400 kg - ${cw} kg × ₹${handPerKg}/kg` : undefined);
+  // Delhi-only by default; an explicit flag overrides it either way.
+  const greenTaxDue = input.green_tax === undefined ? isGreenTaxArea(input.dest) : Boolean(input.green_tax);
+  if (greenTaxDue) {
+    push('green_tax', 'Green Tax',
+      withMinimum(r2(cw * setting(settings, 'green_tax', 0)), settingMin(settings, 'green_tax')),
+      isGreenTaxArea(input.dest) ? 'Delhi environment compensation charge' : 'Added manually');
+  }
 
   // ---- optional services ----
   if (input.appointment_delivery) {

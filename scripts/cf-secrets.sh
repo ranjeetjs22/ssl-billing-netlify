@@ -46,4 +46,4 @@ for name in "${SECRETS[@]}"; do
     || { echo "✘ failed  $name"; exit 1; }
 done
 
-[ "$DRY_RUN" = "1" ] && echo "(dry run — nothing sent)" || echo "Done. Verify with: npx wrangler secret list"
+[ "$DRY_RUN" = "1" ] && echo "(dry run - nothing sent)" || echo "Done. Verify with: npx wrangler secret list"

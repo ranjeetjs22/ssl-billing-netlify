@@ -3,7 +3,7 @@ import fs from 'fs';
 import path from 'path';
 
 // ===========================================================================
-// Configuration — read lazily. On Cloudflare Workers `process.env` is populated
+// Configuration - read lazily. On Cloudflare Workers `process.env` is populated
 // from bindings at request time, so nothing may be captured at module load.
 // ===========================================================================
 interface SupabaseConfig {
@@ -71,6 +71,12 @@ function cacheSet(key: string, val: any, ttl: number) {
 }
 export function invalidateTable(table: string) {
   for (const k of cache.keys()) if (k.startsWith(`${table}|`)) cache.delete(k);
+}
+/** Drop every cached table. Returns how many entries were held. */
+export function invalidateAll(): number {
+  const n = cache.size;
+  cache.clear();
+  return n;
 }
 
 // ===========================================================================
@@ -176,7 +182,7 @@ export async function request(method: string, table: string, options: RequestOpt
 
   for (let attempt = 0; attempt < 16; attempt++) {
     if (method === 'PATCH' && json && typeof json === 'object' && Object.keys(json).length === 0) {
-      // Every field was stripped — nothing to update; return the current row(s).
+      // Every field was stripped - nothing to update; return the current row(s).
       return await request('GET', table, { params: { select: '*', ...(options.params || {}) } });
     }
     try {
@@ -190,7 +196,7 @@ export async function request(method: string, table: string, options: RequestOpt
         missingColumns[table].add(col);
         if (options.dropped && !options.dropped.includes(col)) options.dropped.push(col);
         console.warn(
-          `[Database] Column '${table}.${col}' does not exist in Supabase — value dropped and request retried. ` +
+          `[Database] Column '${table}.${col}' does not exist in Supabase - value dropped and request retried. ` +
           `Apply supabase/migrations/*.sql to persist this field.`
         );
         const { [col]: _omit, ...rest } = json;
@@ -425,7 +431,7 @@ async function ensureBucket(bucket: string) {
     headers: authHeaders({ 'Content-Type': 'application/json' }),
     body: JSON.stringify({ id: bucket, name: bucket, public: true }),
   });
-  // 409 = already exists — fine
+  // 409 = already exists - fine
   if (!res.ok && res.status !== 409) {
     const txt = await res.text();
     if (!/already exists/i.test(txt)) throw new Error(`Could not create storage bucket '${bucket}' (${res.status}): ${txt}`);

@@ -4,7 +4,7 @@ import { Invoice, CompanySettings, BankAccount, Customer, Payment } from '../typ
 import { prepareLogoForPdf } from './logoAsset.js';
 import { formatINR, numberToWords } from './format.js';
 
-// Re-exported for backwards compatibility — prefer importing from './format.js'
+// Re-exported for backwards compatibility - prefer importing from './format.js'
 export { formatINR, numberToWords };
 
 /**
@@ -24,8 +24,52 @@ async function drawLogo(doc: jsPDF, company: CompanySettings, x: number, top: nu
   }
 }
 
+/** Characters Windows, macOS and Android all accept in a file name. */
+function safeFileName(raw: string, fallback: string): string {
+  const cleaned = String(raw || '')
+    .replace(/[\\/:*?"<>|]+/g, '-')   // path separators and reserved characters
+    .replace(/\s+/g, '_')
+    .replace(/-{2,}/g, '-')
+    .replace(/^[-_.]+|[-_.]+$/g, '')
+    .slice(0, 120);
+  return cleaned || fallback;
+}
+
+/**
+ * Save the PDF straight to the user's downloads under a real name, instead of
+ * opening a blob tab. The object URL is released once the browser has taken it.
+ */
+function downloadPdf(doc: jsPDF, baseName: string) {
+  const blob = doc.output('blob');
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = baseName.toLowerCase().endsWith('.pdf') ? baseName : `${baseName}.pdf`;
+  a.rel = 'noopener';
+  a.style.display = 'none';
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 30_000);
+}
+
+/**
+ * Invoice file name is the LR number, as the office files bills by LR.
+ * A bill covering several LRs joins them; a bill with no LR falls back to
+ * the invoice number.
+ */
+export function invoiceFileName(inv: Invoice): string {
+  const lrs = (Array.isArray(inv.lr_items) ? inv.lr_items : [])
+    .map(l => String(l?.lr_no || '').trim()).filter(Boolean);
+  const fromLrs = lrs.length ? lrs.join('_') : String(inv.lr_no || '').split(',').map(x => x.trim()).filter(Boolean).join('_');
+  return safeFileName(fromLrs, safeFileName(inv.invoice_no, 'invoice'));
+}
+
 export async function printInvoicePDF(inv: Invoice, company: CompanySettings, bank?: BankAccount) {
   const doc = new jsPDF({ unit: 'mm', format: 'a4', compress: true });
+  // A non-GST bill must not look like a tax invoice: no "TAX INVOICE" title,
+  // no GSTIN, no SAC and no tax lines. It is a plain freight bill.
+  const internal = inv.doc_type === 'internal';
 
   const pageWidth = doc.internal.pageSize.getWidth();
   const margin = 12;
@@ -72,10 +116,12 @@ export async function printInvoicePDF(inv: Invoice, company: CompanySettings, ba
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(8);
   doc.setTextColor(15, 23, 42);
-  const taxIdText = `GSTIN: ${company.gstin || '24AABCS1429B1Z8'}  |  PAN: ${company.pan || 'AABCS1429B'}`;
-  const taxIdLines = doc.splitTextToSize(taxIdText, leftColWidth);
-  doc.text(taxIdLines, margin, curY);
-  curY += taxIdLines.length * 3.8;
+  if (!internal) {
+    const taxIdText = `GSTIN: ${company.gstin || '24AABCS1429B1Z8'}  |  PAN: ${company.pan || 'AABCS1429B'}`;
+    const taxIdLines = doc.splitTextToSize(taxIdText, leftColWidth);
+    doc.text(taxIdLines, margin, curY);
+    curY += taxIdLines.length * 3.8;
+  }
 
   // Calculate Band start position to ensure no collision with logo or header text
   const bandY = Math.max(curY + 2, logoTop + logoHeight + 3, 34);
@@ -86,9 +132,10 @@ export async function printInvoicePDF(inv: Invoice, company: CompanySettings, ba
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(9);
   doc.setTextColor(255, 255, 255);
-  doc.text('TAX INVOICE', margin + 3, bandY + 4.5);
+  doc.text(internal ? 'FREIGHT BILL' : 'TAX INVOICE', margin + 3, bandY + 4.5);
   doc.setFont('helvetica', 'normal');
-  doc.text(`GST Invoice under SAC ${inv.sac || '996511'} (Goods Transport)`, pageWidth - margin - 3, bandY + 4.5, { align: 'right' });
+  doc.text(internal ? 'Goods transport' : `GST Invoice under SAC ${inv.sac || '996511'} (Goods Transport)`,
+    pageWidth - margin - 3, bandY + 4.5, { align: 'right' });
 
   // Multi-LR bills: one line per LR / consignment
   const lrItems = Array.isArray(inv.lr_items)
@@ -112,23 +159,23 @@ export async function printInvoicePDF(inv: Invoice, company: CompanySettings, ba
       3: { cellWidth: 60 },
     },
     body: [
-      ['Invoice No.', inv.invoice_no || '—', 'Invoice Date', inv.invoice_date || '—'],
+      [internal ? 'Bill No.' : 'Invoice No.', inv.invoice_no || '-', internal ? 'Bill Date' : 'Invoice Date', inv.invoice_date || '-'],
       [
         multiLr ? 'LR Nos.' : 'LR No.',
-        multiLr ? `${lrItems.length} LRs — see Consignment Details below` : (inv.lr_no || '—'),
+        multiLr ? `${lrItems.length} LRs - see Consignment Details below` : (inv.lr_no || '-'),
         multiLr ? 'First LR Date' : 'Shipment Date',
-        (multiLr ? lrItems[0].lr_date : inv.shipment_date) || '—',
+        (multiLr ? lrItems[0].lr_date : inv.shipment_date) || '-',
       ],
-      ['Origin', inv.origin || '—', 'Destination', inv.destination || '—'],
+      ['Origin', inv.origin || '-', 'Destination', inv.destination || '-'],
       [
         multiLr ? 'Total Weight (Kg)' : 'Weight (Kg)',
-        (multiLr ? lrTotalWeight : inv.weight) ? `${formatINR(multiLr ? lrTotalWeight : inv.weight)} Kg` : '—',
+        (multiLr ? lrTotalWeight : inv.weight) ? `${formatINR(multiLr ? lrTotalWeight : inv.weight)} Kg` : '-',
         'Rate per Kg',
         multiLr
-          ? (lrRates.length === 1 ? `Rs. ${lrRates[0]}` : (lrRates.length > 1 ? 'As per LR' : '—'))
-          : (inv.rate_kg ? `Rs. ${inv.rate_kg}` : '—'),
+          ? (lrRates.length === 1 ? `Rs. ${lrRates[0]}` : (lrRates.length > 1 ? 'As per LR' : '-'))
+          : (inv.rate_kg ? `Rs. ${inv.rate_kg}` : '-'),
       ],
-      ['Place of Supply', inv.place_of_supply || '—', 'Payment Terms', inv.payment_terms || '—'],
+      [internal ? 'Delivery State' : 'Place of Supply', inv.place_of_supply || '-', 'Payment Terms', inv.payment_terms || '-'],
     ],
   });
 
@@ -153,8 +200,8 @@ export async function printInvoicePDF(inv: Invoice, company: CompanySettings, ba
         { content: 'SHIP TO (DELIVERY DETAILS)', styles: { fontStyle: 'bold', fillColor: [241, 245, 249] } },
       ],
       [
-        `${buyer.name || '—'}\n${buyer.address || ''}\n${[buyer.city, buyer.state, buyer.pin].filter(Boolean).join(', ')}\nGSTIN: ${buyer.gstin || '—'}\nPhone: ${buyer.phone || '—'}`,
-        `${ship.name || buyer.name || '—'}\n${ship.address || buyer.address || ''}\n${[ship.city || buyer.city, ship.state || buyer.state, ship.pin || buyer.pin].filter(Boolean).join(', ')}${ship.gstin ? `\nGSTIN: ${ship.gstin}` : ''}\nPhone: ${ship.phone || buyer.phone || '—'}`,
+        `${buyer.name || '-'}\n${buyer.address || ''}\n${[buyer.city, buyer.state, buyer.pin].filter(Boolean).join(', ')}${internal ? '' : `\nGSTIN: ${buyer.gstin || '-'}`}\nPhone: ${buyer.phone || '-'}`,
+        `${ship.name || buyer.name || '-'}\n${ship.address || buyer.address || ''}\n${[ship.city || buyer.city, ship.state || buyer.state, ship.pin || buyer.pin].filter(Boolean).join(', ')}${ship.gstin && !internal ? `\nGSTIN: ${ship.gstin}` : ''}\nPhone: ${ship.phone || buyer.phone || '-'}`,
       ],
     ],
   });
@@ -165,11 +212,11 @@ export async function printInvoicePDF(inv: Invoice, company: CompanySettings, ba
   if (multiLr) {
     const lrRows: any[] = lrItems.map((l, i) => [
       String(i + 1),
-      l.lr_no || '—',
-      l.lr_date || '—',
-      [l.origin, l.destination].filter(Boolean).join(' -> ') || '—',
-      l.weight ? formatINR(l.weight) : '—',
-      l.rate_kg ? formatINR(l.rate_kg) : '—',
+      l.lr_no || '-',
+      l.lr_date || '-',
+      [l.origin, l.destination].filter(Boolean).join(' -> ') || '-',
+      l.weight ? formatINR(l.weight) : '-',
+      l.rate_kg ? formatINR(l.rate_kg) : '-',
       formatINR(l.amount),
     ]);
     lrRows.push([
@@ -205,9 +252,9 @@ export async function printInvoicePDF(inv: Invoice, company: CompanySettings, ba
     [
       '1',
       multiLr
-        ? `Freight Charges — ${lrItems.length} LRs (as per Consignment Details above)`
+        ? `Freight Charges - ${lrItems.length} LRs (as per Consignment Details above)`
         : 'Freight Charges (Logistics / Transportation)',
-      inv.sac || '996511',
+      internal ? '' : inv.sac || '996511',
       formatINR(inv.totals?.freight || inv.freight || 0),
     ],
   ];
@@ -215,11 +262,11 @@ export async function printInvoicePDF(inv: Invoice, company: CompanySettings, ba
   let itemIdx = 2;
   if (inv.totals?.additional_items && inv.totals.additional_items.length > 0) {
     for (const item of inv.totals.additional_items) {
-      chargeRows.push([String(itemIdx++), item.label, inv.sac || '996511', formatINR(item.amount)]);
+      chargeRows.push([String(itemIdx++), item.label, internal ? '' : inv.sac || '996511', formatINR(item.amount)]);
     }
   } else if (inv.extra_charges && inv.extra_charges.length > 0) {
     for (const item of inv.extra_charges) {
-      chargeRows.push([String(itemIdx++), item.label, inv.sac || '996511', formatINR(item.amount)]);
+      chargeRows.push([String(itemIdx++), item.label, internal ? '' : inv.sac || '996511', formatINR(item.amount)]);
     }
   }
 
@@ -235,7 +282,7 @@ export async function printInvoicePDF(inv: Invoice, company: CompanySettings, ba
       2: { cellWidth: 26, halign: 'center' },
       3: { cellWidth: 40, halign: 'right' },
     },
-    head: [['#', 'Particulars & Description', 'SAC Code', 'Amount (INR)']],
+    head: [['#', 'Particulars & Description', internal ? '' : 'SAC Code', 'Amount (INR)']],
     body: chargeRows,
   });
 
@@ -266,9 +313,11 @@ export async function printInvoicePDF(inv: Invoice, company: CompanySettings, ba
   if (totals.discount_amount > 0) {
     totalsBody.push(['Discount', `-${formatINR(totals.discount_amount)}`]);
   }
-  totalsBody.push(['Taxable Amount', formatINR(totals.taxable_amount)]);
+  totalsBody.push([internal ? 'Sub Total' : 'Taxable Amount', formatINR(totals.taxable_amount)]);
 
-  if (totals.gst_type === 'igst') {
+  if (internal) {
+    // no tax lines at all on a non-GST bill
+  } else if (totals.gst_type === 'igst') {
     totalsBody.push([`IGST @ ${totals.gst_rate}%`, formatINR(totals.igst)]);
   } else if (totals.gst_type === 'intra') {
     const halfRate = totals.gst_rate / 2;
@@ -327,7 +376,7 @@ export async function printInvoicePDF(inv: Invoice, company: CompanySettings, ba
       ],
       [
         bank
-          ? `Bank: ${bank.bank_name}\nA/C Name: ${bank.account_holder}\nA/C No: ${bank.account_number}\nIFSC: ${bank.ifsc || '—'}  |  Branch: ${bank.branch || '—'}\nUPI ID: ${bank.upi_id || '—'}`
+          ? `Bank: ${bank.bank_name}\nA/C Name: ${bank.account_holder}\nA/C No: ${bank.account_number}\nIFSC: ${bank.ifsc || '-'}  |  Branch: ${bank.branch || '-'}\nUPI ID: ${bank.upi_id || '-'}`
           : 'Bank details not configured.\nPlease transfer to authorized company account.',
         inv.terms || company.terms || "Goods booked at owner's risk. All disputes subject to Ahmedabad jurisdiction only.",
       ],
@@ -340,7 +389,7 @@ export async function printInvoicePDF(inv: Invoice, company: CompanySettings, ba
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(7);
   doc.setTextColor(100, 116, 139);
-  doc.text('This is a computer generated invoice and does not require physical signature.', margin, footY + 12);
+  doc.text(`This is a computer generated ${internal ? 'bill' : 'invoice'} and does not require physical signature.`, margin, footY + 12);
 
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(8);
@@ -349,10 +398,7 @@ export async function printInvoicePDF(inv: Invoice, company: CompanySettings, ba
   doc.setFont('helvetica', 'normal');
   doc.text('Authorised Signatory', pageWidth - margin, footY + 16, { align: 'right' });
 
-  // Open PDF in new tab
-  const blob = doc.output('blob');
-  const url = URL.createObjectURL(blob);
-  window.open(url, '_blank');
+  downloadPdf(doc, invoiceFileName(inv));
 }
 
 export async function printReceiptPDF(payment: Payment, company: CompanySettings) {
@@ -417,14 +463,14 @@ export async function printReceiptPDF(payment: Payment, company: CompanySettings
     },
     body: [
       ['Received With Thanks From', payment.customer_name || 'Customer'],
-      ['Payment Date', payment.payment_date || '—'],
+      ['Payment Date', payment.payment_date || '-'],
       ['Payment Mode / Method', payment.method || 'Bank Transfer'],
-      ['Transaction / UTR Reference', payment.reference || '—'],
-      ['Against Invoice No.', payment.invoice_no || '—'],
+      ['Transaction / UTR Reference', payment.reference || '-'],
+      ['Against Invoice No.', payment.invoice_no || '-'],
       ['Invoice Total Amount', `Rs. ${formatINR(payment.invoice_total || 0)}`],
       ['Amount Received', `Rs. ${formatINR(payment.amount)} (${numberToWords(payment.amount)})`],
       ['Remaining Balance Due', `Rs. ${formatINR(payment.invoice_balance ?? 0)}`],
-      ['Notes / Remarks', payment.notes || '—'],
+      ['Notes / Remarks', payment.notes || '-'],
     ],
   });
 
@@ -443,9 +489,7 @@ export async function printReceiptPDF(payment: Payment, company: CompanySettings
   doc.setFont('helvetica', 'normal');
   doc.text('Authorised Signatory', pageWidth - margin, endY + 22, { align: 'right' });
 
-  const blob = doc.output('blob');
-  const url = URL.createObjectURL(blob);
-  window.open(url, '_blank');
+  downloadPdf(doc, safeFileName(`receipt_${payment.invoice_no || ''}_${payment.payment_date || ''}`, 'receipt'));
 }
 
 export async function printStatementPDF(
@@ -519,8 +563,8 @@ export async function printStatementPDF(
     body: [
       [
         `Customer / Consignee: ${customer.name}\n` +
-        `Address: ${[customer.address, customer.city, customer.state, customer.pin].filter(Boolean).join(', ') || '—'}\n` +
-        `GSTIN: ${customer.gstin || 'Unregistered'}   |   Phone: ${customer.phone || '—'}\n` +
+        `Address: ${[customer.address, customer.city, customer.state, customer.pin].filter(Boolean).join(', ') || '-'}\n` +
+        `GSTIN: ${customer.gstin || 'Unregistered'}   |   Phone: ${customer.phone || '-'}\n` +
         `Payment Terms: ${customer.payment_terms || 'Monthly / Net 15 Days'}`,
         `Opening Balance (B/F):\n` +
         `Period Invoiced Sales:\n` +
@@ -545,10 +589,10 @@ export async function printStatementPDF(
     doc.text(`Itemized Invoice Details for ${periodLabel} (${invoices.length} Invoices)`, margin, nextY + 3);
 
     const invRows = invoices.map(inv => [
-      inv.invoice_date || '—',
-      inv.invoice_no || '—',
-      inv.lr_no ? `LR #${inv.lr_no}` : '—',
-      (inv.origin && inv.destination) ? `${inv.origin} -> ${inv.destination}` : (inv.vehicle_no ? `Veh: ${inv.vehicle_no}` : '—'),
+      inv.invoice_date || '-',
+      inv.invoice_no || '-',
+      inv.lr_no ? `LR #${inv.lr_no}` : '-',
+      (inv.origin && inv.destination) ? `${inv.origin} -> ${inv.destination}` : (inv.vehicle_no ? `Veh: ${inv.vehicle_no}` : '-'),
       formatINR(inv.taxable_amount || (inv.totals?.taxable_amount) || 0),
       formatINR(inv.gst_amount || (inv.totals?.gst_amount) || 0),
       formatINR(inv.grand_total || (inv.totals?.grand_total) || 0),
@@ -588,8 +632,8 @@ export async function printStatementPDF(
   doc.text('Chronological Statement of Account / Running Ledger', margin, nextY + 3);
 
   const ledgerRows = ledger.map(item => [
-    item.date || '—',
-    item.particulars || '—',
+    item.date || '-',
+    item.particulars || '-',
     item.debit ? formatINR(item.debit) : '',
     item.credit ? formatINR(item.credit) : '',
     formatINR(item.balance),
@@ -609,7 +653,7 @@ export async function printStatementPDF(
       4: { cellWidth: 28, halign: 'right', fontStyle: 'bold', textColor: [15, 23, 42] },
     },
     head: [['Date', 'Particulars & Reference', 'Debit (Invoice)', 'Credit (Receipt)', 'Balance (Rs)']],
-    body: ledgerRows.length > 0 ? ledgerRows : [['—', 'No transactions found in this period', '', '', '0.00']],
+    body: ledgerRows.length > 0 ? ledgerRows : [['-', 'No transactions found in this period', '', '', '0.00']],
   });
 
   const finalEndY = (doc as any).lastAutoTable.finalY || nextY + 40;
@@ -631,7 +675,7 @@ export async function printStatementPDF(
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(7);
     doc.setTextColor(71, 85, 105);
-    const bankLine = `Bank: ${bank.bank_name}  |  A/C Holder: ${bank.account_holder}  |  A/C No: ${bank.account_number}  |  IFSC: ${bank.ifsc || '—'}${bank.upi_id ? `  |  UPI: ${bank.upi_id}` : ''}`;
+    const bankLine = `Bank: ${bank.bank_name}  |  A/C Holder: ${bank.account_holder}  |  A/C No: ${bank.account_number}  |  IFSC: ${bank.ifsc || '-'}${bank.upi_id ? `  |  UPI: ${bank.upi_id}` : ''}`;
     doc.text(bankLine, margin, footY + 4);
     footY += 7;
   }
@@ -649,7 +693,5 @@ export async function printStatementPDF(
   doc.setFontSize(7.5);
   doc.text('Authorised Signatory', pageWidth - margin, footY + 12, { align: 'right' });
 
-  const blob = doc.output('blob');
-  const url = URL.createObjectURL(blob);
-  window.open(url, '_blank');
+  downloadPdf(doc, safeFileName(`statement_${customer?.name || ''}`, 'statement'));
 }

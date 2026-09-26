@@ -1,4 +1,4 @@
--- SSL Billing — full schema for a fresh Supabase project.
+-- SSL Billing - full schema for a fresh Supabase project.
 -- Idempotent: safe to re-run. Run in the Supabase SQL editor or via psql.
 -- The app talks to these tables with the service-role key (bypasses RLS);
 -- RLS is enabled with NO policies so the anon/publishable key cannot read anything.

@@ -86,6 +86,10 @@ export interface CustomerLedgerEntry {
   type: 'opening' | 'invoice' | 'payment' | 'credit_note';
   particulars: string;
   reference_no?: string;
+  /** Present on payment rows so the statement can delete that receipt. */
+  payment_id?: string;
+  invoice_id?: string;
+  method?: string;
   lr_no?: string;
   vehicle_no?: string;
   route?: string;
@@ -141,9 +145,45 @@ export interface LrItem {
   weight: number;
   rate_kg: number;
   amount: number;
+  /** What we paid for this trip including the vendor's GST, as entered. */
+  cost_incl_gst?: number | null;
+  /** true when cost_incl_gst includes 18% GST. */
+  gst_included?: boolean;
+  /** What we paid for this trip without GST (derived). null = not costed yet. */
+  cost?: number | null;
+  vendor?: string;
+  /** GST the vendor charged on that cost. */
+  cost_gst?: number;
+  /** false when that GST cannot be claimed back. */
+  itc?: boolean;
 }
 
+/** A bill-level cost such as commission, with the vendor's GST. */
+export interface CostItem {
+  label: string;
+  /** What we paid including the vendor's GST, as entered. */
+  amount_incl_gst?: number;
+  /** true when amount_incl_gst includes 18% GST. */
+  gst_included?: boolean;
+  /** Cost without GST, and the GST inside it (derived). */
+  amount: number;
+  gst?: number;
+  itc?: boolean;
+}
+
+export type DocType = 'tax_invoice' | 'internal';
+
 export interface InvoiceTotals {
+  doc_type?: DocType;
+  lr_cost?: number;
+  other_costs?: CostItem[];
+  other_cost_total?: number;
+  input_gst?: number;
+  blocked_gst?: number;
+  total_cost?: number | null;
+  gross_profit?: number | null;
+  margin_pct?: number | null;
+  partly_costed?: boolean;
   freight: number;
   fuel_surcharge: number;
   fuel_hike: number;
@@ -168,6 +208,12 @@ export interface InvoiceTotals {
 
 export interface Invoice {
   id: string;
+  /** GST tax invoice, or an internal (non-GST) bill that never enters a return. */
+  doc_type?: DocType;
+  other_costs?: CostItem[];
+  input_gst?: number | null;
+  total_cost?: number | null;
+  gross_profit?: number | null;
   invoice_no: string;
   invoice_date: string;
   customer_id: string;
@@ -280,6 +326,12 @@ export interface AuditLog {
   created_at: string;
 }
 
+/**
+ * Every rupee figure is about the invoices DATED in the selected period:
+ * collected is what has been paid on them (whenever), outstanding is what is
+ * still due on them, so total_sales = collected + outstanding. cash_received
+ * is the separate cash-flow view: payments dated inside the period.
+ */
 export interface DashboardMetrics {
   total_sales: number;
   taxable_sales: number;
@@ -287,12 +339,17 @@ export interface DashboardMetrics {
   cgst: number;
   sgst: number;
   igst: number;
+  collected: number;
+  /** Alias of collected, kept for older callers. */
   payments_received: number;
+  cash_received: number;
   outstanding: number;
+  overdue_amount: number;
   expenses: number;
   estimated_profit: number;
   profit_margin: number;
   customers: number;
+  /** Issued invoices in the period; drafts and cancellations are counted apart. */
   invoices: number;
   paid: number;
   pending: number;

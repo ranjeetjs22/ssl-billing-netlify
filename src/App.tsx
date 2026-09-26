@@ -14,13 +14,14 @@ import { PaymentList } from './components/PaymentList.js';
 import { PaymentModal } from './components/PaymentModal.js';
 import { CompanySettingsView } from './components/CompanySettings.js';
 import { UserManagementView } from './components/UserManagement.js';
-import { AuditLogsModal } from './components/AuditLogsModal.js';
 import { Invoice, Customer, CompanySettings, BankAccount } from './types.js';
 import { apiRequest } from './services/api.js';
 
-// The dashboard (charts) is the heaviest screen — load it on demand.
+// The dashboard (charts) is the heaviest screen - load it on demand.
 const Dashboard = React.lazy(() => import('./components/Dashboard.js').then(m => ({ default: m.Dashboard })));
 const RateCalculator = React.lazy(() => import('./components/RateCalculator.js').then(m => ({ default: m.RateCalculator })));
+const Reports = React.lazy(() => import('./components/Reports.js').then(m => ({ default: m.Reports })));
+const Expenses = React.lazy(() => import('./components/Expenses.js').then(m => ({ default: m.Expenses })));
 const ScreenLoader = () => (
   <div className="py-16 flex items-center justify-center" role="status" aria-live="polite">
     <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-accent" />
@@ -32,13 +33,23 @@ function MainApp() {
   const { user, loading } = useAuth();
   const [activeTab, setActiveTab] = useState('dashboard');
   const [sidebarOpenMobile, setSidebarOpenMobile] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState<boolean>(() => {
+    try { return localStorage.getItem('ssl_sidebar_collapsed') === '1'; } catch { return false; }
+  });
+
+  const toggleSidebarCollapsed = () => {
+    setSidebarCollapsed(prev => {
+      const next = !prev;
+      try { localStorage.setItem('ssl_sidebar_collapsed', next ? '1' : '0'); } catch { /* private mode */ }
+      return next;
+    });
+  };
 
   // Modals state
   const [showInvoiceModal, setShowInvoiceModal] = useState(false);
   const [showCustomerModal, setShowCustomerModal] = useState(false);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [showOverdueModal, setShowOverdueModal] = useState(false);
-  const [showAuditLogs, setShowAuditLogs] = useState(false);
 
   // Selected Entities & Editing State
   const [selectedInvoice, setSelectedInvoice] = useState<Invoice | null>(null);
@@ -91,7 +102,7 @@ function MainApp() {
 
   if (loading) {
     return (
-      <div className="min-h-dvh bg-canvas flex items-center justify-center" role="status" aria-live="polite">
+      <div className="min-h-dvh flex items-center justify-center" role="status" aria-live="polite">
         <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-accent" />
         <span className="sr-only">Loading…</span>
       </div>
@@ -103,11 +114,11 @@ function MainApp() {
   }
 
   return (
-    <div className="min-h-dvh bg-canvas text-ink flex selection:bg-accent selection:text-white">
+    <div className="min-h-dvh text-ink flex selection:bg-accent-line selection:text-ink">
       <a
         href="#main-content"
         className="sr-only focus:not-sr-only focus:absolute focus:top-3 focus:left-3 focus:z-[100]
-                   focus:px-4 focus:py-2 focus:rounded-xl focus:bg-accent focus:text-white focus:font-semibold"
+                   focus:px-4 focus:py-2 focus:rounded-card focus:bg-ink focus:text-canvas focus:font-medium"
       >
         Skip to main content
       </a>
@@ -126,14 +137,20 @@ function MainApp() {
           setShowPaymentModal(true);
         }}
         onViewOverdue={() => setShowOverdueModal(true)}
-        onOpenAuditLogs={() => setShowAuditLogs(true)}
         isOpenMobile={sidebarOpenMobile}
         setIsOpenMobile={setSidebarOpenMobile}
+        collapsed={sidebarCollapsed}
+        onToggleCollapsed={toggleSidebarCollapsed}
         companySettings={companySettings}
       />
 
-      {/* Main Content Area on the right */}
-      <div className="flex-1 flex flex-col min-w-0 lg:pl-[17rem]">
+      {/* Main content. Padding tracks the floating rail: 12px inset + its width
+          + a 12px gutter, so the island never sits under the content column. */}
+      <div
+        className={`flex-1 flex flex-col min-w-0 transition-[padding] duration-[240ms] ease-out ${
+          sidebarCollapsed ? 'lg:pl-[88px]' : 'lg:pl-[252px]'
+        }`}
+      >
         {/* Top Header */}
         <TopHeader
           activeTab={activeTab}
@@ -147,14 +164,13 @@ function MainApp() {
             setShowPaymentModal(true);
           }}
           onNewCustomer={() => setShowCustomerModal(true)}
-          onOpenAuditLogs={() => setShowAuditLogs(true)}
           companySettings={companySettings}
         />
 
         {/* Main Body View */}
         <main
           id="main-content"
-          className="flex-1 px-3 py-4 sm:px-6 sm:py-6 max-w-[1600px] w-full mx-auto pb-24 lg:pb-6"
+          className="flex-1 px-3 py-4 sm:px-6 sm:py-6 max-w-[1560px] w-full mx-auto pb-28 lg:pb-8"
         >
           {activeTab === 'dashboard' && (
             <React.Suspense fallback={<ScreenLoader />}>
@@ -211,6 +227,18 @@ function MainApp() {
           {activeTab === 'rates' && (
             <React.Suspense fallback={<ScreenLoader />}>
               <RateCalculator />
+            </React.Suspense>
+          )}
+
+          {activeTab === 'expenses' && (
+            <React.Suspense fallback={<ScreenLoader />}>
+              <Expenses />
+            </React.Suspense>
+          )}
+
+          {activeTab === 'reports' && (
+            <React.Suspense fallback={<ScreenLoader />}>
+              <Reports />
             </React.Suspense>
           )}
 
@@ -321,6 +349,7 @@ function MainApp() {
             setTargetCustomerForInvoice(cust.id);
             setShowInvoiceModal(true);
           }}
+          onRefresh={() => setRefreshKey(k => k + 1)}
           companySettings={companySettings}
         />
       )}
@@ -340,10 +369,6 @@ function MainApp() {
 
       {showOverdueModal && (
         <OverdueModal onClose={() => setShowOverdueModal(false)} />
-      )}
-
-      {showAuditLogs && (
-        <AuditLogsModal onClose={() => setShowAuditLogs(false)} />
       )}
     </div>
   );

@@ -213,7 +213,7 @@ export const SslLogo: React.FC<SslLogoProps> = ({
             letterSpacing="4.2"
             fill="#E65100"
           >
-            SAFE – RELIABLE – ON TIME FREIGHT
+            SAFE - RELIABLE - ON TIME FREIGHT
           </text>
         </g>
       )}

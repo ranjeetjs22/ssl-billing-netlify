@@ -86,7 +86,7 @@ settingsRouter.post('/settings/logo', requireModule('settings'), upload.single('
     const filename = `logo_${Date.now()}.${ext}`;
     let logo_url: string;
     if (db.hasSupabase()) {
-      // Persist in Supabase Storage — serverless instances have no durable disk/memory.
+      // Persist in Supabase Storage - serverless instances have no durable disk/memory.
       logo_url = await db.uploadPublicFile('logos', filename, new Uint8Array(file.buffer), file.mimetype || `image/${ext === 'jpg' ? 'jpeg' : ext}`);
     } else {
       fileStore.set(filename, { buffer: file.buffer, mime: file.mimetype });

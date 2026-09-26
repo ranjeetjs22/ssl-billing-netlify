@@ -42,13 +42,17 @@ export const InvoiceList: React.FC<InvoiceListProps> = ({
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState('all');
+  const [docFilter, setDocFilter] = useState<'all' | 'tax_invoice' | 'internal'>('all');
   const [searchInput, setSearchInput] = useState('');
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
   const [invoiceToDelete, setInvoiceToDelete] = useState<Invoice | null>(null);
   const [toast, setToast] = useState<string | null>(initialToastMessage || null);
-  const [summary, setSummary] = useState({ count: 0, grand_total: 0, taxable: 0, gst: 0, balance: 0 });
+  const [summary, setSummary] = useState({
+    count: 0, grand_total: 0, taxable: 0, gst: 0, balance: 0,
+    gst_count: 0, non_gst_count: 0, total_cost: 0, gross_profit: 0, uncosted: 0,
+  });
 
   // Debounce typing so we issue one request per pause, not one per keystroke
   useEffect(() => {
@@ -62,6 +66,7 @@ export const InvoiceList: React.FC<InvoiceListProps> = ({
     try {
       let url = `/invoices?page=${page}&page_size=${PAGE_SIZE}&sort=invoice_date&order=desc`;
       if (statusFilter !== 'all') url += `&status=${statusFilter}`;
+      if (docFilter !== 'all') url += `&doc_type=${docFilter}`;
       if (search) url += `&search=${encodeURIComponent(search)}`;
       const res = await apiRequest<{ items: Invoice[]; total: number; summary: any }>(url);
       setInvoices(res.items || []);
@@ -72,7 +77,7 @@ export const InvoiceList: React.FC<InvoiceListProps> = ({
     } finally {
       setLoading(false);
     }
-  }, [statusFilter, search, page]);
+  }, [statusFilter, docFilter, search, page]);
 
   useEffect(() => { fetchInvoices(); }, [fetchInvoices]);
   useEffect(() => { if (initialToastMessage) setToast(initialToastMessage); }, [initialToastMessage]);
@@ -93,7 +98,7 @@ export const InvoiceList: React.FC<InvoiceListProps> = ({
   };
 
   const lrLabel = (inv: Invoice) =>
-    inv.lr_items && inv.lr_items.length > 1 ? `${inv.lr_items.length} LRs` : inv.lr_no || '—';
+    inv.lr_items && inv.lr_items.length > 1 ? `${inv.lr_items.length} LRs` : inv.lr_no || '-';
 
   const columns: Column<Invoice>[] = [
     {
@@ -101,7 +106,12 @@ export const InvoiceList: React.FC<InvoiceListProps> = ({
       header: 'Invoice',
       cell: (inv) => (
         <div className="min-w-0">
-          <div className="font-mono font-bold text-accent-ink truncate">{inv.invoice_no}</div>
+          <div className="flex items-center gap-1.5 min-w-0">
+            <span className="font-mono font-bold text-accent-ink truncate">{inv.invoice_no}</span>
+            {inv.doc_type === 'internal' && (
+              <span className="shrink-0 px-1.5 py-px rounded-[4px] border border-line text-[10px] font-semibold text-ink-soft">NON-GST</span>
+            )}
+          </div>
           <div className="text-xs text-ink-faint">{inv.invoice_date}</div>
         </div>
       ),
@@ -111,8 +121,8 @@ export const InvoiceList: React.FC<InvoiceListProps> = ({
       header: 'Customer',
       cell: (inv) => (
         <div className="min-w-0">
-          <div className="font-semibold text-ink truncate max-w-[220px]">{inv.buyer?.name || '—'}</div>
-          <div className="text-xs text-ink-faint truncate">{inv.buyer?.city || inv.place_of_supply || '—'}</div>
+          <div className="font-semibold text-ink truncate max-w-[220px]">{inv.buyer?.name || '-'}</div>
+          <div className="text-xs text-ink-faint truncate">{inv.buyer?.city || inv.place_of_supply || '-'}</div>
         </div>
       ),
     },
@@ -148,6 +158,23 @@ export const InvoiceList: React.FC<InvoiceListProps> = ({
           <span className={cx('font-mono font-semibold', bal > 0.5 ? 'text-warning-ink' : 'text-positive-ink')}>
             ₹{formatINR(bal)}
           </span>
+        );
+      },
+    },
+    {
+      key: 'profit',
+      header: 'Profit',
+      align: 'right',
+      hideBelow: 'lg',
+      cell: (inv) => {
+        const gp = (inv as any).totals?.gross_profit;
+        if (gp === null || gp === undefined) return <span className="text-xs text-ink-faint">Not costed</span>;
+        const m = (inv as any).totals?.margin_pct;
+        return (
+          <div className="leading-tight">
+            <div className={cx('font-mono font-semibold', gp < 0 ? 'text-danger-ink' : 'text-positive-ink')}>₹{formatINR(gp)}</div>
+            {m !== null && m !== undefined && <div className="text-[11px] text-ink-faint">{m}%</div>}
+          </div>
         );
       },
     },
@@ -194,7 +221,7 @@ export const InvoiceList: React.FC<InvoiceListProps> = ({
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
             <div className="font-mono font-bold text-accent-ink text-sm truncate">{inv.invoice_no}</div>
-            <div className="font-semibold text-ink truncate">{inv.buyer?.name || '—'}</div>
+            <div className="font-semibold text-ink truncate">{inv.buyer?.name || '-'}</div>
           </div>
           <StatusBadge status={inv.display_status} />
         </div>
@@ -237,9 +264,12 @@ export const InvoiceList: React.FC<InvoiceListProps> = ({
       {toast && <Toast message={toast} onDismiss={() => setToast(null)} />}
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
-        <StatCard label="Invoices" value={summary.count} loading={loading} />
-        <StatCard label="Taxable" value={`₹${formatINR(summary.taxable)}`} loading={loading} />
-        <StatCard label="GST" value={`₹${formatINR(summary.gst)}`} loading={loading} />
+        <StatCard label="Bills" value={summary.count} loading={loading}
+          sub={`${summary.gst_count} GST · ${summary.non_gst_count} non-GST`} />
+        <StatCard label="Revenue (ex-GST)" value={`₹${formatINR(summary.taxable)}`} loading={loading}
+          sub={`GST ₹${formatINR(summary.gst)}`} />
+        <StatCard label="Gross profit" value={`₹${formatINR(summary.gross_profit)}`} tone="positive" loading={loading}
+          sub={summary.uncosted ? `${summary.uncosted} bill(s) not costed` : `Cost ₹${formatINR(summary.total_cost)}`} />
         <StatCard label="Outstanding" value={`₹${formatINR(summary.balance)}`} tone="warning" loading={loading} />
       </div>
 
@@ -247,7 +277,7 @@ export const InvoiceList: React.FC<InvoiceListProps> = ({
         <div
           role="tablist"
           aria-label="Filter invoices by status"
-          className="flex items-center gap-1 bg-surface border border-line rounded-xl p-1 overflow-x-auto shadow-card"
+          className="flex items-center gap-1 bg-surface border border-line rounded-card p-1 overflow-x-auto shadow-card"
         >
           {TABS.map((tab) => (
             <button
@@ -256,13 +286,25 @@ export const InvoiceList: React.FC<InvoiceListProps> = ({
               aria-selected={statusFilter === tab.key}
               onClick={() => { setStatusFilter(tab.key); setPage(1); }}
               className={cx(
-                'px-3 min-h-[38px] rounded-lg text-sm font-medium whitespace-nowrap cursor-pointer transition-colors duration-150',
+                'px-3 min-h-[38px] rounded-control text-sm font-medium whitespace-nowrap cursor-pointer transition-colors duration-150',
                 statusFilter === tab.key
                   ? 'bg-accent-strong text-on-accent font-semibold'
                   : 'text-ink-soft hover:bg-surface-sunken hover:text-ink'
               )}
             >
               {tab.label}
+            </button>
+          ))}
+        </div>
+
+        <div role="tablist" aria-label="Filter by bill type"
+          className="flex items-center gap-0.5 p-0.5 rounded-control bg-surface-sunken border border-line shrink-0">
+          {([['all', 'All'], ['tax_invoice', 'GST'], ['internal', 'Non-GST']] as const).map(([k, label]) => (
+            <button key={k} role="tab" aria-selected={docFilter === k}
+              onClick={() => { setDocFilter(k); setPage(1); }}
+              className={cx('px-3 h-8 rounded-[6px] text-[13px] whitespace-nowrap cursor-pointer transition-colors',
+                docFilter === k ? 'bg-surface-muted text-ink font-medium shadow-card' : 'text-ink-faint hover:text-ink')}>
+              {label}
             </button>
           ))}
         </div>

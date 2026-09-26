@@ -74,7 +74,7 @@ export const CustomerList: React.FC<CustomerListProps> = ({ onNewCustomer, onSel
       cell: (c) => (
         <div className="flex items-center gap-3 min-w-0">
           <span
-            className="w-9 h-9 rounded-xl bg-accent-soft border border-accent-line text-accent-ink font-bold
+            className="w-9 h-9 rounded-card bg-accent-soft border border-accent-line text-accent-ink font-bold
                        flex items-center justify-center shrink-0 text-sm"
             aria-hidden="true"
           >
@@ -93,7 +93,7 @@ export const CustomerList: React.FC<CustomerListProps> = ({ onNewCustomer, onSel
       hideBelow: 'md',
       cell: (c) => (
         <span className="text-ink-soft truncate block max-w-[160px]">
-          {[c.city, c.state].filter(Boolean).join(', ') || '—'}
+          {[c.city, c.state].filter(Boolean).join(', ') || '-'}
         </span>
       ),
     },
@@ -101,7 +101,7 @@ export const CustomerList: React.FC<CustomerListProps> = ({ onNewCustomer, onSel
       key: 'phone',
       header: 'Phone',
       hideBelow: 'lg',
-      cell: (c) => <span className="font-mono text-xs text-ink-soft">{c.phone || '—'}</span>,
+      cell: (c) => <span className="font-mono text-xs text-ink-soft">{c.phone || '-'}</span>,
     },
     {
       key: 'invoices',
@@ -131,7 +131,7 @@ export const CustomerList: React.FC<CustomerListProps> = ({ onNewCustomer, onSel
         (c.overdue_amount || 0) > 0.01 ? (
           <Badge tone="danger">₹{formatINR(c.overdue_amount)}</Badge>
         ) : (
-          <span className="text-ink-faint">—</span>
+          <span className="text-ink-faint"> - </span>
         ),
     },
   ];
@@ -143,7 +143,7 @@ export const CustomerList: React.FC<CustomerListProps> = ({ onNewCustomer, onSel
         <div className="flex items-center justify-between gap-3">
           <div className="flex items-center gap-2.5 min-w-0">
             <span
-              className="w-9 h-9 rounded-xl bg-accent-soft border border-accent-line text-accent-ink font-bold
+              className="w-9 h-9 rounded-card bg-accent-soft border border-accent-line text-accent-ink font-bold
                          flex items-center justify-center shrink-0 text-sm"
               aria-hidden="true"
             >
@@ -203,7 +203,7 @@ export const CustomerList: React.FC<CustomerListProps> = ({ onNewCustomer, onSel
         <div
           role="tablist"
           aria-label="Filter customers"
-          className="flex items-center gap-1 bg-surface border border-line rounded-xl p-1 overflow-x-auto shadow-card"
+          className="flex items-center gap-1 bg-surface border border-line rounded-card p-1 overflow-x-auto shadow-card"
         >
           {TABS.map((tab) => (
             <button
@@ -212,7 +212,7 @@ export const CustomerList: React.FC<CustomerListProps> = ({ onNewCustomer, onSel
               aria-selected={filterType === tab.key}
               onClick={() => setFilterType(tab.key)}
               className={cx(
-                'px-3 min-h-[38px] rounded-lg text-sm font-medium whitespace-nowrap cursor-pointer transition-colors duration-150',
+                'px-3 min-h-[38px] rounded-control text-sm font-medium whitespace-nowrap cursor-pointer transition-colors duration-150',
                 filterType === tab.key
                   ? 'bg-accent-strong text-on-accent font-semibold'
                   : 'text-ink-soft hover:bg-surface-sunken hover:text-ink'
@@ -243,7 +243,7 @@ export const CustomerList: React.FC<CustomerListProps> = ({ onNewCustomer, onSel
           className="lg:ml-auto"
           id="new-customer-btn"
         >
-          Add Customer
+          Add customer
         </Button>
       </div>
 
@@ -274,7 +274,7 @@ export const CustomerList: React.FC<CustomerListProps> = ({ onNewCustomer, onSel
                     </Button>
                   ) : (
                     <Button variant="primary" icon={<Plus className="w-4 h-4" />} onClick={onNewCustomer}>
-                      Add Customer
+                      Add customer
                     </Button>
                   )
                 }

@@ -8,145 +8,70 @@ dashboardRouter.use(authMiddleware);
 
 const handleDashboard = async (req: Request, res: Response) => {
   try {
-    const fromDate = (req.query.from_date || req.query.from) as string;
-    const toDate = (req.query.to_date || req.query.to) as string;
+    const from = String(req.query.from_date || req.query.from || '').slice(0, 10) || undefined;
+    const to = String(req.query.to_date || req.query.to || '').slice(0, 10) || undefined;
+    const today = calc.todayIST();
 
-    let [invoices, payments, expenses, customers] = await Promise.all([
+    // Expenses has no write path in the app yet, so a missing or blocked table
+    // must not take the whole dashboard down with it.
+    const [invoices, payments, customers, expenses] = await Promise.all([
       db.select('invoices', { order: 'invoice_date.asc' }),
       db.select('payments'),
-      db.select('expenses'),
       db.select('customers'),
+      db.select('expenses').catch(() => [] as any[]),
     ]);
 
-    if (fromDate) {
-      invoices = invoices.filter((i: any) => (i.invoice_date || '') >= fromDate);
-      payments = payments.filter((p: any) => (p.payment_date || p.created_at || '').slice(0, 10) >= fromDate);
-      expenses = expenses.filter((e: any) => (e.expense_date || '').slice(0, 10) >= fromDate);
-    }
-    if (toDate) {
-      invoices = invoices.filter((i: any) => (i.invoice_date || '') <= toDate);
-      payments = payments.filter((p: any) => (p.payment_date || p.created_at || '').slice(0, 10) <= toDate);
-      expenses = expenses.filter((e: any) => (e.expense_date || '').slice(0, 10) <= toDate);
-    }
+    // One definition of sales / collected / outstanding, shared with the
+    // reports and the invoice list, so the three screens cannot disagree.
+    const s = calc.summarise(invoices, payments, { from, to, today });
 
-    const paidByInvoice: Record<string, number> = {};
-    for (const p of payments) {
-      paidByInvoice[p.invoice_id] = (paidByInvoice[p.invoice_id] || 0) + calc.num(p.amount);
-    }
-
-    const totals = {
-      total_sales: 0,
-      taxable_sales: 0,
-      gst: 0,
-      cgst: 0,
-      sgst: 0,
-      igst: 0,
+    const inPeriod = (d: any) => {
+      const v = String(d || '').slice(0, 10);
+      return (!from || v >= from) && (!to || v <= to);
     };
-    const counts = {
-      invoices: 0,
-      paid: 0,
-      pending: 0,
-      overdue: 0,
-      draft: 0,
-      cancelled: 0,
-    };
-
-    const monthly: Record<string, { month: string; sales: number; payments: number; expenses: number }> = {};
-    const today = new Date().toISOString().slice(0, 10);
-
-    for (const inv of invoices) {
-      counts.invoices += 1;
-      const status = String(inv.status || 'issued').toLowerCase();
-      if (status === 'cancelled') {
-        counts.cancelled += 1;
-        continue;
-      }
-      if (status === 'draft') {
-        counts.draft += 1;
-      }
-
-      const t = calc.compute(inv);
-      totals.total_sales += t.grand_total;
-      totals.taxable_sales += t.taxable_amount;
-      totals.gst += t.gst_amount;
-      totals.cgst += t.cgst;
-      totals.sgst += t.sgst;
-      totals.igst += t.igst;
-
-      const received = paidByInvoice[inv.id] || 0;
-      if (status !== 'draft') {
-        if (received >= t.grand_total - 1) {
-          counts.paid += 1;
-        } else {
-          counts.pending += 1;
-          const due = String(inv.due_date || inv.invoice_date || today).slice(0, 10);
-          if (due < today) {
-            counts.overdue += 1;
-          }
-        }
-      }
-
-      const m = String(inv.invoice_date || '').slice(0, 7);
-      if (m) {
-        if (!monthly[m]) monthly[m] = { month: m, sales: 0, payments: 0, expenses: 0 };
-        monthly[m].sales += t.grand_total;
-      }
-    }
-
-    const totalPayments = payments.reduce((acc: number, p: any) => acc + calc.num(p.amount), 0);
-    for (const p of payments) {
-      const m = String(p.payment_date || p.created_at || '').slice(0, 7);
-      if (m) {
-        if (!monthly[m]) monthly[m] = { month: m, sales: 0, payments: 0, expenses: 0 };
-        monthly[m].payments += calc.num(p.amount);
-      }
-    }
-
-    const totalExpenses = expenses.reduce((acc: number, e: any) => acc + calc.num(e.amount), 0);
-    for (const e of expenses) {
+    const periodExpenses = expenses.filter((e: any) => inPeriod(e.expense_date));
+    const totalExpenses = calc.r2(periodExpenses.reduce((a: number, e: any) => a + calc.num(e.amount), 0));
+    const expenseByMonth: Record<string, number> = {};
+    for (const e of periodExpenses) {
       const m = String(e.expense_date || '').slice(0, 7);
-      if (m) {
-        if (!monthly[m]) monthly[m] = { month: m, sales: 0, payments: 0, expenses: 0 };
-        monthly[m].expenses += calc.num(e.amount);
-      }
+      if (m) expenseByMonth[m] = (expenseByMonth[m] || 0) + calc.num(e.amount);
     }
 
-    const series = Object.values(monthly).sort((a, b) => a.month.localeCompare(b.month)).map(s => ({
-      month: s.month,
-      sales: calc.r2(s.sales),
-      payments: calc.r2(s.payments),
-      expenses: calc.r2(s.expenses),
-      profit: calc.r2(s.sales - s.expenses),
-      outstanding: calc.r2(s.sales - s.payments),
-    }));
+    // Gross profit is revenue minus direct trip cost, over the bills that have
+    // a cost entered (calc.summarise). Net profit then takes off overheads.
+    const netProfit = calc.r2(s.gross_profit - totalExpenses);
 
-    const chart_data = series.map(s => ({
-      month: s.month,
-      sales: s.sales,
-      collected: s.payments,
-    }));
-
-    const outstanding = calc.r2(totals.total_sales - totalPayments);
-    const profit = calc.r2(totals.taxable_sales - totalExpenses);
-
+    const { series: monthRows, range, ...money } = s;
     const metricsObj = {
-      total_sales: calc.r2(totals.total_sales),
-      taxable_sales: calc.r2(totals.taxable_sales),
-      gst: calc.r2(totals.gst),
-      cgst: calc.r2(totals.cgst),
-      sgst: calc.r2(totals.sgst),
-      igst: calc.r2(totals.igst),
-      payments_received: calc.r2(totalPayments),
-      outstanding: Math.max(0, outstanding),
-      expenses: calc.r2(totalExpenses),
-      estimated_profit: profit,
-      profit_margin: totals.taxable_sales ? calc.r2((profit / totals.taxable_sales) * 100) : 0,
+      ...money,
+      // kept for callers that still read the old name
+      payments_received: s.collected,
+      expenses: totalExpenses,
+      net_profit: netProfit,
+      // kept for older callers; now the real net figure rather than sales - expenses
+      estimated_profit: netProfit,
+      profit_margin: s.margin_pct ?? 0,
       customers: customers.length,
-      ...counts,
     };
 
-    // Format recent 5 invoices (sorted newest first)
-    const recent_invoices = [...invoices]
+    const series = monthRows.map(m => ({
+      ...m,
+      expenses: calc.r2(expenseByMonth[m.month] || 0),
+    }));
+
+    const chart_data = series.map(m => ({
+      month: m.month,
+      sales: m.sales,
+      collected: m.collected,
+    }));
+
+    // Latest five bills raised in the period, newest first. Status comes from
+    // the same rule every other screen uses, so a cancelled bill says cancelled.
+    const paidBy: Record<string, number> = {};
+    for (const p of payments) paidBy[p.invoice_id] = (paidBy[p.invoice_id] || 0) + calc.num(p.amount);
+
+    const recent_invoices = invoices
+      .filter((inv: any) => inPeriod(inv.invoice_date))
       .sort((a: any, b: any) => {
         const da = a.invoice_date || '';
         const dbDate = b.invoice_date || '';
@@ -159,24 +84,22 @@ const handleDashboard = async (req: Request, res: Response) => {
       .slice(0, 5)
       .map((inv: any) => {
         const t = calc.compute(inv);
-        const received = paidByInvoice[inv.id] || 0;
-        let st = 'PENDING';
-        if (received >= t.grand_total - 1) st = 'PAID';
-        else if (received > 0) st = 'PARTIAL';
-        else if (String(inv.due_date || '').slice(0, 10) < today) st = 'OVERDUE';
-
+        const paid = calc.r2(paidBy[inv.id] || 0);
         return {
           ...inv,
           buyer_name: inv.buyer?.name || inv.customer_name || 'Customer',
-          from_city: inv.origin || 'Ahmedabad',
-          to_city: inv.destination || 'Destination',
+          from_city: inv.origin || '',
+          to_city: inv.destination || '',
           totals: t,
-          status: st,
+          paid,
+          balance: calc.r2(Math.max(0, t.grand_total - paid)),
+          status: calc.displayStatus(inv, paid, t, today),
         };
       });
 
     res.json({
       ...metricsObj,
+      range,
       metrics: metricsObj,
       series,
       chart_data,

@@ -1,8 +1,13 @@
-import React, { useState, useEffect } from 'react';
-import { X, CreditCard, Save, Receipt, Building2 } from 'lucide-react';
+import React, { useState, useEffect, useMemo } from 'react';
+import {
+  Wallet, Search, Check, ChevronDown, Landmark, Hash,
+} from 'lucide-react';
 import { apiRequest } from '../services/api.js';
 import { Invoice, BankAccount } from '../types.js';
 import { formatINR } from '../utils/format.js';
+import {
+  Modal, Button, Field, Input, Select, FormError, cx,
+} from './ui.js';
 
 interface PaymentModalProps {
   initialInvoice?: Invoice | null;
@@ -11,16 +16,20 @@ interface PaymentModalProps {
 }
 
 /**
- * Values MUST match the server's accepted list (server/routes/payments.ts → METHODS).
- * Labels are what the user sees.
+ * Values MUST match the server's accepted list (server/routes/payments.ts -> METHODS).
+ * Labels are what the user sees; `short` is what fits on a segmented pill.
  */
-const PAYMENT_METHODS: { value: string; label: string }[] = [
-  { value: 'Bank Transfer', label: 'Bank Transfer (NEFT / RTGS / IMPS)' },
-  { value: 'UPI', label: 'UPI / QR' },
-  { value: 'Cheque', label: 'Cheque / DD' },
-  { value: 'Cash', label: 'Cash' },
-  { value: 'Other', label: 'Other' },
+const PAYMENT_METHODS: { value: string; label: string; short: string }[] = [
+  { value: 'Bank Transfer', label: 'Bank Transfer (NEFT / RTGS / IMPS)', short: 'Bank' },
+  { value: 'UPI', label: 'UPI / QR', short: 'UPI' },
+  { value: 'Cheque', label: 'Cheque / DD', short: 'Cheque' },
+  { value: 'Cash', label: 'Cash', short: 'Cash' },
+  { value: 'Other', label: 'Other', short: 'Other' },
 ];
+
+/** Local-time ISO; `toISOString()` shifts to UTC and moves IST dates back a day. */
+const iso = (d: Date) =>
+  `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 
 export const PaymentModal: React.FC<PaymentModalProps> = ({
   initialInvoice,
@@ -31,7 +40,7 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
   const [bankAccounts, setBankAccounts] = useState<BankAccount[]>([]);
   const [selectedInvoiceId, setSelectedInvoiceId] = useState(initialInvoice?.id || '');
   const [amount, setAmount] = useState<number>(initialInvoice?.balance ?? initialInvoice?.grand_total ?? 0);
-  const [paymentDate, setPaymentDate] = useState(new Date().toISOString().slice(0, 10));
+  const [paymentDate, setPaymentDate] = useState(iso(new Date()));
   const [method, setMethod] = useState(PAYMENT_METHODS[0].value);
   const [methods, setMethods] = useState(PAYMENT_METHODS);
   const [reference, setReference] = useState('');
@@ -39,6 +48,9 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
   const [notes, setNotes] = useState('');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const [query, setQuery] = useState('');
+  const [showDetails, setShowDetails] = useState(false);
 
   useEffect(() => {
     const init = async () => {
@@ -54,7 +66,6 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
           setSelectedInvoiceId(list[0].id);
           setAmount(list[0].balance ?? list[0].grand_total);
         }
-
       } catch (err) {
         console.error('Init error in payment modal', err);
       }
@@ -74,7 +85,9 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
       try {
         const m = await apiRequest<{ methods: string[] }>('/payments/methods');
         if (Array.isArray(m?.methods) && m.methods.length > 0) {
-          const merged = m.methods.map(v => PAYMENT_METHODS.find(x => x.value === v) || { value: v, label: v });
+          const merged = m.methods.map(
+            v => PAYMENT_METHODS.find(x => x.value === v) || { value: v, label: v, short: v }
+          );
           setMethods(merged);
           if (!m.methods.includes(PAYMENT_METHODS[0].value)) setMethod(m.methods[0]);
         }
@@ -95,6 +108,23 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
 
   const curInvoice = invoices.find(i => i.id === selectedInvoiceId);
   const curBalance = curInvoice ? (curInvoice.balance ?? curInvoice.grand_total ?? 0) : 0;
+  const curTotal = Number(curInvoice?.grand_total || 0);
+  const curPaid = Number(curInvoice?.paid || 0);
+
+  /** Search over number and customer so a long pending list stays usable. */
+  const filtered = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return invoices;
+    return invoices.filter(i =>
+      String(i.invoice_no || '').toLowerCase().includes(q) ||
+      String(i.buyer?.name || '').toLowerCase().includes(q) ||
+      String(i.lr_no || '').toLowerCase().includes(q)
+    );
+  }, [invoices, query]);
+
+  const remaining = Math.max(0, curBalance - (Number(amount) || 0));
+  const isPartial = !!curInvoice && amount > 0 && amount < curBalance - 0.5;
+  const needsReference = method === 'Bank Transfer' || method === 'UPI' || method === 'Cheque';
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -140,188 +170,298 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
     }
   };
 
+  const paidPct = curTotal > 0 ? Math.min(100, (curPaid / curTotal) * 100) : 0;
+  const thisPct = curTotal > 0 ? Math.min(100 - paidPct, ((Number(amount) || 0) / curTotal) * 100) : 0;
+
   return (
-    <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 overflow-y-auto">
-      <div className="bg-white border border-slate-200 rounded-2xl max-w-lg w-full max-h-[92vh] flex flex-col shadow-2xl text-slate-800 my-auto">
-        {/* Header */}
-        <div className="p-4 border-b border-slate-200 flex items-center justify-between">
-          <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-xl bg-emerald-50 border border-emerald-200 flex items-center justify-center text-emerald-600">
-              <Receipt className="w-4 h-4" />
-            </div>
-            <div>
-              <h2 className="text-base font-bold text-slate-900">Record Payment Receipt</h2>
-              <p className="text-[11px] text-slate-500">Credit against pending invoice</p>
-            </div>
-          </div>
-
-          <button onClick={onClose} className="p-1 text-slate-400 hover:text-slate-700 rounded-lg transition">
-            <X className="w-5 h-5" />
-          </button>
-        </div>
-
-        {/* Form */}
-        <form onSubmit={handleSave} className="flex-1 overflow-y-auto p-5 space-y-4 text-xs">
-          {error && (
-            <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl text-rose-700">
-              {error}
-            </div>
-          )}
-
-          {/* Invoice Selection */}
-          <div>
-            <label className="block text-slate-700 font-semibold mb-1">Select Target Invoice *</label>
-            <select
-              required
-              value={selectedInvoiceId}
-              onChange={(e) => handleInvoiceChange(e.target.value)}
-              className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-900 text-xs focus:outline-none focus:border-emerald-500 font-mono"
+    <Modal
+      onClose={onClose}
+      title="Record payment"
+      subtitle={curInvoice ? `Against ${curInvoice.invoice_no}` : 'Credit against a pending invoice'}
+      icon={<Wallet className="w-[18px] h-[18px]" strokeWidth={1.8} />}
+      size="lg"
+      footer={
+        <div className="flex items-center justify-between gap-3">
+          <span className="text-xs text-ink-faint hidden sm:block">
+            {curInvoice
+              ? isPartial
+                ? `₹${formatINR(remaining)} will remain outstanding`
+                : 'This settles the invoice in full'
+              : 'Pick an invoice to continue'}
+          </span>
+          <div className="flex items-center gap-2 ml-auto">
+            <Button variant="ghost" onClick={onClose} type="button">Cancel</Button>
+            <Button
+              form="payment-form"
+              type="submit"
+              variant="primary"
+              loading={saving}
+              disabled={!selectedInvoiceId || amount <= 0}
+              icon={<Check className="w-4 h-4" />}
             >
-              {invoices.map((inv) => (
-                <option key={inv.id} value={inv.id}>
-                  {inv.invoice_no} · {inv.buyer?.name || 'Customer'} (Bal: ₹{formatINR(inv.balance ?? inv.grand_total)})
-                </option>
-              ))}
-            </select>
+              {isPartial ? 'Record part payment' : 'Record payment'}
+            </Button>
+          </div>
+        </div>
+      }
+    >
+      <form id="payment-form" onSubmit={handleSave} className="space-y-5">
+        {error && <FormError message={error} />}
+
+        {/* ---------------------------------------------- 1. which invoice */}
+        <section>
+          <div className="flex items-center justify-between gap-3 mb-2">
+            <h3 className="label-micro">Invoice</h3>
+            <span className="text-[11px] text-ink-faint">
+              {filtered.length} pending
+            </span>
           </div>
 
-          {curInvoice && (
-            <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-200 flex items-center justify-between text-xs">
-              <div>
-                <span className="text-slate-500">Invoice Total:</span>
-                <div className="font-mono text-slate-700 font-semibold">₹{formatINR(curInvoice.grand_total)}</div>
-              </div>
-              <div>
-                <span className="text-slate-500">Already Paid:</span>
-                <div className="font-mono text-emerald-600 font-semibold">₹{formatINR(curInvoice.paid || 0)}</div>
-              </div>
-              <div>
-                <span className="text-slate-500">Balance Due:</span>
-                <div className="font-mono font-bold text-orange-600">₹{formatINR(curInvoice.balance ?? curInvoice.grand_total)}</div>
-              </div>
-            </div>
-          )}
+          <div className="relative mb-2">
+            <Search
+              className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-ink-faint pointer-events-none"
+              strokeWidth={1.8}
+              aria-hidden="true"
+            />
+            <Input
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Search invoice number, customer or LR"
+              aria-label="Search pending invoices"
+              className="pl-9"
+            />
+          </div>
 
-          {/* Amount & Date */}
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <div className="flex items-center justify-between mb-1">
-                <label className="text-slate-700 font-semibold">Received Amount (₹) *</label>
-                {curInvoice && (
-                  <div className="flex items-center gap-1.5 text-[10px] font-semibold">
-                    <button type="button" onClick={() => setAmount(Math.round(curBalance * 50) / 100)} className="text-slate-500 hover:text-emerald-700 cursor-pointer">50%</button>
-                    <span className="text-slate-300">·</span>
-                    <button type="button" onClick={() => setAmount(curBalance)} className="text-emerald-600 hover:text-emerald-700 cursor-pointer">Full balance</button>
+          <div
+            role="radiogroup"
+            aria-label="Pending invoices"
+            className="rounded-card border border-line divide-y divide-line max-h-[196px] overflow-y-auto overscroll-contain"
+          >
+            {filtered.length === 0 ? (
+              <p className="p-4 text-sm text-ink-faint text-center">
+                {invoices.length === 0 ? 'No pending invoices.' : 'Nothing matches that search.'}
+              </p>
+            ) : filtered.map((inv) => {
+              const active = inv.id === selectedInvoiceId;
+              const bal = inv.balance ?? inv.grand_total;
+              return (
+                <button
+                  key={inv.id}
+                  type="button"
+                  role="radio"
+                  aria-checked={active}
+                  onClick={() => handleInvoiceChange(inv.id)}
+                  className={cx(
+                    'w-full flex items-center gap-3 px-3 py-2.5 text-left cursor-pointer',
+                    'transition-colors duration-[140ms]',
+                    active ? 'bg-accent-soft' : 'hover:bg-surface-muted'
+                  )}
+                >
+                  <span className={cx(
+                    'w-4 h-4 rounded-full border shrink-0 flex items-center justify-center',
+                    active ? 'border-accent bg-accent text-on-accent' : 'border-line-strong'
+                  )} aria-hidden="true">
+                    {active && <Check className="w-2.5 h-2.5" strokeWidth={3} />}
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block font-mono text-[12px] text-accent-ink truncate">{inv.invoice_no}</span>
+                    <span className="block text-[13px] text-ink truncate">{inv.buyer?.name || 'Customer'}</span>
+                  </span>
+                  <span className="text-right shrink-0">
+                    <span className="block numeral text-[13px] text-ink">₹{formatINR(bal)}</span>
+                    <span className="block text-[10px] text-ink-faint">due</span>
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        </section>
+
+        {/* ---------------------------------------------- 2. how much */}
+        {curInvoice && (
+          <section>
+            <h3 className="label-micro mb-2">Amount</h3>
+
+            <div className="panel p-4">
+              {/* where this invoice stands, and what this payment does to it */}
+              <div className="flex items-baseline justify-between gap-3 text-[11px] text-ink-faint mb-1.5">
+                <span>Invoice ₹{formatINR(curTotal)}</span>
+                <span>Already paid ₹{formatINR(curPaid)}</span>
+              </div>
+              <div className="h-1.5 rounded-full bg-surface-sunken overflow-hidden flex" aria-hidden="true">
+                <div className="h-full bg-positive/70 transition-[width] duration-300" style={{ width: `${paidPct}%` }} />
+                <div
+                  className="h-full transition-[width] duration-300"
+                  style={{ width: `${thisPct}%`, background: 'var(--color-accent)' }}
+                />
+              </div>
+              <div className="flex items-baseline justify-between gap-3 text-[11px] mt-1.5">
+                <span className="text-accent-ink">This payment ₹{formatINR(Number(amount) || 0)}</span>
+                <span className="text-ink-faint">Remaining ₹{formatINR(remaining)}</span>
+              </div>
+
+              <div className="flex flex-col sm:flex-row sm:items-end gap-3 mt-4">
+                <div className="flex-1 min-w-0">
+                  <label htmlFor="pay-amount" className="sr-only">Amount received</label>
+                  <div className="relative">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-faint text-lg leading-none pointer-events-none">₹</span>
+                    <input
+                      id="pay-amount"
+                      type="number"
+                      step="any"
+                      required
+                      min="0.01"
+                      max={curBalance + 0.5}
+                      value={amount || ''}
+                      onChange={(e) => setAmount(parseFloat(e.target.value) || 0)}
+                      placeholder="0.00"
+                      className="w-full bg-surface-sunken border border-line rounded-control pl-8 pr-3 py-2.5
+                                 numeral text-[1.35rem] text-ink min-h-[52px]
+                                 transition-[border-color,box-shadow] duration-[var(--duration-fast)]
+                                 hover:border-line-strong focus:border-accent focus:outline-none focus:ring-focus"
+                    />
                   </div>
-                )}
-              </div>
-              <input
-                type="number"
-                step="any"
-                required
-                min="0.01"
-                max={curInvoice ? curBalance + 0.5 : undefined}
-                value={amount || ''}
-                onChange={(e) => setAmount(parseFloat(e.target.value) || 0)}
-                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 font-mono font-bold text-emerald-600 text-sm focus:outline-none focus:border-emerald-500"
-                placeholder="0.00"
-              />
-            </div>
+                </div>
 
-            <div>
-              <label className="block text-slate-700 font-semibold mb-1">Receipt Date *</label>
-              <input
+                <div className="flex items-center gap-1.5 shrink-0">
+                  {[
+                    { label: '25%', value: Math.round(curBalance * 25) / 100 },
+                    { label: '50%', value: Math.round(curBalance * 50) / 100 },
+                    { label: 'Full', value: curBalance },
+                  ].map(q => (
+                    <button
+                      key={q.label}
+                      type="button"
+                      onClick={() => setAmount(q.value)}
+                      className={cx(
+                        'px-3 min-h-[38px] rounded-control border text-[12.5px] cursor-pointer',
+                        'transition-colors duration-[140ms]',
+                        Math.abs((Number(amount) || 0) - q.value) < 0.01
+                          ? 'border-accent-line bg-accent-soft text-accent-ink font-medium'
+                          : 'border-line bg-surface text-ink-soft hover:border-line-strong hover:text-ink'
+                      )}
+                    >
+                      {q.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </section>
+        )}
+
+        {/* ---------------------------------------------- 3. how it was paid */}
+        <section>
+          <h3 className="label-micro mb-2">Method and date</h3>
+
+          <div
+            role="radiogroup"
+            aria-label="Payment method"
+            className="flex items-center gap-1 p-1 rounded-control bg-surface-sunken border border-line overflow-x-auto scrollbar-none"
+          >
+            {methods.map((m) => (
+              <button
+                key={m.value}
+                type="button"
+                role="radio"
+                aria-checked={method === m.value}
+                title={m.label}
+                onClick={() => setMethod(m.value)}
+                className={cx(
+                  'flex-1 min-w-[68px] min-h-[36px] px-3 rounded-[6px] text-[12.5px] whitespace-nowrap cursor-pointer',
+                  'transition-[background-color,color] duration-[140ms]',
+                  method === m.value
+                    ? 'bg-surface-muted text-ink font-medium shadow-card'
+                    : 'text-ink-faint hover:text-ink'
+                )}
+              >
+                {m.short}
+              </button>
+            ))}
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-3">
+            <Field label="Receipt date" htmlFor="pay-date" required>
+              <Input
+                id="pay-date"
                 type="date"
                 required
                 value={paymentDate}
                 onChange={(e) => setPaymentDate(e.target.value)}
-                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-900 text-xs focus:outline-none focus:border-emerald-500"
               />
-            </div>
-          </div>
+            </Field>
 
-          {/* Method & Bank */}
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-slate-700 font-semibold mb-1">Payment Method</label>
-              <select
-                value={method}
-                onChange={(e) => setMethod(e.target.value)}
-                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-900 text-xs focus:outline-none focus:border-emerald-500"
-              >
-                {methods.map((m) => (
-                  <option key={m.value} value={m.value}>{m.label}</option>
-                ))}
-              </select>
-            </div>
-
-            <div>
-              <label className="block text-slate-700 font-semibold mb-1">Deposited Bank Account</label>
-              <select
-                value={bankAccountId}
-                onChange={(e) => setBankAccountId(e.target.value)}
-                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-900 text-xs focus:outline-none focus:border-emerald-500"
-              >
-                <option value="">Default Company Account</option>
-                {bankAccounts.map((b) => (
-                  <option key={b.id} value={b.id}>
-                    {b.bank_name} - {b.account_number.slice(-4)}
-                  </option>
-                ))}
-              </select>
-            </div>
-          </div>
-
-          {/* Reference */}
-          <div>
-            <label className="block text-slate-700 font-semibold mb-1">UTR / Cheque / Reference No</label>
-            <input
-              type="text"
-              value={reference}
-              onChange={(e) => setReference(e.target.value)}
-              className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 font-mono text-slate-900 text-xs focus:outline-none focus:border-emerald-500"
-              placeholder="e.g. UTR-HDFC9982710"
-            />
-          </div>
-
-          {/* Notes */}
-          <div>
-            <label className="block text-slate-700 font-semibold mb-1">Remarks / Note</label>
-            <input
-              type="text"
-              value={notes}
-              onChange={(e) => setNotes(e.target.value)}
-              className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-900 text-xs focus:outline-none focus:border-emerald-500"
-              placeholder="Payment received against transport consignment"
-            />
-          </div>
-
-          {/* Footer */}
-          <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-100">
-            <button
-              type="button"
-              onClick={onClose}
-              className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-medium transition"
+            <Field
+              label="UTR / cheque / reference"
+              htmlFor="pay-ref"
+              hint={needsReference ? 'Recommended so the receipt can be traced' : undefined}
             >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              disabled={saving}
-              className="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-semibold shadow-xs transition flex items-center gap-2 disabled:opacity-50"
-            >
-              <Save className="w-4 h-4" />
-              <span>
-                {saving
-                  ? 'Processing...'
-                  : curInvoice && amount > 0 && amount < curBalance - 0.5
-                  ? 'Record Partial Payment'
-                  : 'Record Payment'}
-              </span>
-            </button>
+              <div className="relative">
+                <Hash className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-ink-faint pointer-events-none"
+                  strokeWidth={1.8} aria-hidden="true" />
+                <Input
+                  id="pay-ref"
+                  value={reference}
+                  onChange={(e) => setReference(e.target.value)}
+                  placeholder="UTR-HDFC9982710"
+                  className="pl-9 font-mono"
+                />
+              </div>
+            </Field>
           </div>
-        </form>
-      </div>
-    </div>
+        </section>
+
+        {/* ---------------------------------------------- 4. the rest, folded away */}
+        <section>
+          <button
+            type="button"
+            onClick={() => setShowDetails(v => !v)}
+            aria-expanded={showDetails}
+            className="flex items-center gap-1.5 text-[12.5px] text-ink-faint hover:text-ink
+                       cursor-pointer transition-colors duration-[140ms]"
+          >
+            <ChevronDown
+              className={cx('w-4 h-4 transition-transform duration-[200ms]', showDetails && 'rotate-180')}
+              strokeWidth={1.8}
+              aria-hidden="true"
+            />
+            Deposit account and remarks
+          </button>
+
+          {showDetails && (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-3 animate-fade-in">
+              <Field label="Deposited to" htmlFor="pay-bank">
+                <div className="relative">
+                  <Landmark className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-ink-faint pointer-events-none z-10"
+                    strokeWidth={1.8} aria-hidden="true" />
+                  <Select
+                    id="pay-bank"
+                    value={bankAccountId}
+                    onChange={(e) => setBankAccountId(e.target.value)}
+                    className="pl-9"
+                  >
+                    <option value="">Default company account</option>
+                    {bankAccounts.map((b) => (
+                      <option key={b.id} value={b.id}>
+                        {b.bank_name} · {String(b.account_number || '').slice(-4)}
+                      </option>
+                    ))}
+                  </Select>
+                </div>
+              </Field>
+
+              <Field label="Remarks" htmlFor="pay-notes">
+                <Input
+                  id="pay-notes"
+                  value={notes}
+                  onChange={(e) => setNotes(e.target.value)}
+                  placeholder="Received against transport consignment"
+                />
+              </Field>
+            </div>
+          )}
+        </section>
+      </form>
+    </Modal>
   );
 };

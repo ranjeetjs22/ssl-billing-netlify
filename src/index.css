@@ -1,196 +1,285 @@
 @import "tailwindcss";
 
 /* ==========================================================================
-   SSL Billing — design tokens
-   Style: Data-Dense Dashboard (navy + brand orange, emerald for settled money).
-   Every colour used in the app resolves to a semantic token here, so light and
-   dark mode stay consistent and nothing is hard-coded per screen.
+   SSL Billing - visual language
+   --------------------------------------------------------------------------
+   Deep charcoal, glass surfaces, restrained ember.
+
+   Surfaces are translucent white-over-charcoal rather than solid fills, so
+   panels layer and the ambient light reads through them. Orange is an accent,
+   not a theme: it marks the primary action, the active destination, and the
+   one series that matters - nothing else.
+
+   Dark is the default. Light re-points the same tokens; no `dark:` variant
+   exists anywhere in the codebase.
    ========================================================================== */
 @theme {
-  /* Brand — taken from the SSL logo: navy wordmark, orange chevron, green warehouse */
-  --color-brand-50:  #FFF4ED;
-  --color-brand-100: #FFE6D5;
-  --color-brand-200: #FFC9AA;
-  --color-brand-300: #FFA274;
-  --color-brand-400: #FF6F3C;
-  --color-brand-500: #F97316;
-  --color-brand-600: #EA580C;
-  --color-brand-700: #C2410C;
-  --color-brand-800: #9A3412;
-  --color-brand-900: #7C2D12;
+  /* ---- Ember: used sparingly ------------------------------------------- */
+  --color-ember-100: #FFE7DC;
+  --color-ember-200: #FFC4A8;
+  --color-ember-300: #FF9E74;
+  --color-ember-400: #FF7A41;
+  --color-ember-500: #FF6A2B;
+  --color-ember-600: #E8541A;
+  --color-ember-700: #C24412;
+  --color-ember-800: #8E310C;
 
-  --color-navy-50:  #F1F5F9;
-  --color-navy-100: #E2E8F0;
-  --color-navy-400: #4A6FA5;
-  --color-navy-600: #1E3A5F;
-  --color-navy-800: #14263D;
-  --color-navy-900: #0B182B;
-  --color-navy-950: #070F1D;
+  /* ---- Charcoal ramp ---------------------------------------------------- */
+  --color-char-50:  #F7F7F8;
+  --color-char-100: #EDEDEF;
+  --color-char-200: #D6D6DA;
+  --color-char-300: #A8A8B0;
+  --color-char-400: #77777F;
+  --color-char-500: #52525A;
+  --color-char-600: #34343A;
+  --color-char-700: #212126;
+  --color-char-800: #141418;
+  --color-char-900: #0D0D10;
+  --color-char-950: #08080A;
 
-  /* Semantic surface + text tokens (re-pointed in dark mode below) */
-  --color-canvas:        #F4F6FA;
-  --color-surface:       #FFFFFF;
-  --color-surface-muted: #F8FAFC;
-  --color-surface-sunken: #F1F5F9;
-  --color-line:          #E2E8F0;
-  --color-line-strong:   #CBD5E1;
-  --color-ink:           #0F172A;
-  --color-ink-soft:      #475569;
-  --color-ink-faint:     #5B6B7F;
-  --color-ink-inverse:   #FFFFFF;
+  /* ======================================================================
+     DEFAULT = DARK. Surfaces are glass: white at low alpha over charcoal.
+     ====================================================================== */
+  --color-canvas:         #08080A;
+  --color-surface:        rgb(255 255 255 / 0.034);
+  --color-surface-muted:  rgb(255 255 255 / 0.062);
+  --color-surface-sunken: rgb(0 0 0 / 0.30);
+  --color-line:           rgb(255 255 255 / 0.075);
+  --color-line-strong:    rgb(255 255 255 / 0.16);
+  --color-ink:            #ECECEF;
+  --color-ink-soft:       #9C9CA5;
+  --color-ink-faint:      #85858F;   /* 4.5:1+ on every dark surface */
+  --color-ink-inverse:    #08080A;
+  --color-scrim:          rgb(0 0 0 / 0.72);
+  --color-sheet:          #121217;   /* dialogs, drawers, tooltips: opaque */
 
-  --color-accent:        #EA580C;
-  --color-accent-hover:  #C2410C;
-  /* Fill colour for accent-backed controls. #EA580C only reaches 3.55:1 against
-     white, so buttons use this darker shade (5.2:1) to clear WCAG AA for text. */
-  --color-accent-strong: #C2410C;
-  --color-accent-strong-hover: #9A3412;
-  --color-on-accent:     #FFFFFF;
-  --color-accent-soft:   #FFF4ED;
-  --color-accent-line:   #FFC9AA;
-  --color-accent-ink:    #9A3412;
+  --color-accent:               #FF6A2B;
+  --color-accent-hover:         #FF7A41;
+  --color-accent-strong:        #E8541A;
+  --color-accent-strong-hover:  #FF6A2B;
+  --color-on-accent:            #FFFFFF;
+  --color-accent-soft:          rgb(255 106 43 / 0.10);
+  --color-accent-line:          rgb(255 106 43 / 0.28);
+  --color-accent-ink:           #FF9E74;
 
-  --color-positive:      #059669;
-  --color-positive-soft: #ECFDF5;
-  --color-positive-line: #A7F3D0;
-  --color-positive-ink:  #047857;
+  --color-positive:      #3DD68C;
+  --color-positive-soft: rgb(61 214 140 / 0.10);
+  --color-positive-line: rgb(61 214 140 / 0.26);
+  --color-positive-ink:  #6EE7AC;
 
-  --color-warning:       #D97706;
-  --color-warning-soft:  #FFFBEB;
-  --color-warning-line:  #FDE68A;
-  --color-warning-ink:   #B45309;
+  --color-warning:       #F0B429;
+  --color-warning-soft:  rgb(240 180 41 / 0.10);
+  --color-warning-line:  rgb(240 180 41 / 0.26);
+  --color-warning-ink:   #F7CB5E;
 
-  --color-danger:        #DC2626;
-  --color-danger-soft:   #FEF2F2;
-  --color-danger-line:   #FECACA;
-  --color-danger-ink:    #B91C1C;
+  --color-danger:        #F2555A;
+  --color-danger-soft:   rgb(242 85 90 / 0.10);
+  --color-danger-line:   rgb(242 85 90 / 0.28);
+  --color-danger-ink:    #FF8A8E;
 
-  --color-info:          #2563EB;
-  --color-info-soft:     #EFF6FF;
-  --color-info-line:     #BFDBFE;
-  --color-info-ink:      #1D4ED8;
+  --color-info:          #5B9CFF;
+  --color-info-soft:     rgb(91 156 255 / 0.10);
+  --color-info-line:     rgb(91 156 255 / 0.26);
+  --color-info-ink:      #8FBAFF;
 
-  /* Type — system stack: modern on every OS and costs 0 KB of network */
-  --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI Variable Text",
-               "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", sans-serif;
-  --font-mono: ui-monospace, "SF Mono", "Cascadia Mono", "Roboto Mono",
-               "JetBrains Mono", Menlo, Consolas, monospace;
+  /* Ambient light + the decorative layer's strength */
+  --glow-color: 255 106 43;
+  --glow-alpha: 0.10;
+  --deco-alpha: 0.030;
+  --grid-size: 44px;
 
-  /* Elevation — one consistent scale, no ad-hoc shadows */
-  --shadow-card:  0 1px 2px 0 rgb(15 23 42 / 0.04), 0 1px 3px 0 rgb(15 23 42 / 0.06);
-  --shadow-raised: 0 4px 12px -2px rgb(15 23 42 / 0.10), 0 2px 4px -2px rgb(15 23 42 / 0.06);
-  --shadow-overlay: 0 24px 48px -12px rgb(15 23 42 / 0.28);
+  /* ---- Type ------------------------------------------------------------- */
+  /* Apple devices get the real SF; everyone else gets Geist, which is the
+     closest widely available match: same tall x-height, open apertures and
+     neutral humanist shapes. */
+  --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display",
+               Geist, "Segoe UI Variable Text", "Segoe UI", Roboto, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", "Geist Mono", Menlo, Consolas, monospace;
 
-  /* Motion — one rhythm for the whole app */
+  /* ---- Radius ----------------------------------------------------------- */
+  --radius-control: 0.5rem;
+  --radius-card:    0.75rem;
+  --radius-overlay: 1rem;
+
+  /* ---- Elevation: glass casts softly ------------------------------------ */
+  --shadow-card:    0 1px 2px 0 rgb(0 0 0 / 0.36);
+  --shadow-raised:  0 8px 24px -6px rgb(0 0 0 / 0.58), 0 2px 6px -2px rgb(0 0 0 / 0.40);
+  --shadow-overlay: 0 32px 72px -18px rgb(0 0 0 / 0.78), 0 0 0 1px rgb(255 255 255 / 0.07);
+  --shadow-focus:   0 0 0 3px rgb(255 106 43 / 0.26);
+  --shadow-ember:   0 0 18px -2px rgb(255 106 43 / 0.55);
+
+  /* ---- Motion ----------------------------------------------------------- */
   --ease-out-soft: cubic-bezier(0.22, 1, 0.36, 1);
-  --duration-fast: 150ms;
+  --ease-in-out-soft: cubic-bezier(0.4, 0, 0.2, 1);
+  --duration-fast: 140ms;
   --duration-base: 220ms;
+  --duration-slow: 380ms;
 }
 
-/* Dark mode: re-point the same semantic tokens (desaturated tonal variants,
-   never a straight inversion) so every component follows automatically. */
 @layer base {
-  :root { color-scheme: light; }
+  :root { color-scheme: dark; }
 
-  :root:has(body[data-theme="dark"]),
-  body[data-theme="dark"] {
-    color-scheme: dark;
+  /* ======================================================================
+     LIGHT - same tokens, glass over warm paper.
+     ====================================================================== */
+  :root:has(body[data-theme="light"]),
+  body[data-theme="light"] {
+    color-scheme: light;
 
-    --color-canvas:        #0B182B;
-    --color-surface:       #111F35;
-    --color-surface-muted: #16273F;
-    --color-surface-sunken: #0E1B2E;
-    --color-line:          #23364F;
-    --color-line-strong:   #334966;
-    --color-ink:           #E9EEF6;
-    --color-ink-soft:      #A9BAD0;
-    --color-ink-faint:     #8398B4;
-    --color-ink-inverse:   #0B182B;
+    --color-canvas:         #F4F4F6;
+    --color-surface:        rgb(255 255 255 / 0.78);
+    --color-surface-muted:  rgb(255 255 255 / 0.95);
+    --color-surface-sunken: rgb(15 15 20 / 0.045);
+    --color-line:           rgb(15 15 20 / 0.10);
+    --color-line-strong:    rgb(15 15 20 / 0.20);
+    --color-ink:            #15151A;
+    --color-ink-soft:       #4E4E58;
+    --color-ink-faint:      #6B6B76;
+    --color-ink-inverse:    #FFFFFF;
+    --color-scrim:          rgb(15 15 20 / 0.45);
+    --color-sheet:          #FFFFFF;
 
-    --color-accent:        #FB8B4C;
-    --color-accent-hover:  #FDA671;
-    /* In dark mode the fill is light and the label is dark navy (7.5:1). */
-    --color-accent-strong: #FB8B4C;
-    --color-accent-strong-hover: #FDA671;
-    --color-on-accent:     #0B182B;
-    --color-accent-soft:   #34210F;
-    --color-accent-line:   #7A3E17;
-    --color-accent-ink:    #FFC9AA;
+    --color-accent:               #D9480F;
+    --color-accent-hover:         #B8380B;
+    --color-accent-strong:        #D9480F;
+    --color-accent-strong-hover:  #B8380B;
+    --color-on-accent:            #FFFFFF;
+    --color-accent-soft:          rgb(217 72 15 / 0.08);
+    --color-accent-line:          rgb(217 72 15 / 0.24);
+    --color-accent-ink:           #B8380B;
 
-    --color-positive:      #34D399;
-    --color-positive-soft: #0C2B22;
-    --color-positive-line: #1C5344;
-    --color-positive-ink:  #6EE7B7;
+    --color-positive:      #12805C;
+    --color-positive-soft: rgb(18 128 92 / 0.08);
+    --color-positive-line: rgb(18 128 92 / 0.24);
+    --color-positive-ink:  #0C6547;
 
-    --color-warning:       #FBBF24;
-    --color-warning-soft:  #302108;
-    --color-warning-line:  #6B4A12;
-    --color-warning-ink:   #FCD34D;
+    --color-warning:       #A96A00;
+    --color-warning-soft:  rgb(169 106 0 / 0.08);
+    --color-warning-line:  rgb(169 106 0 / 0.24);
+    --color-warning-ink:   #855300;
 
-    --color-danger:        #F87171;
-    --color-danger-soft:   #351616;
-    --color-danger-line:   #7A2C2C;
-    --color-danger-ink:    #FCA5A5;
+    --color-danger:        #C62A2F;
+    --color-danger-soft:   rgb(198 42 47 / 0.08);
+    --color-danger-line:   rgb(198 42 47 / 0.24);
+    --color-danger-ink:    #A11E23;
 
-    --color-info:          #60A5FA;
-    --color-info-soft:     #10243F;
-    --color-info-line:     #1E4173;
-    --color-info-ink:      #93C5FD;
+    --color-info:          #2563C9;
+    --color-info-soft:     rgb(37 99 201 / 0.08);
+    --color-info-line:     rgb(37 99 201 / 0.24);
+    --color-info-ink:      #1D4FA3;
 
-    --shadow-card:   0 1px 2px 0 rgb(0 0 0 / 0.30), 0 1px 3px 0 rgb(0 0 0 / 0.24);
-    --shadow-raised: 0 4px 12px -2px rgb(0 0 0 / 0.45), 0 2px 4px -2px rgb(0 0 0 / 0.35);
-    --shadow-overlay: 0 24px 48px -12px rgb(0 0 0 / 0.65);
+    --glow-alpha: 0.055;
+    --deco-alpha: 0.032;
+
+    --shadow-card:    0 1px 2px 0 rgb(15 15 20 / 0.05);
+    --shadow-raised:  0 8px 22px -6px rgb(15 15 20 / 0.12), 0 2px 5px -2px rgb(15 15 20 / 0.07);
+    --shadow-overlay: 0 28px 64px -18px rgb(15 15 20 / 0.26), 0 0 0 1px rgb(15 15 20 / 0.06);
+    --shadow-focus:   0 0 0 3px rgb(217 72 15 / 0.20);
+    --shadow-ember:   0 0 16px -3px rgb(217 72 15 / 0.40);
   }
 
-  html {
-    -webkit-text-size-adjust: 100%;
-    scroll-behavior: smooth;
-  }
+  html { -webkit-text-size-adjust: 100%; scroll-behavior: smooth; }
 
   body {
     background-color: var(--color-canvas);
     color: var(--color-ink);
     font-family: var(--font-sans);
-    /* 16px base: below this iOS auto-zooms form fields and body text fails WCAG */
-    font-size: 16px;
+    font-size: 15px;              /* compact; inputs are lifted to 16px below */
     line-height: 1.5;
+    letter-spacing: -0.008em;
     -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
     text-rendering: optimizeLegibility;
     overscroll-behavior-y: none;
+    min-height: 100dvh;
   }
 
-  /* Numbers in tables, money and totals must not jitter as digits change */
-  .font-mono, table, input[type="number"], [data-numeric] {
+  /* ---- The decorative layer -------------------------------------------
+     A faint technical grid, two ambient ember washes and a hairline horizon.
+     Fixed, non-interactive, and low enough in opacity to read as texture
+     rather than content. -------------------------------------------------- */
+  body::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    z-index: 0;
+    pointer-events: none;
+    background:
+      /* ambient light, top-right and a weaker one bottom-left */
+      radial-gradient(52rem 38rem at 88% -10%,
+        rgb(var(--glow-color) / var(--glow-alpha)) 0%, transparent 62%),
+      radial-gradient(40rem 32rem at -6% 106%,
+        rgb(var(--glow-color) / calc(var(--glow-alpha) * 0.5)) 0%, transparent 60%),
+      /* fine technical grid */
+      linear-gradient(to right, currentColor 1px, transparent 1px),
+      linear-gradient(to bottom, currentColor 1px, transparent 1px);
+    background-size: 100% 100%, 100% 100%, var(--grid-size) var(--grid-size), var(--grid-size) var(--grid-size);
+    color: rgb(128 128 140 / var(--deco-alpha));
+    mask-image: radial-gradient(130% 100% at 50% 0%, #000 42%, transparent 92%);
+    -webkit-mask-image: radial-gradient(130% 100% at 50% 0%, #000 42%, transparent 92%);
+  }
+
+  /* Content always sits above the decorative layer */
+  #root { position: relative; z-index: 1; }
+
+  h1, h2, h3, h4 { letter-spacing: -0.021em; font-weight: 600; }
+
+  /* Figures must not jitter as digits change */
+  .font-mono, table, input[type="number"], [data-numeric], .numeral {
     font-variant-numeric: tabular-nums;
     font-feature-settings: "tnum" 1;
   }
+  .numeral {
+    font-family: var(--font-sans);
+    font-weight: 600;
+    letter-spacing: -0.032em;
+    font-variant-numeric: tabular-nums;
+  }
 
-  /* One visible, consistent focus ring — never removed (WCAG 2.4.7) */
+  /* One focus ring everywhere - never removed (WCAG 2.4.7) */
   :focus-visible {
-    outline: 2px solid var(--color-accent);
+    outline: 1px solid var(--color-accent);
     outline-offset: 2px;
-    border-radius: 0.5rem;
+    border-radius: var(--radius-control);
   }
   :focus:not(:focus-visible) { outline: none; }
 
-  /* iOS: prevent the auto-zoom that happens when a focused field is under 16px */
+  /* iOS: stop the auto-zoom that fires on fields under 16px */
   @supports (-webkit-touch-callout: none) {
     input, select, textarea { font-size: max(16px, 1em); }
   }
 
-  ::placeholder { color: var(--color-ink-faint); opacity: 1; }
+  /* Native <select> option lists. Some browsers (Firefox, and Chrome on Linux
+     with a light GTK theme) draw the popup with the OS colours and ignore
+     color-scheme, while the option text inherits our light ink: white on white
+     in dark mode. Pin both explicitly. */
+  select { color-scheme: inherit; }
+  select option, select optgroup {
+    background-color: var(--color-sheet);
+    color: var(--color-ink);
+  }
+  select option:checked { background-color: var(--color-surface-muted); }
+  select option:disabled { color: var(--color-ink-faint); }
 
-  /* Quiet, themed scrollbars */
+  /* Native checkboxes and radios pick up the brand instead of the UA blue */
+  input[type="checkbox"], input[type="radio"], progress, ::marker {
+    accent-color: var(--color-accent);
+  }
+
+  ::placeholder { color: var(--color-ink-faint); opacity: 1; }
+  ::selection { background: rgb(var(--glow-color) / 0.28); color: var(--color-ink); }
+
   * { scrollbar-width: thin; scrollbar-color: var(--color-line-strong) transparent; }
-  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar { width: 9px; height: 9px; }
+  ::-webkit-scrollbar-track { background: transparent; }
   ::-webkit-scrollbar-thumb {
     background: var(--color-line-strong);
     border-radius: 999px;
     border: 3px solid transparent;
     background-clip: content-box;
   }
+  ::-webkit-scrollbar-thumb:hover { background: var(--color-ink-faint); background-clip: content-box; }
 
-  /* Accessibility: honour the OS "reduce motion" setting (WCAG 2.3.3) */
   @media (prefers-reduced-motion: reduce) {
     html { scroll-behavior: auto; }
     *, *::before, *::after {
@@ -202,52 +291,182 @@
 }
 
 @layer components {
-  /* Expands a small icon button's hit area to the 44px minimum without changing its
-     visual size or shifting layout. Declared in the components layer so that an
-     `absolute` utility on the same element still wins (utilities layer comes later). */
+  /* Hit-area helper: reaches the 44px touch minimum without changing the
+     element's visual size or shifting layout. */
   .tap-44 { position: relative; }
   .tap-44::after {
     content: "";
     position: absolute;
     inset: 50% auto auto 50%;
-    width: 44px;
-    height: 44px;
+    width: 44px; height: 44px;
     transform: translate(-50%, -50%);
+  }
+
+  /* ---- Glass panel -----------------------------------------------------
+     Translucent, blurred, hairline-bordered, with a lit top edge. Panels
+     layer over one another rather than stacking opaque cards. */
+  .panel {
+    position: relative;
+    background: var(--color-surface);
+    backdrop-filter: blur(20px) saturate(140%);
+    -webkit-backdrop-filter: blur(20px) saturate(140%);
+    border: 1px solid var(--color-line);
+    border-radius: var(--radius-card);
+    box-shadow: var(--shadow-card);
+    transition: border-color var(--duration-base) var(--ease-out-soft),
+                box-shadow var(--duration-base) var(--ease-out-soft);
+  }
+  /* the highlight a lit pane catches along its top edge */
+  .panel::after {
+    content: "";
+    position: absolute;
+    inset: 0 0 auto 0;
+    height: 1px;
+    background: linear-gradient(90deg, transparent 12%, rgb(255 255 255 / 0.10), transparent 88%);
+    pointer-events: none;
+  }
+  body[data-theme="light"] .panel::after {
+    background: linear-gradient(90deg, transparent 12%, rgb(255 255 255 / 0.85), transparent 88%);
+  }
+
+  /* A glass panel is its own stacking context (backdrop-filter), so a dropdown
+     opened inside it would be painted UNDER the next panel on the page. Any
+     panel currently holding an open list or popover lifts above its siblings. */
+  .panel:has([role="listbox"]),
+  .panel:has([data-popover-open="true"]) { z-index: 40; }
+
+  /* An interactive panel lifts and warms its border on hover */
+  .panel-hover:hover {
+    border-color: var(--color-line-strong);
+    box-shadow: var(--shadow-raised);
+  }
+
+  /* ---- Dialog surface ---------------------------------------------------
+     A dialog covers live content, so it stops being glass: a near-opaque wash
+     of the canvas keeps a dense form readable over a busy table. It keeps the
+     blur so it still feels layered rather than pasted on. */
+  .sheet {
+    background: var(--color-sheet);
+    backdrop-filter: blur(24px) saturate(140%);
+    -webkit-backdrop-filter: blur(24px) saturate(140%);
+  }
+
+  /* ---- Floating tooltip -------------------------------------------------
+     A label that floats over live content has to stay legible, so unlike a
+     panel it sits on a near-opaque wash of the canvas rather than on glass. */
+  .tip {
+    background: var(--color-sheet);
+    backdrop-filter: blur(14px) saturate(140%);
+    -webkit-backdrop-filter: blur(14px) saturate(140%);
+    border: 1px solid var(--color-line-strong);
+    border-radius: var(--radius-control);
+    box-shadow: var(--shadow-raised);
+    color: var(--color-ink);
+  }
+
+  /* ---- Decorative fragments -------------------------------------------- */
+  /* A hairline rule that fades at both ends */
+  .rule-fade {
+    height: 1px;
+    background: linear-gradient(90deg, transparent, var(--color-line-strong), transparent);
+  }
+
+  /* Small live indicator: a dot with a slow halo */
+  .pip {
+    position: relative;
+    display: inline-block;
+    width: 5px; height: 5px;
+    border-radius: 999px;
+    background: var(--color-accent);
+    box-shadow: 0 0 0 0 rgb(var(--glow-color) / 0.55);
+    animation: pip-halo 2.8s var(--ease-in-out-soft) infinite;
+  }
+
+  /* KPI band: one continuous surface split by hairlines, not separate cards */
+  .metric-strip { display: grid; }
+  .metric-strip > * + * { border-left: 1px solid var(--color-line); }
+  @media (max-width: 1023px) {
+    .metric-strip > * + * { border-left: 0; }
+    .metric-strip > *:nth-child(n + 3) { border-top: 1px solid var(--color-line); }
+    .metric-strip > *:nth-child(even) { border-left: 1px solid var(--color-line); }
+  }
+
+  .status-dot {
+    display: inline-block;
+    width: 0.375rem; height: 0.375rem;
+    border-radius: 999px;
+    flex: none;
+  }
+
+  .table-quiet tbody tr { border-top: 1px solid var(--color-line); }
+  .table-quiet tbody tr:hover { background: var(--color-surface-muted); }
+  .table-sticky thead th {
+    position: sticky; top: 0; z-index: 2;
+    background: var(--color-surface-muted);
+    backdrop-filter: blur(12px);
+    border-bottom: 1px solid var(--color-line);
   }
 }
 
 @layer utilities {
-  /* Devices with a notch / home indicator */
   .pb-safe { padding-bottom: max(1rem, env(safe-area-inset-bottom)); }
-  .pt-safe { padding-top: env(safe-area-inset-top); }
-  .h-dvh-safe { min-height: 100dvh; }
 
-  /* Entrance motion — enter slightly slower than exit, ease-out, small travel */
+  /* A segmented control that overflows on a phone should still scroll, just
+     without a scrollbar sitting inside the pill. */
+  .scrollbar-none { scrollbar-width: none; -ms-overflow-style: none; }
+  .scrollbar-none::-webkit-scrollbar { display: none; }
+  .pt-safe { padding-top: env(safe-area-inset-top); }
+
   @keyframes ssl-fade-in { from { opacity: 0 } to { opacity: 1 } }
-  @keyframes ssl-rise    { from { opacity: 0; transform: translateY(8px) scale(0.99) } to { opacity: 1; transform: none } }
+  @keyframes ssl-rise    { from { opacity: 0; transform: translateY(10px) } to { opacity: 1; transform: none } }
   @keyframes ssl-sheet   { from { transform: translateY(100%) } to { transform: none } }
   @keyframes ssl-shimmer { 100% { transform: translateX(100%) } }
+  @keyframes pip-halo {
+    0%   { box-shadow: 0 0 0 0 rgb(var(--glow-color) / 0.50); }
+    70%  { box-shadow: 0 0 0 6px rgb(var(--glow-color) / 0); }
+    100% { box-shadow: 0 0 0 0 rgb(var(--glow-color) / 0); }
+  }
 
   .animate-fade-in { animation: ssl-fade-in var(--duration-base) var(--ease-out-soft) both; }
   .animate-rise    { animation: ssl-rise var(--duration-base) var(--ease-out-soft) both; }
-  .animate-sheet   { animation: ssl-sheet 280ms var(--ease-out-soft) both; }
+  .animate-sheet   { animation: ssl-sheet 240ms var(--ease-out-soft) both; }
 
-  /* Skeleton shimmer for loading states */
+  /* Stagger helper for lists that animate in */
+  .stagger > * { animation: ssl-rise var(--duration-base) var(--ease-out-soft) both; }
+  .stagger > *:nth-child(1) { animation-delay: 0ms }
+  .stagger > *:nth-child(2) { animation-delay: 35ms }
+  .stagger > *:nth-child(3) { animation-delay: 70ms }
+  .stagger > *:nth-child(4) { animation-delay: 105ms }
+  .stagger > *:nth-child(5) { animation-delay: 140ms }
+  .stagger > *:nth-child(n+6) { animation-delay: 175ms }
+
   .skeleton {
-    position: relative;
-    overflow: hidden;
-    background: var(--color-surface-sunken);
+    position: relative; overflow: hidden;
+    background: var(--color-surface-muted);
+    border-radius: var(--radius-control);
   }
   .skeleton::after {
     content: "";
-    position: absolute;
-    inset: 0;
+    position: absolute; inset: 0;
     transform: translateX(-100%);
-    background: linear-gradient(90deg, transparent, rgb(255 255 255 / 0.14), transparent);
-    animation: ssl-shimmer 1.4s infinite;
+    background: linear-gradient(90deg, transparent, rgb(255 255 255 / 0.06), transparent);
+    animation: ssl-shimmer 1.6s infinite;
   }
 
-  @media print {
-    .no-print { display: none !important; }
+  .rounded-control { border-radius: var(--radius-control); }
+  .rounded-card    { border-radius: var(--radius-card); }
+  .rounded-overlay { border-radius: var(--radius-overlay); }
+  .ring-focus      { box-shadow: var(--shadow-focus); }
+  .glow-ember      { box-shadow: var(--shadow-ember); }
+
+  /* Micro-label: the uppercase caption above fields, metrics and columns */
+  .label-micro {
+    font-size: 0.6875rem;
+    font-weight: 500;
+    letter-spacing: 0.07em;
+    text-transform: uppercase;
+    color: var(--color-ink-faint);
   }
+
+  @media print { .no-print { display: none !important; } }
 }

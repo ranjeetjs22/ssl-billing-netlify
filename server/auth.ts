@@ -3,7 +3,7 @@ import jwt from 'jsonwebtoken';
 import { Request, Response, NextFunction } from 'express';
 import * as db from './db.js';
 
-// Read lazily — on Cloudflare Workers process.env is populated per request.
+// Read lazily - on Cloudflare Workers process.env is populated per request.
 export function secret(): string {
   return process.env.JWT_SECRET || 'ssl-billing-gst-4f8c1d9b2e7a6350bd1c8ea4297f5b6031ac';
 }
@@ -21,7 +21,7 @@ export const ROLE_MODULES: Record<string, string[]> = {
 // Password hashing
 // ---------------------------------------------------------------------------
 // New hashes use PBKDF2-SHA256 via WebCrypto (native, fast, available in Node and on
-// Cloudflare Workers — bcryptjs is pure JS and burns ~80 ms of CPU per hash, which
+// Cloudflare Workers - bcryptjs is pure JS and burns ~80 ms of CPU per hash, which
 // exceeds the Workers free-plan CPU budget). Legacy bcrypt hashes ("$2…") still verify.
 const PBKDF2_ITERATIONS = 60_000;
 const subtle = globalThis.crypto.subtle;

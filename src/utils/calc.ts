@@ -15,5 +15,7 @@ export {
   lrNumbersLabel,
   normaliseGstType,
   amountInWords,
+  splitInclusive,
+  VENDOR_GST_RATE,
 } from '../../server/calc.js';
 export type { LrItem, InvoiceTotals } from '../../server/calc.js';

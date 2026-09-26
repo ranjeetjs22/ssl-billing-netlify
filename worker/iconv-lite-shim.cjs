@@ -1,7 +1,7 @@
 /**
  * Minimal `iconv-lite` replacement for the Cloudflare Workers build.
  *
- * Why this exists: iconv-lite@0.4 ends with `require("./streams")(iconv)` — it calls a
+ * Why this exists: iconv-lite@0.4 ends with `require("./streams")(iconv)` - it calls a
  * module as a function. esbuild's CJS/ESM interop turns that into
  * `require_streams(...) is not a function`, so the Worker fails to boot (API error 10021).
  *
@@ -15,7 +15,7 @@
  * and no Node-only extensions are needed. Anything this file cannot decode reports as
  * unsupported, which makes body-parser return a correct 415 instead of crashing.
  *
- * Wired up via the `alias` field in wrangler.jsonc — the real iconv-lite is still used
+ * Wired up via the `alias` field in wrangler.jsonc - the real iconv-lite is still used
  * when running under Node (npm run dev).
  */
 
@@ -73,7 +73,7 @@ function makeDecoder(enc) {
       end: () => '',
     };
   }
-  // Throws for an unknown label — callers translate that into "unsupported charset".
+  // Throws for an unknown label - callers translate that into "unsupported charset".
   const td = new TextDecoder(label);
   return {
     write: (chunk) => td.decode(toBytes(chunk), { stream: true }),

@@ -4,7 +4,7 @@
  * jsPDF stores PNG pixel data *uncompressed* unless told otherwise, so a 2 MB uploaded
  * PNG easily became a 10 MB invoice. Every logo (uploaded or built-in) is therefore
  * rasterised once onto a white canvas, capped at MAX_LOGO_WIDTH px, and embedded as a
- * JPEG — typically 20–60 KB.
+ * JPEG, typically 20 to 60 KB.
  */
 
 export const LOGO_SVG_STRING = `<svg viewBox="0 0 620 180" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -129,7 +129,7 @@ export const LOGO_SVG_STRING = `<svg viewBox="0 0 620 180" fill="none" xmlns="ht
       SHREE SANWARIYA LOGISTICS
     </text>
     <text x="240" y="160" text-anchor="middle" font-family="'Inter', Arial, sans-serif" font-weight="700" font-size="9" letter-spacing="4.2" fill="#E65100">
-      SAFE – RELIABLE – ON TIME FREIGHT
+      SAFE - RELIABLE - ON TIME FREIGHT
     </text>
   </g>
 </svg>`;
@@ -212,7 +212,7 @@ export function prepareLogoForPdf(src?: string | null): Promise<PdfLogo | null> 
   return logoCache.get(key)!;
 }
 
-/** @deprecated use prepareLogoForPdf — kept for backwards compatibility. */
+/** @deprecated use prepareLogoForPdf - kept for backwards compatibility. */
 export async function getLogoPngDataUrl(): Promise<string> {
   const logo = await prepareLogoForPdf();
   return logo?.dataUrl || '';

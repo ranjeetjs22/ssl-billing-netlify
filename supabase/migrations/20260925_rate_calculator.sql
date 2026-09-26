@@ -1,4 +1,4 @@
--- SSL Billing — Rate Calculator
+-- SSL Billing - Rate Calculator
 -- Zone-wise base rates, special rates (SPR), charge configuration and ODA slabs,
 -- taken from SSL_Rate_card.pdf + the zone list. Idempotent: safe to re-run.
 
@@ -268,8 +268,8 @@ on conflict (origin_kind, origin_value, dest_kind, dest_value) do update
 insert into public.rate_settings (key, value, text_value, unit, min_value, max_value, remark) values
   ('processing',          100,  null, 'LR',            null, null, 'Processing charge per LR'),
   ('fsc',                 20,   null, '%age',          null, null, 'Fuel surcharge as %age of base freight'),
-  ('rov_owner',           0.05, null, '%age',          50,   null, 'Risk as %age of declared value — owner risk'),
-  ('rov_carrier',         0.4,  null, '%age',          200,  null, 'Risk as %age of declared value — carrier risk'),
+  ('rov_owner',           0.05, null, '%age',          50,   null, 'Risk as %age of declared value - owner risk'),
+  ('rov_carrier',         0.4,  null, '%age',          200,  null, 'Risk as %age of declared value - carrier risk'),
   ('divisor',             4500, null, 'base_mul',      null, null, 'Volumetric weight divisor (L*W*H/divisor)'),
   ('handling_100_250',    0,    null, 'per kg',        0,    null, 'Package handling 100-250 kg'),
   ('handling_250_400',    0,    null, 'per kg',        0,    null, 'Package handling 250-400 kg'),
@@ -286,7 +286,7 @@ insert into public.rate_settings (key, value, text_value, unit, min_value, max_v
   ('fuel_freight_step',   2,    null, '%age',          null, null, 'Change in freight per fuel step'),
   ('fuel_hike_applicable',1,    null, 'flag',          null, null, 'Apply DPH on base freight'),
   ('fuel_hike_logic',     1,    null, 'flag',          null, null, 'Do not consider negative DPH'),
-  ('fuel_current_rate',   92.72,null, 'Rs. per litre', null, null, 'Current diesel rate — update to drive the hike'),
+  ('fuel_current_rate',   92.72,null, 'Rs. per litre', null, null, 'Current diesel rate - update to drive the hike'),
   ('csd_army_delivery',   0,    null, 'per kg',        null, null, 'CSD / Army delivery'),
   ('pod_charges',         0,    null, 'LR',            null, null, 'Charge for sharing POD'),
   ('re_attempt_free',     2,    null, 'count',         null, null, 'Number of free re-attempts'),

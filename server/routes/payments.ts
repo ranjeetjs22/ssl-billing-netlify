@@ -275,7 +275,7 @@ paymentRouter.post('/payments', requireModule('payments'), async (req: Request, 
 
     const status = String(inv.status || '').toLowerCase();
     if (['cancelled', 'canceled'].includes(status)) {
-      return res.status(400).json({ detail: 'This invoice is cancelled — a payment cannot be recorded against it.' });
+      return res.status(400).json({ detail: 'This invoice is cancelled, so a payment cannot be recorded against it.' });
     }
     if (status === 'draft') {
       return res.status(400).json({ detail: 'Please issue this draft invoice before recording a payment.' });

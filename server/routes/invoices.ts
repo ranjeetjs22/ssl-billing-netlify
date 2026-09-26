@@ -15,9 +15,16 @@ function fyLabel(dateStr: string): string {
   return `${fyStart}-${fyEnd}`;
 }
 
-async function nextInvoiceNumber(invoiceDate: string): Promise<string> {
+/** Series prefix for a document type. The two never share a counter. */
+function seriesPrefix(company: Record<string, any>, doc: calc.DocType): string {
+  return doc === 'internal'
+    ? String(company.internal_prefix || 'TRP').trim()
+    : String(company.invoice_prefix || 'SSL').trim();
+}
+
+async function nextInvoiceNumber(invoiceDate: string, doc: calc.DocType = 'tax_invoice'): Promise<string> {
   const company = (await db.selectOne('company_settings')) || {};
-  const prefix = (company.invoice_prefix || 'SSL').trim();
+  const prefix = seriesPrefix(company, doc);
   const fy = fyLabel(invoiceDate);
   const existingInvoices = await db.select('invoices');
   const existingNumbers = new Set<string>(existingInvoices.map((r: any) => String(r.invoice_no || '')).filter(Boolean));
@@ -33,7 +40,10 @@ async function nextInvoiceNumber(invoiceDate: string): Promise<string> {
     }
   }
 
-  let seq = used.length > 0 ? Math.max(company.next_number || 1, Math.max(...used) + 1) : (company.next_number || 1);
+  // next_number belongs to the GST series only. The internal series is derived
+  // purely from what exists, so issuing one can never move the GST counter.
+  const floor = doc === 'tax_invoice' ? (company.next_number || 1) : 1;
+  let seq = used.length > 0 ? Math.max(floor, Math.max(...used) + 1) : floor;
   while (existingNumbers.has(`${prefix}/${fy}/${seq.toString().padStart(4, '0')}`)) {
     seq += 1;
   }
@@ -78,8 +88,8 @@ function deriveConsignment(body: Record<string, any>, fallback: Record<string, a
 
 invoiceRouter.get('/invoices/next-number', requireModule('invoices'), async (req: Request, res: Response) => {
   try {
-    const invDate = (req.query.invoice_date as string) || new Date().toISOString().slice(0, 10);
-    const invoice_no = await nextInvoiceNumber(invDate);
+    const invDate = (req.query.invoice_date as string) || calc.todayIST();
+    const invoice_no = await nextInvoiceNumber(invDate, calc.docType({ doc_type: req.query.doc_type }));
     res.json({ invoice_no });
   } catch (err: any) {
     res.status(500).json({ detail: err.message });
@@ -102,8 +112,10 @@ invoiceRouter.get('/invoices', requireModule('invoices'), async (req: Request, r
   try {
     const status = req.query.status as string;
     const customerId = req.query.customer_id as string;
-    const fromDate = req.query.from_date as string;
-    const toDate = req.query.to_date as string;
+    // Same parameter names the dashboard and reports accept, so one range
+    // string drives all three screens.
+    const fromDate = String(req.query.from_date || req.query.from || '').slice(0, 10);
+    const toDate = String(req.query.to_date || req.query.to || '').slice(0, 10);
     const search = req.query.search as string;
     const sort = (req.query.sort as string) || 'invoice_date';
     const order = (req.query.order as string) || 'desc';
@@ -146,6 +158,12 @@ invoiceRouter.get('/invoices', requireModule('invoices'), async (req: Request, r
     if (customerId) {
       rows = rows.filter((r: any) => r.customer_id === customerId);
     }
+    // ?doc_type=tax_invoice | internal  (also accepts gst / non_gst)
+    const docFilter = String(req.query.doc_type || '').toLowerCase();
+    if (docFilter && docFilter !== 'all') {
+      const want: calc.DocType = ['internal', 'non_gst', 'nongst'].includes(docFilter) ? 'internal' : 'tax_invoice';
+      rows = rows.filter((r: any) => calc.docType(r) === want);
+    }
     if (fromDate) {
       rows = rows.filter((r: any) => (r.invoice_date || '') >= fromDate);
     }
@@ -184,13 +202,22 @@ invoiceRouter.get('/invoices', requireModule('invoices'), async (req: Request, r
       }
     }
 
-    const validItems = items.filter((i: any) => i.display_status !== 'cancelled');
+    // Drafts are not sales and cancelled bills are not receivables: the money
+    // figures cover issued invoices only, matching the dashboard and reports.
+    const validItems = items.filter((i: any) => !['cancelled', 'draft'].includes(i.display_status));
     const summary = {
       count: items.length,
+      issued: validItems.length,
       grand_total: calc.r2(validItems.reduce((acc: number, i: any) => acc + i.totals.grand_total, 0)),
       taxable: calc.r2(validItems.reduce((acc: number, i: any) => acc + i.totals.taxable_amount, 0)),
       gst: calc.r2(validItems.reduce((acc: number, i: any) => acc + i.totals.gst_amount, 0)),
       balance: calc.r2(validItems.reduce((acc: number, i: any) => acc + i.balance, 0)),
+      gst_count: validItems.filter((i: any) => i.totals.doc_type === 'tax_invoice').length,
+      non_gst_count: validItems.filter((i: any) => i.totals.doc_type === 'internal').length,
+      total_cost: calc.r2(validItems.reduce((acc: number, i: any) => acc + (i.totals.total_cost ?? 0), 0)),
+      gross_profit: calc.r2(validItems.reduce((acc: number, i: any) => acc + (i.totals.gross_profit ?? 0), 0)),
+      uncosted: validItems.filter((i: any) => i.totals.total_cost === null).length,
+      input_gst: calc.r2(validItems.reduce((acc: number, i: any) => acc + (i.totals.input_gst || 0), 0)),
     };
 
     const start = Math.max(0, (page - 1) * pageSize);
@@ -276,7 +303,7 @@ invoiceRouter.get('/invoices/overdue', requireModule('invoices'), async (_req: R
       custMap[c.id] = c;
     }
 
-    const today = new Date().toISOString().slice(0, 10);
+    const today = calc.todayIST();
     const out: any[] = [];
 
     for (const r of rows) {
@@ -292,7 +319,7 @@ invoiceRouter.get('/invoices/overdue', requireModule('invoices'), async (_req: R
       const balance = calc.r2(Math.max(0, t.grand_total - paid));
       const name = (r.buyer || {}).name || cust.name || 'Customer';
 
-      const message = `Dear ${name}, our invoice ${r.invoice_no} dated ${String(r.invoice_date).slice(0, 10)} for Rs. ${balance.toLocaleString('en-IN', { minimumFractionDigits: 2 })} was due on ${due} and is now ${days} day(s) overdue. Kindly arrange the payment at your earliest convenience. Thank you — ${company.name || 'SHREE SANWARIYA LOGISTICS'}.`;
+      const message = `Dear ${name}, our invoice ${r.invoice_no} dated ${String(r.invoice_date).slice(0, 10)} for Rs. ${balance.toLocaleString('en-IN', { minimumFractionDigits: 2 })} was due on ${due} and is now ${days} day(s) overdue. Kindly arrange the payment at your earliest convenience. Thank you - ${company.name || 'SHREE SANWARIYA LOGISTICS'}.`;
 
       out.push({
         id: r.id,
@@ -361,9 +388,21 @@ invoiceRouter.post('/invoices', requireModule('invoices'), async (req: Request, 
     }
 
     const company = companyRow || {};
-    const invoiceDate = body.invoice_date || new Date().toISOString().slice(0, 10);
-    const invoiceNo = String(body.invoice_no || (await nextInvoiceNumber(invoiceDate))).trim();
+    const doc = calc.docType(body);
+    const invoiceDate = body.invoice_date || calc.todayIST();
+    let invoiceNo = String(body.invoice_no || (await nextInvoiceNumber(invoiceDate, doc))).trim();
     if (body.invoice_no) {
+      // A hand-typed number must stay inside its own series, or a non-GST bill
+      // could take a GST serial and break the consecutive GST sequence.
+      const own = seriesPrefix(company, doc);
+      const other = seriesPrefix(company, doc === 'internal' ? 'tax_invoice' : 'internal');
+      if (own !== other && invoiceNo.toUpperCase().startsWith(`${other.toUpperCase()}/`)) {
+        return res.status(400).json({
+          detail: doc === 'internal'
+            ? `Non-GST bills cannot use the GST series (${other}/...). Use ${own}/... instead.`
+            : `GST invoices cannot use the non-GST series (${other}/...). Use ${own}/... instead.`,
+        });
+      }
       const dup = await db.selectOne('invoices', { invoice_no: `eq.${invoiceNo}` });
       if (dup) {
         return res.status(400).json({ detail: `Invoice number ${invoiceNo} already exists. Please use a different number.` });
@@ -371,8 +410,11 @@ invoiceRouter.post('/invoices', requireModule('invoices'), async (req: Request, 
     }
 
     const extras = calc.extrasList(body.extra_charges);
+    const otherCosts = calc.costsList(body.other_costs);
     const consignment = deriveConsignment(body);
-    const totals = calc.compute({ ...body, extra_charges: extras, lr_items: consignment.lr_items });
+    const totals = calc.compute({
+      ...body, doc_type: doc, extra_charges: extras, other_costs: otherCosts, lr_items: consignment.lr_items,
+    });
 
     const buyer = {
       name: cust.name,
@@ -416,9 +458,10 @@ invoiceRouter.post('/invoices', requireModule('invoices'), async (req: Request, 
     const user = (req as any).user;
     const userId = user?.id || '5fecd6f5-7c32-488c-b1bc-b2a5f80b6927';
 
-    const row = {
+    const row: Record<string, any> = {
       user_id: userId,
       customer_id: body.customer_id,
+      doc_type: doc,
       invoice_date: invoiceDate,
       invoice_no: invoiceNo,
       buyer,
@@ -450,6 +493,10 @@ invoiceRouter.post('/invoices', requireModule('invoices'), async (req: Request, 
       igst: totals.igst,
       round_off: totals.round_off,
       grand_total: totals.grand_total,
+      other_costs: otherCosts,
+      total_cost: totals.total_cost,
+      gross_profit: totals.gross_profit,
+      input_gst: totals.input_gst,
       payment_terms: body.payment_terms || cust.payment_terms || '',
       due_date: dueDate,
       terms: body.terms || company.terms || '',
@@ -468,16 +515,35 @@ invoiceRouter.post('/invoices', requireModule('invoices'), async (req: Request, 
       updated_at: new Date().toISOString(),
     };
 
-    const { row: created, dropped } = await db.insertEx('invoices', row);
+    // Two people saving at once can both be handed the same next number; the
+    // unique index rejects the second. Take the next free number and retry
+    // rather than failing the save. Hand-typed numbers are never changed.
+    let inserted: { row: any; dropped: string[] } | null = null;
+    for (let attempt = 0; attempt < 5; attempt++) {
+      try {
+        inserted = await db.insertEx('invoices', row);
+        break;
+      } catch (e: any) {
+        if (body.invoice_no || !/duplicate key|unique constraint|23505/i.test(String(e?.message))) throw e;
+        invoiceNo = await nextInvoiceNumber(invoiceDate, doc);
+        row.invoice_no = invoiceNo;
+      }
+    }
+    if (!inserted) {
+      return res.status(409).json({ detail: 'Another invoice was saved at the same moment. Please try again.' });
+    }
+    const { row: created, dropped } = inserted;
     if (dropped.length > 0) {
-      console.warn(`[Invoices] Supabase schema is missing column(s): ${dropped.join(', ')} — invoice saved without them.`);
+      console.warn(`[Invoices] Supabase schema is missing column(s): ${dropped.join(', ')} - invoice saved without them.`);
     }
     // Keep the API response complete even when the DB could not persist a column.
     if (dropped.includes('lr_items')) created.lr_items = consignment.lr_items;
 
-    // Increment next_number in company settings if sequence number matched
+    // Advance the GST counter. Internal bills have their own series and must
+    // never move it, or the GST sequence would skip numbers.
     const seqPart = invoiceNo.split('/').pop();
-    if (seqPart && /^\d+$/.test(seqPart) && company.id) {
+    if (doc === 'tax_invoice' && seqPart && /^\d+$/.test(seqPart) && company.id
+        && parseInt(seqPart, 10) + 1 > (company.next_number || 0)) {
       await db.update('company_settings', { id: `eq.${company.id}` }, {
         next_number: parseInt(seqPart, 10) + 1,
       });
@@ -557,13 +623,25 @@ invoiceRouter.put('/invoices/:invoice_id', requireModule('invoices'), async (req
       shipTo = body.ship_to;
     }
 
+    // A bill's type is fixed once it has a number: its number belongs to that
+    // series. Converting means cancelling and re-issuing in the other series.
+    const doc = calc.docType(old);
+    if (body.doc_type && calc.docType(body) !== doc) {
+      return res.status(400).json({
+        detail: 'A bill cannot be switched between GST and non-GST after it is created. Cancel it and create a new one.',
+      });
+    }
+
     const extras = calc.extrasList(body.extra_charges);
+    const otherCosts = body.other_costs === undefined ? calc.costsList(old.other_costs) : calc.costsList(body.other_costs);
     // If the client did not send lr_items at all, keep whatever lines the invoice already has.
     const consignment = deriveConsignment(
       body.lr_items === undefined ? { ...body, lr_items: old.lr_items } : body,
       old
     );
-    const totals = calc.compute({ ...body, extra_charges: extras, lr_items: consignment.lr_items });
+    const totals = calc.compute({
+      ...body, doc_type: doc, extra_charges: extras, other_costs: otherCosts, lr_items: consignment.lr_items,
+    });
 
     const data: any = {
       customer_id: customerId,
@@ -598,6 +676,10 @@ invoiceRouter.put('/invoices/:invoice_id', requireModule('invoices'), async (req
       igst: totals.igst,
       round_off: totals.round_off,
       grand_total: totals.grand_total,
+      other_costs: otherCosts,
+      total_cost: totals.total_cost,
+      gross_profit: totals.gross_profit,
+      input_gst: totals.input_gst,
       payment_terms: body.payment_terms !== undefined ? body.payment_terms : old.payment_terms,
       due_date: body.due_date !== undefined ? body.due_date : old.due_date,
       notes: body.notes !== undefined ? body.notes : old.notes,
@@ -606,7 +688,7 @@ invoiceRouter.put('/invoices/:invoice_id', requireModule('invoices'), async (req
 
     const { row: updated, dropped } = await db.updateEx('invoices', { id: `eq.${invId}` }, data);
     if (dropped.length > 0) {
-      console.warn(`[Invoices] Supabase schema is missing column(s): ${dropped.join(', ')} — invoice updated without them.`);
+      console.warn(`[Invoices] Supabase schema is missing column(s): ${dropped.join(', ')} - invoice updated without them.`);
     }
     if (dropped.includes('lr_items')) updated.lr_items = consignment.lr_items;
     const payments = await db.select('payments', { invoice_id: `eq.${invId}` });

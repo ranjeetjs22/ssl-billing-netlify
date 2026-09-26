@@ -1,4 +1,4 @@
--- SSL Billing — schema catch-up migration
+-- SSL Billing - schema catch-up migration
 -- Safe to run multiple times (every statement is idempotent).
 -- Run in the Supabase SQL editor (Dashboard → SQL → New query → Run).
 

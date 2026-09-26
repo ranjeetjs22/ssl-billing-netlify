@@ -82,10 +82,10 @@ export const LoginView: React.FC = () => {
   const brandName = companySettings?.name || 'SHREE SANWARIYA LOGISTICS';
 
   return (
-    <div className="min-h-dvh bg-canvas flex flex-col justify-center px-4 py-10 sm:px-6">
+    <div className="min-h-dvh flex flex-col justify-center px-4 py-10 sm:px-6">
       <div className="mx-auto w-full max-w-md">
         <div className="flex flex-col items-center text-center mb-6">
-          <span className="bg-surface border border-line rounded-2xl p-3 shadow-card mb-4">
+          <span className="bg-surface border border-line rounded-card p-3 shadow-card mb-4">
             <SslLogo className="h-12 w-auto" customLogoUrl={companySettings?.logo_url} />
           </span>
           <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-ink">{brandName}</h1>
@@ -164,7 +164,7 @@ export const LoginView: React.FC = () => {
         </Card>
 
         <p className="mt-5 text-center text-xs text-ink-faint">
-          GSTIN {companySettings?.gstin || '—'} · SAC 996511
+          {companySettings?.gstin ? `GSTIN ${companySettings.gstin} · ` : ''}SAC 996511
         </p>
       </div>
 
@@ -176,7 +176,7 @@ export const LoginView: React.FC = () => {
           size="sm"
         >
           {resetSuccess ? (
-            <div className="p-4 bg-positive-soft border border-positive-line rounded-xl flex items-center gap-3 text-positive-ink text-sm font-medium">
+            <div className="p-4 bg-positive-soft border border-positive-line rounded-card flex items-center gap-3 text-positive-ink text-sm font-medium">
               <CheckCircle2 className="w-5 h-5 shrink-0" aria-hidden="true" />
               <span>Password updated. Redirecting…</span>
             </div>
@@ -200,7 +200,7 @@ export const LoginView: React.FC = () => {
           ) : (
             <form onSubmit={handleReset} className="space-y-4">
               {forgotMsg && <p className="text-sm text-positive-ink">{forgotMsg}</p>}
-              <Field label="Reset token" htmlFor="reset-token" hint="Copied automatically — keep this private.">
+              <Field label="Reset token" htmlFor="reset-token" hint="Copied automatically. Keep this private.">
                 <Input id="reset-token" type="text" readOnly value={resetToken} className="font-mono" />
               </Field>
               <Field label="New password" htmlFor="reset-pass" required hint="At least 6 characters.">

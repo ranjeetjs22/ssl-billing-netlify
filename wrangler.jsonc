@@ -13,7 +13,7 @@
     // API paths go to the Worker; everything else is served straight from the edge cache
     "run_worker_first": ["/api/*"]
   },
-  // Runs the Worker close to Supabase instead of close to the visitor — every request
+  // Runs the Worker close to Supabase instead of close to the visitor - every request
   // makes several round-trips to the database, so this is the biggest latency win.
   "placement": { "mode": "smart" },
   "observability": { "enabled": true },

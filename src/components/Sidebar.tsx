@@ -1,17 +1,21 @@
 import React from 'react';
 import {
-  LayoutDashboard,
+  LayoutGrid,
   FileText,
-  Users,
-  CreditCard,
-  Settings,
+  Wallet,
+  Building2,
   Calculator,
-  UserCheck,
-  ShieldAlert,
+  ChartColumnIncreasing,
+  Settings2,
+  Receipt,
+  UserCog,
+  TriangleAlert,
   LogOut,
   Plus,
-  AlertTriangle,
   X,
+  ChevronsLeft,
+  ChevronsRight,
+  MoreHorizontal,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext.js';
 import { CompanySettings } from '../types.js';
@@ -22,22 +26,30 @@ export interface NavItem {
   key: string;
   label: string;
   shortLabel: string;
-  icon: React.ComponentType<{ className?: string }>;
+  icon: React.ComponentType<{ className?: string; strokeWidth?: number }>;
   module: string;
+  group: 'main' | 'manage';
   adminOnly?: boolean;
 }
 
-/** Single source of truth for navigation — the sidebar and the mobile bottom bar
- *  both read this, so the two can never drift apart. */
+/**
+ * Single source of truth for navigation. The rail, the collapsed rail and the
+ * mobile bar all read this, so the three can never drift apart.
+ */
 export const NAV_ITEMS: NavItem[] = [
-  { key: 'dashboard', label: 'Dashboard', shortLabel: 'Home', icon: LayoutDashboard, module: 'dashboard' },
-  { key: 'invoices', label: 'Invoices', shortLabel: 'Invoices', icon: FileText, module: 'invoices' },
-  { key: 'payments', label: 'Payments', shortLabel: 'Payments', icon: CreditCard, module: 'payments' },
-  { key: 'customers', label: 'Customers', shortLabel: 'Customers', icon: Users, module: 'customers' },
-  { key: 'rates', label: 'Rate Calculator', shortLabel: 'Rates', icon: Calculator, module: 'invoices' },
-  { key: 'settings', label: 'Settings', shortLabel: 'Settings', icon: Settings, module: 'settings' },
-  { key: 'users', label: 'Users & Roles', shortLabel: 'Users', icon: UserCheck, module: 'users', adminOnly: true },
+  { key: 'dashboard', label: 'Overview', shortLabel: 'Home', icon: LayoutGrid, module: 'dashboard', group: 'main' },
+  { key: 'invoices', label: 'Invoices', shortLabel: 'Invoices', icon: FileText, module: 'invoices', group: 'main' },
+  { key: 'payments', label: 'Payments', shortLabel: 'Payments', icon: Wallet, module: 'payments', group: 'main' },
+  { key: 'customers', label: 'Customers', shortLabel: 'Customers', icon: Building2, module: 'customers', group: 'main' },
+  { key: 'rates', label: 'Rate calculator', shortLabel: 'Rates', icon: Calculator, module: 'invoices', group: 'manage' },
+  { key: 'expenses', label: 'Expenses', shortLabel: 'Expenses', icon: Receipt, module: 'expenses', group: 'manage' },
+  { key: 'reports', label: 'Reports', shortLabel: 'Reports', icon: ChartColumnIncreasing, module: 'invoices', group: 'manage' },
+  { key: 'settings', label: 'Settings', shortLabel: 'Settings', icon: Settings2, module: 'settings', group: 'manage' },
+  { key: 'users', label: 'Users', shortLabel: 'Users', icon: UserCog, module: 'users', group: 'manage', adminOnly: true },
 ];
+
+const ICON = 'w-[18px] h-[18px] shrink-0';
+const STROKE = 1.6;
 
 interface SidebarProps {
   activeTab: string;
@@ -46,20 +58,79 @@ interface SidebarProps {
   onNewCustomer: () => void;
   onReceivePayment: () => void;
   onViewOverdue: () => void;
-  onOpenAuditLogs: () => void;
   isOpenMobile: boolean;
   setIsOpenMobile: (open: boolean) => void;
+  /** Desktop rail reduced to icons only. */
+  collapsed?: boolean;
+  onToggleCollapsed?: () => void;
   companySettings?: CompanySettings;
 }
+
+/**
+ * A nav row. Active reads as a filled pill with an ember icon rather than a
+ * marker bar, so the whole row is the target and the state is unmistakable.
+ * Collapsed, the label becomes a floating tooltip.
+ */
+const NavRow: React.FC<{
+  icon: React.ComponentType<{ className?: string; strokeWidth?: number }>;
+  label: string;
+  active?: boolean;
+  collapsed?: boolean;
+  id?: string;
+  tone?: 'default' | 'warning';
+  onClick: () => void;
+}> = ({ icon: Icon, label, active, collapsed, id, tone = 'default', onClick }) => (
+  <button
+    id={id}
+    onClick={onClick}
+    aria-current={active ? 'page' : undefined}
+    className={cx(
+      'group relative w-full flex items-center min-h-[38px] rounded-control cursor-pointer',
+      'text-[13.5px] transition-[background-color,color] duration-[140ms] ease-out',
+      collapsed ? 'justify-center px-0' : 'gap-3 px-2.5',
+      active
+        ? 'bg-surface-muted text-ink font-medium'
+        : tone === 'warning'
+          ? 'text-warning-ink/80 hover:bg-surface hover:text-warning-ink'
+          : 'text-ink-soft hover:bg-surface hover:text-ink'
+    )}
+  >
+    <Icon
+      className={cx(ICON, 'transition-colors', active && 'text-accent')}
+      strokeWidth={STROKE}
+      aria-hidden="true"
+    />
+    {!collapsed && <span className="truncate">{label}</span>}
+
+    {collapsed && (
+      <span
+        role="tooltip"
+        className="tip pointer-events-none absolute left-[calc(100%+12px)] z-50 whitespace-nowrap
+                   px-2 py-1 text-xs opacity-0 translate-x-[-4px]
+                   transition-[opacity,transform] duration-[140ms]
+                   group-hover:opacity-100 group-hover:translate-x-0
+                   group-focus-visible:opacity-100 group-focus-visible:translate-x-0"
+      >
+        {label}
+      </span>
+    )}
+  </button>
+);
+
+const GroupLabel: React.FC<{ children: React.ReactNode; hidden?: boolean }> = ({ children, hidden }) =>
+  hidden
+    ? <div className="rule-fade mx-2 my-2.5" aria-hidden="true" />
+    : <p className="px-2.5 pt-4 pb-1.5 label-micro">{children}</p>;
 
 export const Sidebar: React.FC<SidebarProps> = ({
   activeTab,
   setActiveTab,
   onNewInvoice,
   onViewOverdue,
-  onOpenAuditLogs,
   isOpenMobile,
   setIsOpenMobile,
+  collapsed = false,
+  onToggleCollapsed,
   companySettings,
 }) => {
   const { user, logout } = useAuth();
@@ -70,16 +141,14 @@ export const Sidebar: React.FC<SidebarProps> = ({
     return user.modules?.includes(mod);
   };
 
-  const visibleItems = NAV_ITEMS.filter(
+  const visible = NAV_ITEMS.filter(
     (i) => hasModule(i.module) && (!i.adminOnly || user?.role === 'admin')
   );
+  const main = visible.filter((i) => i.group === 'main');
+  const manage = visible.filter((i) => i.group === 'manage');
 
-  const handleNavClick = (tab: string) => {
-    setActiveTab(tab);
-    setIsOpenMobile(false);
-  };
+  const go = (tab: string) => { setActiveTab(tab); setIsOpenMobile(false); };
 
-  // Close the drawer on Escape (mobile)
   React.useEffect(() => {
     if (!isOpenMobile) return;
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setIsOpenMobile(false); };
@@ -87,148 +156,203 @@ export const Sidebar: React.FC<SidebarProps> = ({
     return () => window.removeEventListener('keydown', onKey);
   }, [isOpenMobile, setIsOpenMobile]);
 
+  const initials = (user?.full_name || user?.email || '?').charAt(0).toUpperCase();
+  const tight = collapsed && !isOpenMobile;
+
   return (
     <>
-      {/* Backdrop — strong enough to isolate the drawer from the page behind it */}
       {isOpenMobile && (
         <div
-          className="fixed inset-0 bg-navy-950/60 backdrop-blur-[2px] z-40 lg:hidden animate-fade-in"
+          className="fixed inset-0 bg-scrim backdrop-blur-[6px] z-40 lg:hidden animate-fade-in"
           onClick={() => setIsOpenMobile(false)}
           aria-hidden="true"
         />
       )}
 
+      {/* A detached island rather than a full-height wall: the canvas and its
+          ambient light continue around it, which is what keeps it light. */}
       <aside
         aria-label="Main navigation"
         className={cx(
-          'fixed top-0 bottom-0 left-0 z-50 w-[17rem] bg-navy-900 text-navy-100 flex flex-col',
-          'border-r border-white/5 transition-transform duration-300 ease-out pt-safe',
+          'fixed z-50 flex flex-col overflow-hidden',
+          'lg:top-3 lg:bottom-3 lg:left-3 lg:rounded-overlay lg:border lg:border-line lg:shadow-card',
+          'top-0 bottom-0 left-0 border-r border-line pt-safe lg:pt-0',
+          isOpenMobile ? 'sheet' : 'bg-surface backdrop-blur-2xl',
+          'transition-[transform,width] duration-[240ms] ease-out',
+          tight ? 'w-[64px]' : 'w-[228px]',
           isOpenMobile ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'
         )}
       >
-        {/* Brand */}
-        <div className="h-16 px-3 flex items-center justify-between border-b border-white/5 shrink-0">
+        {/* brand */}
+        <div className={cx('h-[52px] flex items-center shrink-0', tight ? 'justify-center px-0' : 'justify-between pl-3 pr-2')}>
           <button
-            onClick={() => handleNavClick('dashboard')}
-            className="flex items-center gap-2.5 min-w-0 rounded-xl p-1 -m-1 cursor-pointer hover:bg-white/5 transition-colors"
+            onClick={() => go('dashboard')}
+            className="flex items-center gap-2.5 min-w-0 rounded-control p-1 -m-1 cursor-pointer
+                       hover:bg-surface-muted transition-colors duration-[140ms]"
           >
-            <span className="bg-white rounded-lg p-1 shrink-0 flex items-center justify-center w-11 h-9 overflow-hidden">
-              <SslLogo className="h-7 w-auto max-w-[38px]" customLogoUrl={companySettings?.logo_url} />
+            <span className="w-[26px] h-[26px] rounded-[7px] bg-surface-muted border border-line
+                             flex items-center justify-center shrink-0 overflow-hidden">
+              <SslLogo className="h-3.5 w-auto" customLogoUrl={companySettings?.logo_url} />
             </span>
-            <span className="min-w-0 text-left">
-              <span className="block font-bold text-sm text-white leading-tight truncate">
-                {companySettings?.name?.split(' ').slice(0, 2).join(' ') || 'SHREE SANWARIYA'}
+            {!tight && (
+              <span className="min-w-0 text-left">
+                <span className="block text-[13px] font-semibold text-ink leading-tight truncate tracking-[-0.01em]">
+                  {companySettings?.name?.split(' ').slice(0, 2).join(' ') || 'Shree Sanwariya'}
+                </span>
+                <span className="flex items-center gap-1.5 text-[10px] text-ink-faint leading-tight">
+                  <span className="pip" aria-hidden="true" />
+                  GST billing
+                </span>
               </span>
-              <span className="block text-[11px] font-semibold text-brand-400 tracking-wide">GST Billing</span>
-            </span>
+            )}
           </button>
 
-          <IconButton
-            label="Close navigation"
-            onClick={() => setIsOpenMobile(false)}
-            className="lg:hidden text-navy-100 hover:bg-white/10 hover:text-white"
-          >
-            <X className="w-5 h-5" />
-          </IconButton>
+          {!tight && (
+            <IconButton
+              label="Close navigation"
+              onClick={() => setIsOpenMobile(false)}
+              className="lg:hidden w-8 h-8"
+            >
+              <X className="w-4 h-4" strokeWidth={STROKE} />
+            </IconButton>
+          )}
         </div>
 
-        {/* Primary action — one clear CTA, visually dominant */}
+        {/* primary action */}
         {hasModule('invoices') && (
-          <div className="px-3 pt-3 shrink-0">
+          <div className={cx('shrink-0 pb-1', tight ? 'px-2.5' : 'px-3')}>
             <button
-              onClick={() => { handleNavClick('invoices'); onNewInvoice(); }}
-              className="w-full inline-flex items-center justify-center gap-2 min-h-[44px] rounded-xl bg-accent-strong
-                         text-on-accent font-semibold text-sm cursor-pointer shadow-raised
-                         hover:bg-accent-strong-hover active:scale-[0.98] transition-[background-color,transform] duration-150"
+              onClick={() => { go('invoices'); onNewInvoice(); }}
+              aria-label="New invoice"
+              className={cx(
+                'group relative w-full inline-flex items-center min-h-[36px] rounded-control cursor-pointer',
+                'border border-accent-line bg-accent-soft text-accent-ink',
+                'text-[13.5px] font-medium',
+                'transition-[background-color,border-color,box-shadow] duration-[160ms] ease-out',
+                'hover:bg-accent-strong hover:border-accent-strong hover:text-on-accent hover:glow-ember',
+                tight ? 'justify-center px-0' : 'gap-2.5 px-2.5'
+              )}
             >
-              <Plus className="w-4 h-4" aria-hidden="true" />
-              New Invoice
+              <Plus className="w-[17px] h-[17px] shrink-0" strokeWidth={2.2} aria-hidden="true" />
+              {!tight && 'New invoice'}
+              {tight && (
+                <span
+                  role="tooltip"
+                  className="tip pointer-events-none absolute left-[calc(100%+12px)] z-50 whitespace-nowrap
+                             px-2 py-1 text-xs opacity-0 transition-opacity duration-[140ms]
+                             group-hover:opacity-100"
+                >
+                  New invoice
+                </span>
+              )}
             </button>
           </div>
         )}
 
-        {/* Navigation */}
-        <nav className="flex-1 overflow-y-auto px-3 py-3 space-y-1">
-          {visibleItems.map((item) => {
-            const Icon = item.icon;
-            const active = activeTab === item.key;
-            return (
-              <button
+        {/* navigation.
+            A scroll container clips on BOTH axes, so the collapsed rail has to
+            stay overflow-visible or its tooltips are cut off at the rail edge.
+            Collapsed the list is short enough that it never needs to scroll. */}
+        <nav className={cx('flex-1 pb-2', tight ? 'px-2.5 overflow-visible' : 'px-3 overflow-y-auto')}>
+          <div className="space-y-0.5">
+            {main.map((item) => (
+              <NavRow
                 key={item.key}
                 id={`sidebar-${item.key}-btn`}
-                onClick={() => handleNavClick(item.key)}
-                aria-current={active ? 'page' : undefined}
-                className={cx(
-                  'w-full flex items-center gap-3 px-3 min-h-[44px] rounded-xl text-sm font-medium cursor-pointer',
-                  'transition-colors duration-150',
-                  active
-                    ? 'bg-white/10 text-white font-semibold'
-                    : 'text-navy-100/90 hover:bg-white/5 hover:text-white'
-                )}
-              >
-                {/* Active marker is a shape, not just colour */}
-                <span
-                  className={cx('w-1 h-5 rounded-full shrink-0 -ml-1', active ? 'bg-accent' : 'bg-transparent')}
-                  aria-hidden="true"
-                />
-                <Icon className="w-[18px] h-[18px] shrink-0" aria-hidden="true" />
-                <span className="truncate">{item.label}</span>
-              </button>
-            );
-          })}
+                icon={item.icon}
+                label={item.label}
+                active={activeTab === item.key}
+                collapsed={tight}
+                onClick={() => go(item.key)}
+              />
+            ))}
+          </div>
 
-          {(hasModule('invoices') || user?.role === 'admin') && (
-            <div className="pt-3 mt-2 border-t border-white/5 space-y-1">
-              <p className="px-3 pb-1 text-[11px] font-semibold uppercase tracking-wider text-navy-100/70">Tools</p>
+          {manage.length > 0 && (
+            <>
+              <GroupLabel hidden={tight}>Manage</GroupLabel>
+              <div className="space-y-0.5">
+                {manage.map((item) => (
+                  <NavRow
+                    key={item.key}
+                    id={`sidebar-${item.key}-btn`}
+                    icon={item.icon}
+                    label={item.label}
+                    active={activeTab === item.key}
+                    collapsed={tight}
+                    onClick={() => go(item.key)}
+                  />
+                ))}
+              </div>
+            </>
+          )}
 
-              {hasModule('invoices') && (
-                <button
-                  onClick={onViewOverdue}
-                  className="w-full flex items-center gap-3 px-3 min-h-[44px] rounded-xl text-sm font-medium
-                             text-navy-100/90 hover:bg-white/5 hover:text-white cursor-pointer transition-colors duration-150"
-                >
-                  <AlertTriangle className="w-[18px] h-[18px] shrink-0 text-warning" aria-hidden="true" />
-                  <span className="truncate">Overdue &amp; Reminders</span>
-                </button>
-              )}
-
-              {user?.role === 'admin' && (
-                <button
-                  onClick={onOpenAuditLogs}
-                  className="w-full flex items-center gap-3 px-3 min-h-[44px] rounded-xl text-sm font-medium
-                             text-navy-100/90 hover:bg-white/5 hover:text-white cursor-pointer transition-colors duration-150"
-                >
-                  <ShieldAlert className="w-[18px] h-[18px] shrink-0" aria-hidden="true" />
-                  <span className="truncate">Audit Logs</span>
-                </button>
-              )}
-            </div>
+          {hasModule('invoices') && (
+            <>
+              <GroupLabel hidden={tight}>Tools</GroupLabel>
+              <div className="space-y-0.5">
+                <NavRow icon={TriangleAlert} label="Overdue" tone="warning" collapsed={tight} onClick={onViewOverdue} />
+              </div>
+            </>
           )}
         </nav>
 
-        {/* Account — sign out kept visually separate from navigation */}
-        <div className="p-3 border-t border-white/5 shrink-0 pb-safe">
-          <div className="flex items-center gap-2 p-2 rounded-xl bg-white/5">
+        {/* account card */}
+        <div className={cx('shrink-0 pb-safe lg:pb-2', tight ? 'px-2.5' : 'px-3')}>
+          <div className="rule-fade mb-2" aria-hidden="true" />
+
+          <div className={cx('flex items-center rounded-control', tight ? 'flex-col gap-1' : 'gap-2.5 px-1.5 py-1.5')}>
             <span
-              className="w-9 h-9 rounded-full bg-accent-strong text-on-accent font-bold text-sm flex items-center justify-center shrink-0"
+              className="w-[26px] h-[26px] rounded-[7px] bg-accent-soft border border-accent-line text-accent-ink
+                         text-[11px] font-semibold flex items-center justify-center shrink-0"
               aria-hidden="true"
             >
-              {(user?.full_name || user?.email || '?').charAt(0).toUpperCase()}
+              {initials}
             </span>
-            <span className="min-w-0 flex-1">
-              <span className="block font-semibold text-white text-sm truncate">
-                {user?.full_name || user?.email}
-              </span>
-              <span className="block text-[11px] text-navy-100/80 capitalize">{user?.role}</span>
-            </span>
-            <IconButton
-              label="Sign out"
-              onClick={logout}
-              className="text-navy-100/70 hover:bg-danger hover:text-white shrink-0"
-            >
-              <LogOut className="w-[18px] h-[18px]" />
-            </IconButton>
+            {!tight && (
+              <>
+                <span className="min-w-0 flex-1">
+                  <span className="block text-[12.5px] text-ink truncate leading-tight">
+                    {user?.full_name || user?.email}
+                  </span>
+                  <span className="block text-[10px] text-ink-faint capitalize leading-tight">{user?.role}</span>
+                </span>
+                <IconButton
+                  label="Sign out"
+                  onClick={logout}
+                  className="w-8 h-8 text-ink-faint hover:text-danger-ink hover:bg-danger-soft shrink-0"
+                >
+                  <LogOut className="w-[15px] h-[15px]" strokeWidth={STROKE} />
+                </IconButton>
+              </>
+            )}
+            {tight && (
+              <IconButton
+                label="Sign out"
+                onClick={logout}
+                className="w-8 h-8 text-ink-faint hover:text-danger-ink hover:bg-danger-soft"
+              >
+                <LogOut className="w-[15px] h-[15px]" strokeWidth={STROKE} />
+              </IconButton>
+            )}
           </div>
+
+          {onToggleCollapsed && (
+            <button
+              onClick={onToggleCollapsed}
+              aria-label={tight ? 'Expand navigation' : 'Collapse navigation'}
+              className={cx(
+                'hidden lg:flex items-center gap-2.5 w-full min-h-[32px] rounded-control cursor-pointer',
+                'text-ink-faint hover:text-ink hover:bg-surface-muted transition-colors duration-[140ms]',
+                tight ? 'justify-center px-0' : 'px-2.5'
+              )}
+            >
+              {tight
+                ? <ChevronsRight className="w-4 h-4" strokeWidth={STROKE} aria-hidden="true" />
+                : <ChevronsLeft className="w-4 h-4" strokeWidth={STROKE} aria-hidden="true" />}
+              {!tight && <span className="text-[12.5px]">Collapse</span>}
+            </button>
+          )}
         </div>
       </aside>
     </>
@@ -236,8 +360,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
 };
 
 /**
- * Mobile bottom navigation — top-level destinations only, max 5 items, icon + label.
- * Sits above the safe-area inset so it clears the iOS home indicator.
+ * Mobile bottom bar, as a floating island so the content scrolls past it rather
+ * than under a full-width slab. Top level destinations only, five at most.
  */
 export const MobileNav: React.FC<{
   activeTab: string;
@@ -251,50 +375,44 @@ export const MobileNav: React.FC<{
     return user.modules?.includes(mod);
   };
 
-  const items = NAV_ITEMS.filter(
-    (i) => hasModule(i.module) && !i.adminOnly && i.key !== 'settings'
-  ).slice(0, 4);
+  const items = NAV_ITEMS.filter((i) => hasModule(i.module) && i.group === 'main').slice(0, 4);
+
+  const Tab: React.FC<{
+    icon: React.ComponentType<{ className?: string; strokeWidth?: number }>;
+    label: string; active?: boolean; onClick: () => void;
+  }> = ({ icon: Icon, label, active, onClick }) => (
+    <button
+      onClick={onClick}
+      aria-current={active ? 'page' : undefined}
+      className={cx(
+        'flex-1 flex flex-col items-center justify-center gap-[3px] min-h-[52px] rounded-card',
+        'cursor-pointer transition-colors duration-[140ms]',
+        active ? 'text-accent bg-accent-soft' : 'text-ink-faint active:bg-surface-muted'
+      )}
+    >
+      <Icon className="w-[19px] h-[19px]" strokeWidth={STROKE} aria-hidden="true" />
+      <span className={cx('text-[10px] leading-none', active && 'font-medium')}>{label}</span>
+    </button>
+  );
 
   return (
-    <nav
-      aria-label="Primary"
-      className="lg:hidden fixed bottom-0 inset-x-0 z-40 bg-surface/95 backdrop-blur border-t border-line pb-safe"
-    >
-      <ul className="flex items-stretch">
-        {items.map((item) => {
-          const Icon = item.icon;
-          const active = activeTab === item.key;
-          return (
-            <li key={item.key} className="flex-1">
-              <button
-                onClick={() => setActiveTab(item.key)}
-                aria-current={active ? 'page' : undefined}
-                className={cx(
-                  'w-full flex flex-col items-center justify-center gap-0.5 min-h-[52px] pt-1.5 pb-1 cursor-pointer',
-                  'transition-colors duration-150',
-                  active ? 'text-accent-ink' : 'text-ink-faint active:bg-surface-sunken'
-                )}
-              >
-                <Icon className={cx('w-[22px] h-[22px]', active && 'stroke-[2.4]')} aria-hidden="true" />
-                <span className={cx('text-[11px] leading-none', active ? 'font-bold' : 'font-medium')}>
-                  {item.shortLabel}
-                </span>
-              </button>
-            </li>
-          );
-        })}
-
-        <li className="flex-1">
-          <button
-            onClick={onMore}
-            className="w-full flex flex-col items-center justify-center gap-0.5 min-h-[52px] pt-1.5 pb-1
-                       text-ink-faint active:bg-surface-sunken cursor-pointer transition-colors duration-150"
-          >
-            <Settings className="w-[22px] h-[22px]" aria-hidden="true" />
-            <span className="text-[11px] leading-none font-medium">More</span>
-          </button>
-        </li>
-      </ul>
-    </nav>
+    <div className="lg:hidden fixed bottom-0 inset-x-0 z-40 px-3 pb-3 pb-safe pointer-events-none">
+      <nav
+        aria-label="Primary"
+        className="sheet pointer-events-auto flex items-stretch gap-1 p-1
+                   rounded-overlay border border-line shadow-raised"
+      >
+        {items.map((item) => (
+          <Tab
+            key={item.key}
+            icon={item.icon}
+            label={item.shortLabel}
+            active={activeTab === item.key}
+            onClick={() => setActiveTab(item.key)}
+          />
+        ))}
+        <Tab icon={MoreHorizontal} label="More" onClick={onMore} />
+      </nav>
+    </div>
   );
 };

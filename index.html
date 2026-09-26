@@ -4,16 +4,26 @@
     <meta charset="UTF-8" />
     <!-- viewport-fit=cover for notch/safe-area support; zoom is NOT disabled (a11y) -->
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-    <title>SSL Billing — GST Freight Invoicing</title>
+    <title>SSL Billing - GST Freight Invoicing</title>
     <meta name="description" content="GST tax invoicing, LR consignment billing, payment receipts and customer statements for Shree Sanwariya Logistics." />
-    <meta name="theme-color" content="#0B182B" media="(prefers-color-scheme: dark)" />
-    <meta name="theme-color" content="#F4F6FA" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#08080A" media="(prefers-color-scheme: dark)" />
+    <meta name="theme-color" content="#F4F4F6" media="(prefers-color-scheme: light)" />
     <meta name="color-scheme" content="light dark" />
+    <!-- Geist and Geist Mono: the closest widely available match to Apple's SF.
+         Apple devices use the real SF via -apple-system in the CSS stack, so this
+         only downloads for everyone else. preconnect + swap so text paints
+         immediately in the system fallback and re-flows once the webfont lands. -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500;600&display=swap"
+    />
     <link rel="icon" href="/logo.svg" type="image/svg+xml" />
     <link rel="apple-touch-icon" href="/logo.svg" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-title" content="SSL Billing" />
-    <meta property="og:title" content="SSL Billing — GST Freight Invoicing" />
+    <meta property="og:title" content="SSL Billing - GST Freight Invoicing" />
     <meta property="og:description" content="GST tax invoicing, LR consignment billing and payment tracking." />
     <meta property="og:type" content="website" />
     <meta name="twitter:card" content="summary_large_image" />
@@ -21,7 +31,8 @@
       // Apply the saved theme before first paint so there is no white flash in dark mode.
       (function () {
         try {
-          var t = localStorage.getItem('ssl_theme') || 'system';
+          // Dark is this product's default; 'light' is an explicit opt-in.
+          var t = localStorage.getItem('ssl_theme') || 'dark';
           var dark = t === 'dark' || (t === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches);
           document.documentElement.style.colorScheme = dark ? 'dark' : 'light';
           document.addEventListener('DOMContentLoaded', function () {

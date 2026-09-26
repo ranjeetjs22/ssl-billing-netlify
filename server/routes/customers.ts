@@ -451,6 +451,10 @@ async function buildCustomerStatement(custId: string, query: Record<string, any>
       type: 'payment',
       particulars: `Payment Received (${p.method || 'Bank Transfer'}${refStr}${invStr})`,
       reference_no: p.reference,
+      // ids so the statement can offer a delete on the exact receipt
+      payment_id: p.id,
+      invoice_id: p.invoice_id,
+      method: p.method,
       debit: 0,
       credit: pAmt,
     });

@@ -58,12 +58,12 @@ export const PaymentList: React.FC<PaymentListProps> = ({ onNewPayment, companyS
     {
       key: 'customer',
       header: 'Customer',
-      cell: (p) => <span className="font-semibold text-ink truncate block max-w-[220px]">{p.customer_name || '—'}</span>,
+      cell: (p) => <span className="font-semibold text-ink truncate block max-w-[220px]">{p.customer_name || '-'}</span>,
     },
     {
       key: 'invoice',
       header: 'Invoice',
-      cell: (p) => <span className="font-mono font-bold text-accent-ink">{p.invoice_no || '—'}</span>,
+      cell: (p) => <span className="font-mono font-bold text-accent-ink">{p.invoice_no || '-'}</span>,
     },
     {
       key: 'method',
@@ -75,7 +75,7 @@ export const PaymentList: React.FC<PaymentListProps> = ({ onNewPayment, companyS
       key: 'reference',
       header: 'Reference',
       hideBelow: 'lg',
-      cell: (p) => <span className="font-mono text-xs text-ink-faint truncate block max-w-[150px]">{p.reference || '—'}</span>,
+      cell: (p) => <span className="font-mono text-xs text-ink-faint truncate block max-w-[150px]">{p.reference || '-'}</span>,
     },
     {
       key: 'amount',
@@ -99,8 +99,8 @@ export const PaymentList: React.FC<PaymentListProps> = ({ onNewPayment, companyS
     <div className="space-y-2">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <div className="font-semibold text-ink truncate">{p.customer_name || '—'}</div>
-          <div className="font-mono text-xs text-accent-ink">{p.invoice_no || '—'}</div>
+          <div className="font-semibold text-ink truncate">{p.customer_name || '-'}</div>
+          <div className="font-mono text-xs text-accent-ink">{p.invoice_no || '-'}</div>
         </div>
         <span className="font-mono font-bold text-positive-ink text-base shrink-0">+₹{formatINR(p.amount)}</span>
       </div>
@@ -164,7 +164,7 @@ export const PaymentList: React.FC<PaymentListProps> = ({ onNewPayment, companyS
                   search ? (
                     <Button variant="secondary" onClick={() => setSearchInput('')}>Clear search</Button>
                   ) : (
-                    <Button variant="success" icon={<Plus className="w-4 h-4" />} onClick={onNewPayment}>Record Payment</Button>
+                    <Button variant="success" icon={<Plus className="w-4 h-4" />} onClick={onNewPayment}>Record payment</Button>
                   )
                 }
               />

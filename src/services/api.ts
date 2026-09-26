@@ -12,6 +12,32 @@ export function removeToken() {
   localStorage.removeItem('ssl_token');
 }
 
+/**
+ * Clear every cache between the user and the database, then reload.
+ *
+ * Three layers can hold stale data: the server's read cache for settings and
+ * users, the browser's HTTP cache, and the Cache Storage API. The sign-in
+ * token, theme and sidebar preference are kept, so this is safe to press.
+ */
+export async function hardRefresh(): Promise<void> {
+  try { await apiRequest('/admin/clear-cache', { method: 'POST' }); } catch { /* not fatal */ }
+  try {
+    if ('caches' in window) {
+      const keys = await caches.keys();
+      await Promise.all(keys.map(k => caches.delete(k)));
+    }
+  } catch { /* storage may be blocked */ }
+  try {
+    const regs = await navigator.serviceWorker?.getRegistrations?.();
+    await Promise.all((regs || []).map(r => r.unregister()));
+  } catch { /* no service worker */ }
+  // A cache-busting query on the document URL defeats a cached index.html,
+  // so the page comes back with the newest bundle as well as fresh data.
+  const url = new URL(window.location.href);
+  url.searchParams.set('_r', String(Date.now()));
+  window.location.replace(url.toString());
+}
+
 export async function apiRequest<T = any>(
   endpoint: string,
   options: RequestInit = {}
@@ -30,6 +56,8 @@ export async function apiRequest<T = any>(
   }
 
   const response = await fetch(`${API_BASE}${endpoint}`, {
+    // Never let the browser answer an API call from its HTTP cache.
+    cache: 'no-store',
     ...options,
     headers,
   });
