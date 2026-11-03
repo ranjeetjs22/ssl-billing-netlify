@@ -6,7 +6,7 @@ import { apiRequest } from '../services/api.js';
 import { Invoice, BankAccount } from '../types.js';
 import { formatINR } from '../utils/format.js';
 import {
-  Modal, Button, Field, Input, Select, FormError, cx,
+  Modal, Button, Field, Input, Select, Segmented, FormError, cx,
 } from './ui.js';
 
 interface PaymentModalProps {
@@ -301,25 +301,20 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
         </div>
       }
     >
-      <form id="payment-form" onSubmit={handleSave} className="space-y-5">
+      <form id="payment-form" onSubmit={handleSave} className="space-y-4">
         {error && <FormError message={error} />}
 
-        <div role="radiogroup" aria-label="Payment against"
-          className="inline-flex p-0.5 rounded-control bg-surface-sunken border border-line">
-          {([['single', 'One invoice'], ['multi', 'Multiple invoices']] as const).map(([v, label]) => (
-            <button key={v} type="button" role="radio" aria-checked={mode === v}
-              onClick={() => {
-                setMode(v);
-                setError(null);
-                // Start the multi view on the customer of the invoice already picked
-                if (v === 'multi' && !bulkCustomerId && curInvoice?.customer_id) pickBulkCustomer(curInvoice.customer_id);
-              }}
-              className={cx('px-3 min-h-[36px] rounded-[6px] text-[12.5px] whitespace-nowrap cursor-pointer transition-colors',
-                mode === v ? 'bg-surface-muted text-ink font-medium' : 'text-ink-faint hover:text-ink')}>
-              {label}
-            </button>
-          ))}
-        </div>
+        <Segmented<'single' | 'multi'>
+          label="Payment against"
+          options={[{ value: 'single', label: 'One invoice' }, { value: 'multi', label: 'Multiple invoices' }]}
+          value={mode}
+          onChange={(v) => {
+            setMode(v);
+            setError(null);
+            // Start the multi view on the customer of the invoice already picked
+            if (v === 'multi' && !bulkCustomerId && curInvoice?.customer_id) pickBulkCustomer(curInvoice.customer_id);
+          }}
+        />
 
         {mode === 'multi' && (
           <section className="space-y-3">
@@ -336,18 +331,18 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
 
             {bulkCustomerId && (
               <>
-                <div className="panel p-4 space-y-2">
-                  <label htmlFor="bulk-total" className="label-micro block">Total amount received</label>
+                <div className="panel p-3 sm:p-4 space-y-2">
+                  <label htmlFor="bulk-total" className="text-xs font-medium text-ink-soft block">Total amount received</label>
                   <div className="flex flex-col sm:flex-row gap-2">
                     <div className="relative flex-1">
-                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-faint text-lg leading-none pointer-events-none">₹</span>
+                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-faint text-base leading-none pointer-events-none">₹</span>
                       <input
                         id="bulk-total"
                         type="number" step="any" min="0" inputMode="decimal"
                         value={bulkTotal || ''}
                         onChange={(e) => { const v = parseFloat(e.target.value) || 0; setBulkTotal(v); autoAllocate(v); }}
                         placeholder="0.00"
-                        className="w-full bg-surface-sunken border border-line rounded-control pl-8 pr-3 py-2.5 numeral text-[1.2rem] text-ink min-h-[48px]
+                        className="w-full bg-surface border border-line rounded-control pl-7 pr-3 h-11 sm:h-10 numeral text-lg text-ink
                                    hover:border-line-strong focus:border-accent focus:outline-none focus:ring-focus"
                       />
                     </div>
@@ -358,7 +353,7 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
                       Pay all due
                     </Button>
                   </div>
-                  <p className="text-[11px] text-ink-faint">
+                  <p className="text-xs text-ink-faint">
                     Applied to the oldest bills first. Tick bills or edit the amounts below to change it.
                     {bulkTotal > 0 && Math.abs(bulkTotal - allocatedTotal) > 0.01 && (
                       <span className="text-warning-ink">
@@ -374,14 +369,14 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
                     const on = (alloc[inv.id] || 0) > 0;
                     const over = (alloc[inv.id] || 0) > dueOf(inv) + 0.5;
                     return (
-                      <div key={inv.id} className={cx('flex items-center gap-3 px-3 py-2', on && 'bg-accent-soft/50')}>
+                      <div key={inv.id} className={cx('flex items-center gap-3 px-3 py-2', on && 'bg-accent-soft')}>
                         <input type="checkbox" checked={on} onChange={() => toggleBulkInvoice(inv)}
                           aria-label={`Include ${inv.invoice_no}`}
                           className="w-4 h-4 accent-[var(--color-accent-strong)] shrink-0 cursor-pointer" />
                         <span className="min-w-0 flex-1">
-                          <span className="block font-mono text-[12px] text-accent-ink truncate">{inv.invoice_no}</span>
-                          <span className="block text-[11px] text-ink-faint truncate">
-                            {inv.invoice_date}{inv.lr_no ? ` · LR ${inv.lr_no}` : ''} · ₹{formatINR(dueOf(inv))} due
+                          <span className="block font-mono text-[13px] text-ink truncate">{inv.invoice_no}</span>
+                          <span className="block text-xs text-ink-faint truncate">
+                            <span className="tabular-nums">{inv.invoice_date}</span>{inv.lr_no ? ` · ${/^lr/i.test(String(inv.lr_no)) ? inv.lr_no : `LR ${inv.lr_no}`}` : ''} · <span className="tabular-nums">₹{formatINR(dueOf(inv))}</span> due
                           </span>
                         </span>
                         <input
@@ -393,16 +388,16 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
                             setAlloc(prev => { const n = { ...prev }; if (v > 0) n[inv.id] = v; else delete n[inv.id]; return n; });
                           }}
                           placeholder="0"
-                          className={cx('w-28 text-right numeral bg-surface border rounded-control px-2 py-1.5 min-h-[38px] text-[13px] text-ink focus:outline-none focus:border-accent',
+                          className={cx('w-24 sm:w-28 shrink-0 text-right tabular-nums font-medium bg-surface border rounded-control px-2 h-9 text-sm text-ink focus:outline-none focus:border-accent focus:ring-focus',
                             over ? 'border-danger' : 'border-line')}
                         />
                       </div>
                     );
                   })}
                 </div>
-                <div className="flex items-center justify-between text-[12.5px]">
+                <div className="flex items-center justify-between text-sm">
                   <span className="text-ink-faint">{bulkCount} of {bulkInvoices.length} bills selected</span>
-                  <span className="text-ink">Total <span className="numeral font-semibold">₹{formatINR(allocatedTotal)}</span></span>
+                  <span className="text-ink-faint">Total <span className="tabular-nums font-semibold text-ink">₹{formatINR(allocatedTotal)}</span></span>
                 </div>
               </>
             )}
@@ -413,8 +408,8 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
         {/* ---------------------------------------------- 1. which invoice */}
         <section>
           <div className="flex items-center justify-between gap-3 mb-2">
-            <h3 className="label-micro">Invoice</h3>
-            <span className="text-[11px] text-ink-faint">
+            <h3 className="text-sm font-semibold text-ink">Invoice</h3>
+            <span className="text-xs text-ink-faint tabular-nums">
               {filtered.length} pending
             </span>
           </div>
@@ -461,17 +456,17 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
                 >
                   <span className={cx(
                     'w-4 h-4 rounded-full border shrink-0 flex items-center justify-center',
-                    active ? 'border-accent bg-accent text-on-accent' : 'border-line-strong'
+                    active ? 'border-accent-strong bg-accent-strong text-on-accent' : 'border-line-strong'
                   )} aria-hidden="true">
                     {active && <Check className="w-2.5 h-2.5" strokeWidth={3} />}
                   </span>
                   <span className="min-w-0 flex-1">
-                    <span className="block font-mono text-[12px] text-accent-ink truncate">{inv.invoice_no}</span>
-                    <span className="block text-[13px] text-ink truncate">{inv.buyer?.name || 'Customer'}</span>
+                    <span className="block font-mono text-[13px] text-ink truncate">{inv.invoice_no}</span>
+                    <span className="block text-xs text-ink-faint truncate">{inv.buyer?.name || 'Customer'}</span>
                   </span>
                   <span className="text-right shrink-0">
-                    <span className="block numeral text-[13px] text-ink">₹{formatINR(bal)}</span>
-                    <span className="block text-[11px] text-ink-faint">due</span>
+                    <span className="block tabular-nums font-medium text-sm text-ink">₹{formatINR(bal)}</span>
+                    <span className="block text-xs text-ink-faint">due</span>
                   </span>
                 </button>
               );
@@ -482,31 +477,31 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
         {/* ---------------------------------------------- 2. how much */}
         {curInvoice && (
           <section>
-            <h3 className="label-micro mb-2">Amount</h3>
+            <h3 className="text-sm font-semibold text-ink mb-2">Amount</h3>
 
-            <div className="panel p-4">
+            <div className="panel p-3 sm:p-4">
               {/* where this invoice stands, and what this payment does to it */}
-              <div className="flex items-baseline justify-between gap-3 text-[11px] text-ink-faint mb-1.5">
+              <div className="flex items-baseline justify-between gap-3 text-xs text-ink-faint tabular-nums mb-1.5">
                 <span>Invoice ₹{formatINR(curTotal)}</span>
                 <span>Already paid ₹{formatINR(curPaid)}</span>
               </div>
               <div className="h-1.5 rounded-full bg-surface-sunken overflow-hidden flex" aria-hidden="true">
-                <div className="h-full bg-positive/70 transition-[width] duration-300" style={{ width: `${paidPct}%` }} />
+                <div className="h-full bg-positive transition-[width] duration-300" style={{ width: `${paidPct}%` }} />
                 <div
                   className="h-full transition-[width] duration-300"
                   style={{ width: `${thisPct}%`, background: 'var(--color-accent)' }}
                 />
               </div>
-              <div className="flex items-baseline justify-between gap-3 text-[11px] mt-1.5">
+              <div className="flex items-baseline justify-between gap-3 text-xs tabular-nums mt-1.5">
                 <span className="text-accent-ink">This payment ₹{formatINR(Number(amount) || 0)}</span>
                 <span className="text-ink-faint">Remaining ₹{formatINR(remaining)}</span>
               </div>
 
-              <div className="flex flex-col sm:flex-row sm:items-end gap-3 mt-4">
+              <div className="flex flex-col sm:flex-row sm:items-center gap-2 mt-3">
                 <div className="flex-1 min-w-0">
                   <label htmlFor="pay-amount" className="sr-only">Amount received</label>
                   <div className="relative">
-                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-faint text-lg leading-none pointer-events-none">₹</span>
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-faint text-base leading-none pointer-events-none">₹</span>
                     <input
                       id="pay-amount"
                       type="number"
@@ -517,8 +512,8 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
                       value={amount || ''}
                       onChange={(e) => setAmount(parseFloat(e.target.value) || 0)}
                       placeholder="0.00"
-                      className="w-full bg-surface-sunken border border-line rounded-control pl-8 pr-3 py-2.5
-                                 numeral text-[1.35rem] text-ink min-h-[52px]
+                      className="w-full bg-surface border border-line rounded-control pl-7 pr-3 h-11 sm:h-10
+                                 numeral text-xl text-ink
                                  transition-[border-color,box-shadow] duration-[var(--duration-fast)]
                                  hover:border-line-strong focus:border-accent focus:outline-none focus:ring-focus"
                     />
@@ -536,7 +531,7 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
                       type="button"
                       onClick={() => setAmount(q.value)}
                       className={cx(
-                        'px-3 min-h-[38px] rounded-control border text-[12.5px] cursor-pointer',
+                        'flex-1 sm:flex-none px-3 h-10 sm:h-9 rounded-control border text-sm cursor-pointer',
                         'transition-colors duration-[140ms]',
                         Math.abs((Number(amount) || 0) - q.value) < 0.01
                           ? 'border-accent-line bg-accent-soft text-accent-ink font-medium'
@@ -556,33 +551,15 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
 
         {/* ---------------------------------------------- 3. how it was paid */}
         <section>
-          <h3 className="label-micro mb-2">Method and date</h3>
+          <h3 className="text-sm font-semibold text-ink mb-2">Method and date</h3>
 
-          <div
-            role="radiogroup"
-            aria-label="Payment method"
-            className="flex items-center gap-1 p-1 rounded-control bg-surface-sunken border border-line overflow-x-auto scrollbar-none"
-          >
-            {methods.map((m) => (
-              <button
-                key={m.value}
-                type="button"
-                role="radio"
-                aria-checked={method === m.value}
-                title={m.label}
-                onClick={() => setMethod(m.value)}
-                className={cx(
-                  'flex-1 min-w-[68px] min-h-[36px] px-3 rounded-[6px] text-[12.5px] whitespace-nowrap cursor-pointer',
-                  'transition-[background-color,color] duration-[140ms]',
-                  method === m.value
-                    ? 'bg-surface-muted text-ink font-medium'
-                    : 'text-ink-faint hover:text-ink'
-                )}
-              >
-                {m.short}
-              </button>
-            ))}
-          </div>
+          <Segmented
+            label="Payment method"
+            options={methods.map((m) => ({ value: m.value, label: <span title={m.label}>{m.short}</span> }))}
+            value={method}
+            onChange={setMethod}
+            className="w-full sm:w-auto [&>button]:flex-1 [&>button]:justify-center sm:[&>button]:flex-none"
+          />
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-3">
             <Field label="Receipt date" htmlFor="pay-date" required>
@@ -621,7 +598,7 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
             type="button"
             onClick={() => setShowDetails(v => !v)}
             aria-expanded={showDetails}
-            className="flex items-center gap-1.5 text-[12.5px] text-ink-faint hover:text-ink
+            className="flex items-center gap-1.5 text-sm text-ink-faint hover:text-ink
                        cursor-pointer transition-colors duration-[140ms]"
           >
             <ChevronDown

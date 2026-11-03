@@ -1,37 +1,80 @@
 import React, { useState, useEffect } from 'react';
-import { 
-  X,
-  Building2,
-  MapPin,
-  Phone,
-  Mail,
+import {
   Printer,
   Plus,
-  FileText,
-  CreditCard,
-  Calendar,
-  ArrowUpRight,
   Share2,
   Copy,
   Check,
-  Download,
-  AlertCircle,
-  TrendingDown,
-  TrendingUp,
-  Receipt,
-  Truck,
-  DollarSign,
+  ArrowUpRight,
   Trash2,
-  AlertTriangle,
-  Loader2,
-  Pencil
+  Pencil,
 } from 'lucide-react';
 import { Customer, Invoice, Payment, CompanySettings, BankAccount, CustomerStatementResponse, CustomerLedgerEntry } from '../types.js';
 import { formatINR } from '../utils/format.js';
 import { printStatementPDF, printInvoicePDF } from '../utils/pdf.js';
 import { apiRequest } from '../services/api.js';
 import { DeleteInvoiceModal } from './DeleteInvoiceModal.js';
-import { useBackLayer } from '../utils/backNav.js';
+import {
+  Modal, Button, IconButton, Badge, StatusBadge, Segmented, MetricStrip, Metric, Input, Select, FormError,
+  EmptyState, SkeletonRows, cx,
+} from './ui.js';
+
+const inr = (n: number | undefined | null) => `₹${formatINR(n)}`;
+
+const PERIOD_OPTIONS: { value: string; label: string }[] = [
+  { value: 'current_month', label: 'This month' },
+  { value: 'prev_month', label: 'Last month' },
+  { value: 'last_3_months', label: 'Last 3 months' },
+  { value: 'fy', label: 'This FY' },
+  { value: 'all', label: 'All time' },
+  { value: 'custom', label: 'Custom' },
+];
+
+/** Phone action: icon over a short label, five across under the header. */
+const PhoneAction: React.FC<{
+  icon: React.ReactNode;
+  label: string;
+  title: string;
+  onClick: () => void;
+  primary?: boolean;
+}> = ({ icon, label, title, onClick, primary }) => (
+  <button
+    type="button"
+    onClick={onClick}
+    title={title}
+    className={cx(
+      'flex flex-col items-center justify-center gap-1 h-14 rounded-control border text-[11px] font-medium cursor-pointer',
+      'transition-colors duration-[var(--duration-fast)] [&_svg]:w-4 [&_svg]:h-4',
+      primary
+        ? 'bg-accent-strong border-accent-strong text-on-accent hover:bg-accent-strong-hover'
+        : 'bg-surface border-line text-ink hover:bg-surface-muted'
+    )}
+  >
+    <span aria-hidden="true">{icon}</span>
+    <span className="leading-none">{label}</span>
+  </button>
+);
+
+/** Label over value, for the customer info tab. */
+const KV: React.FC<{ label: string; value: React.ReactNode; mono?: boolean; wide?: boolean }> = ({ label, value, mono, wide }) => (
+  <div className={cx('min-w-0', wide && 'sm:col-span-2')}>
+    <dt className="text-xs text-ink-faint">{label}</dt>
+    <dd className={cx('mt-0.5 text-sm text-ink break-words', mono && 'font-mono text-[13px]')}>{value || '-'}</dd>
+  </div>
+);
+
+/** Small "label  figure" pair used in tab toolbars. */
+const Total: React.FC<{ label: string; value: React.ReactNode; className?: string }> = ({ label, value, className }) => (
+  <span className="text-xs text-ink-faint whitespace-nowrap">
+    {label} <span className={cx('tabular-nums font-medium text-sm', className || 'text-ink')}>{value}</span>
+  </span>
+);
+
+const th = 'h-8 px-2.5 first:pl-4 last:pr-3 text-xs font-medium text-ink-faint whitespace-nowrap';
+const td = 'py-2 px-2.5 first:pl-4 last:pr-3 align-middle';
+
+/** LR numbers are stored either bare ("4410") or prefixed ("LR-4410"). */
+const lrText = (lr?: string | null) => (lr ? (/^lr/i.test(String(lr)) ? String(lr) : `LR ${lr}`) : '');
 
 interface CustomerDetailModalProps {
   customer: Customer;
@@ -46,6 +89,7 @@ interface CustomerDetailModalProps {
   onRefresh?: () => void;
 }
 
+
 export const CustomerDetailModal: React.FC<CustomerDetailModalProps> = ({
   customer: initialCustomer,
   onClose,
@@ -55,8 +99,6 @@ export const CustomerDetailModal: React.FC<CustomerDetailModalProps> = ({
   companySettings,
   onRefresh,
 }) => {
-  // Phone Back button closes this instead of leaving the app
-  useBackLayer(onClose);
   const [customer, setCustomer] = useState<Customer>(initialCustomer);
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [payments, setPayments] = useState<Payment[]>([]);
@@ -284,732 +326,651 @@ export const CustomerDetailModal: React.FC<CustomerDetailModalProps> = ({
     setTimeout(() => setCopied(false), 2500);
   };
 
+
+  const printStatement = () => printStatementPDF(customer, ledger, summary, companySettings, periodLabel, invoices, defaultBank);
+  const newBill = () => {
+    onClose();
+    onNewInvoice(customer);
+  };
+  const askDeletePayment = (p: { id: string; amount: number; date: string; label: string }) => {
+    setDeleteError(null);
+    setPaymentToDelete(p);
+  };
+  const closing = Number(summary.closing_balance || 0);
+  const location = [customer.city, customer.state].filter(Boolean).join(', ') || 'Gujarat';
+
+  const tabs = [
+    { key: 'invoices', label: 'Invoices', count: invoices.length },
+    { key: 'ledger', label: 'Ledger', count: ledger.length },
+    { key: 'payments', label: 'Payments', count: payments.length },
+    { key: 'profile', label: 'Customer info' },
+  ] as const;
+
+  const invFilterOptions = ([
+    ['all', 'All'], ['unpaid', 'Unpaid'], ['overdue', 'Overdue'], ['paid', 'Paid'],
+  ] as const).map(([value, label]) => ({ value, label, count: countBy(value) }));
+
+  const deleteBtn = (onClick: () => void, aria: string) => (
+    <IconButton
+      label={aria}
+      title="Delete this receipt"
+      onClick={onClick}
+      className="text-ink-faint hover:text-danger-ink hover:bg-danger-soft"
+    >
+      <Trash2 />
+    </IconButton>
+  );
+
   return (
-    <div className="fixed inset-0 bg-scrim flex items-center justify-center p-3 sm:p-4 z-50 overflow-y-auto">
-      <div className="sheet border border-line rounded-overlay max-w-5xl w-full max-h-[94vh] flex flex-col shadow-overlay text-ink my-auto overflow-hidden">
-        {/* Header */}
-        <div className="p-4 sm:p-5 border-b border-line flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-surface-muted">
-          <div className="flex items-center gap-3">
-            <div className="w-11 h-11 rounded-card bg-accent-soft border border-accent-line flex items-center justify-center text-accent-ink font-bold shrink-0">
-              <Building2 className="w-5 h-5" />
-            </div>
-            <div>
-              <div className="flex items-center gap-2 flex-wrap">
-                <h2 className="text-base sm:text-lg font-bold text-ink">{customer.name}</h2>
-                <span className="text-[11px] bg-surface-sunken/80 text-ink-soft font-semibold px-2 py-0.5 rounded-md">
-                  {customer.payment_terms || 'Net 15 Days'}
-                </span>
-                {customer.credit_limit ? (
-                  <span className="text-[11px] bg-info-soft text-info-ink border border-info-line font-semibold px-2 py-0.5 rounded-md">
-                    Limit: ₹{formatINR(customer.credit_limit)}
-                  </span>
-                ) : null}
-              </div>
-              <div className="text-[11px] text-ink-faint flex items-center gap-3 mt-1 flex-wrap font-sans">
-                <span>GSTIN: <strong className="text-ink font-mono">{customer.gstin || 'Unregistered'}</strong></span>
-                <span>·</span>
-                <span>Location: <strong className="text-ink-soft">{[customer.city, customer.state].filter(Boolean).join(', ') || 'Gujarat'}</strong></span>
-                {customer.phone && (
-                  <>
-                    <span>·</span>
-                    <span className="flex items-center gap-1">
-                      <Phone className="w-3 h-3 text-ink-faint" />
-                      <span>{customer.phone}</span>
-                    </span>
-                  </>
-                )}
-              </div>
-            </div>
-          </div>
-
-          {/* Action Buttons */}
-          <div className="flex items-center gap-2 flex-wrap">
-            <button
-              onClick={() => printStatementPDF(customer, ledger, summary, companySettings, periodLabel, invoices, defaultBank)}
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-accent-strong hover:bg-accent-strong-hover text-on-accent rounded-card text-xs font-semibold transition cursor-pointer"
-              title="Download official PDF statement"
-            >
-              <Printer className="w-3.5 h-3.5" />
-              <span>Print Statement PDF</span>
-            </button>
-
-            <button
-              onClick={handleShareWhatsApp}
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-surface text-positive-ink border border-positive-line hover:bg-positive-soft hover:border-positive rounded-card text-xs font-semibold transition cursor-pointer"
-              title="Share statement breakdown directly via WhatsApp"
-            >
-              <Share2 className="w-3.5 h-3.5" />
-              <span>Share WhatsApp</span>
-            </button>
-
-            <button
-              onClick={handleCopyText}
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-surface-sunken hover:bg-surface-sunken text-ink-soft border border-line rounded-card text-xs font-medium transition cursor-pointer"
-              title="Copy statement summary to clipboard"
-            >
-              {copied ? <Check className="w-3.5 h-3.5 text-positive-ink" /> : <Copy className="w-3.5 h-3.5" />}
-              <span>{copied ? 'Copied!' : 'Copy Summary'}</span>
-            </button>
-
+    <>
+      <Modal
+        onClose={onClose}
+        title={customer.name}
+        subtitle={periodLabel}
+        size="xl"
+        headerActions={
+          <div className="hidden md:flex items-center gap-1.5 mr-1">
+            <Button size="sm" variant="primary" icon={<Printer />} onClick={printStatement} title="Download official PDF statement">
+              Print statement
+            </Button>
+            <Button size="sm" icon={<Share2 />} onClick={handleShareWhatsApp} title="Share statement breakdown directly via WhatsApp">
+              WhatsApp
+            </Button>
+            <Button size="sm" icon={copied ? <Check className="text-positive-ink" /> : <Copy />} onClick={handleCopyText}
+              title="Copy statement summary to clipboard">
+              {copied ? 'Copied' : 'Copy'}
+            </Button>
             {onEditCustomer && (
-              <button
-                onClick={() => onEditCustomer(customer)}
-                className="flex items-center gap-1.5 px-3 py-1.5 bg-surface text-ink border border-line hover:border-line-strong hover:bg-surface-muted rounded-control text-xs font-medium transition cursor-pointer"
-                title="Edit this customer's details"
-              >
-                <Pencil className="w-3.5 h-3.5" />
-                <span>Edit Details</span>
-              </button>
+              <Button size="sm" icon={<Pencil />} onClick={() => onEditCustomer(customer)} title="Edit this customer's details">
+                Edit
+              </Button>
             )}
-
-            <button
-              onClick={() => {
-                onClose();
-                onNewInvoice(customer);
-              }}
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-surface text-ink border border-line hover:border-line-strong hover:bg-surface-muted rounded-control text-xs font-medium transition cursor-pointer"
-            >
-              <Plus className="w-3.5 h-3.5" />
-              <span>New Bill</span>
-            </button>
-
-            <button onClick={onClose} className="p-1.5 text-ink-faint hover:text-ink hover:bg-surface-sunken rounded-control transition ml-1 cursor-pointer">
-              <X className="w-5 h-5" />
-            </button>
+            <Button size="sm" icon={<Plus />} onClick={newBill} title="Raise a new bill for this customer">
+              New bill
+            </Button>
+            <span className="w-px h-5 bg-line ml-1" aria-hidden="true" />
           </div>
-        </div>
+        }
+        footer={
+          <div className="flex items-center justify-between gap-3">
+            <p className="text-xs text-ink-faint min-w-0 truncate">
+              <span className="hidden sm:inline">{periodLabel} · </span>
+              Outstanding{' '}
+              <span className={cx('tabular-nums font-medium text-sm', closing > 0.01 ? 'text-warning-ink' : 'text-ink')}>
+                {inr(summary.closing_balance)}
+              </span>
+            </p>
+            <Button variant="ghost" onClick={onClose}>Close</Button>
+          </div>
+        }
+      >
+        <div className="space-y-4">
+          {/* Who this is */}
+          <div className="space-y-3">
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 text-xs text-ink-faint">
+              <span>
+                GSTIN <span className="font-mono text-[13px] text-ink">{customer.gstin || 'Unregistered'}</span>
+              </span>
+              <span className="text-ink-soft">{location}</span>
+              {customer.phone && (
+                <>
+                  <a href={`tel:${customer.phone}`} className="text-ink-soft tabular-nums hover:text-accent-ink">{customer.phone}</a>
+                </>
+              )}
+              <span>
+                Total outstanding <span className="tabular-nums font-medium text-sm text-ink">{inr(summary.total_overall_outstanding)}</span>
+              </span>
+              <span className="flex items-center gap-1.5">
+                <Badge>{customer.payment_terms || 'Net 15 Days'}</Badge>
+                {customer.credit_limit ? <Badge>Limit {inr(customer.credit_limit)}</Badge> : null}
+              </span>
+            </div>
 
-        {/* Period Filter Toolbar */}
-        <div className="bg-surface-sunken border-b border-line px-4 py-2.5 flex flex-col md:flex-row md:items-center justify-between gap-2.5 text-xs">
-          <div className="flex items-center gap-2 flex-wrap">
-            <span className="font-semibold text-ink-soft flex items-center gap-1 text-[11px]">
-              <Calendar className="w-3.5 h-3.5 text-ink-faint" />
-              <span>Statement Period:</span>
-            </span>
-
-            <div className="inline-flex rounded-control bg-surface p-0.5 border border-line">
-              {[
-                { key: 'current_month', label: 'This Month' },
-                { key: 'prev_month', label: 'Last Month' },
-                { key: 'last_3_months', label: 'Last 3 Months' },
-                { key: 'fy', label: 'Current FY' },
-                { key: 'all', label: 'All Time' },
-                { key: 'custom', label: 'Custom Range' },
-              ].map(opt => (
-                <button
-                  key={opt.key}
-                  onClick={() => setPeriodFilterType(opt.key)}
-                  className={`px-2.5 py-1 rounded-md text-[11px] font-medium transition cursor-pointer ${
-                    periodFilterType === opt.key
-                      ? 'bg-accent-soft text-accent-ink border border-accent-line font-semibold'
-                      : 'text-ink-soft hover:text-ink hover:bg-surface-muted'
-                  }`}
-                >
-                  {opt.label}
-                </button>
-              ))}
+            {/* Phone and small tablet: the header actions live here */}
+            <div className={cx('md:hidden grid gap-1.5', onEditCustomer ? 'grid-cols-5' : 'grid-cols-4')}>
+              <PhoneAction primary icon={<Printer />} label="Print" title="Download official PDF statement" onClick={printStatement} />
+              <PhoneAction icon={<Share2 />} label="WhatsApp" title="Share statement on WhatsApp" onClick={handleShareWhatsApp} />
+              <PhoneAction icon={copied ? <Check className="text-positive-ink" /> : <Copy />} label={copied ? 'Copied' : 'Copy'}
+                title="Copy statement summary" onClick={handleCopyText} />
+              {onEditCustomer && (
+                <PhoneAction icon={<Pencil />} label="Edit" title="Edit this customer's details" onClick={() => onEditCustomer(customer)} />
+              )}
+              <PhoneAction icon={<Plus />} label="New bill" title="Raise a new bill" onClick={newBill} />
             </div>
           </div>
 
-          {periodFilterType === 'custom' && (
-            <form onSubmit={handleApplyCustomDates} className="flex items-center gap-2">
-              <input
-                type="date"
-                value={customStartDate}
-                onChange={e => setCustomStartDate(e.target.value)}
-                className="bg-surface border border-line rounded-control px-2 py-1 text-xs text-ink"
-                required
+          {/* Statement period */}
+          <div className="flex flex-col lg:flex-row lg:items-center gap-2">
+            <Select
+              aria-label="Statement period"
+              value={periodFilterType}
+              onChange={(e) => setPeriodFilterType(e.target.value)}
+              className="sm:hidden"
+            >
+              {PERIOD_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+            </Select>
+            <div className="hidden sm:block">
+              <Segmented
+                label="Statement period"
+                options={PERIOD_OPTIONS}
+                value={periodFilterType}
+                onChange={setPeriodFilterType}
               />
-              <span className="text-ink-faint">to</span>
-              <input
-                type="date"
-                value={customEndDate}
-                onChange={e => setCustomEndDate(e.target.value)}
-                className="bg-surface border border-line rounded-control px-2 py-1 text-xs text-ink"
-                required
-              />
-              <button
-                type="submit"
-                className="px-2.5 py-1 bg-surface text-ink border border-line hover:border-line-strong hover:bg-surface-muted rounded-control text-xs font-medium cursor-pointer"
-              >
-                Apply
-              </button>
-            </form>
+            </div>
+            {periodFilterType === 'custom' && (
+              <form onSubmit={handleApplyCustomDates} className="flex items-center gap-1.5">
+                <Input type="date" value={customStartDate} onChange={e => setCustomStartDate(e.target.value)}
+                  required aria-label="From date" className="w-auto min-w-0 flex-1 sm:flex-none sm:w-[150px] sm:h-8" />
+                <span className="text-xs text-ink-faint">to</span>
+                <Input type="date" value={customEndDate} onChange={e => setCustomEndDate(e.target.value)}
+                  required aria-label="To date" className="w-auto min-w-0 flex-1 sm:flex-none sm:w-[150px] sm:h-8" />
+                <Button type="submit" size="sm">Apply</Button>
+              </form>
+            )}
+          </div>
+
+          {/* Period summary */}
+          <MetricStrip>
+            <Metric label="Opening balance" value={inr(summary.opening_balance)} compare="Before period start" />
+            <Metric
+              label="Invoiced"
+              value={inr(summary.period_invoiced)}
+              compare={`${invoices.length} bill${invoices.length === 1 ? '' : 's'} · GST ${inr(summary.period_gst)}`}
+            />
+            <Metric
+              label="Received"
+              tone="positive"
+              value={inr(summary.period_received)}
+              compare={`${payments.length} receipt${payments.length === 1 ? '' : 's'}`}
+            />
+            <Metric
+              label="Closing balance"
+              tone={closing > 0.01 ? 'warning' : 'positive'}
+              value={inr(summary.closing_balance)}
+              compare={summary.overdue_amount > 0
+                ? <span className="text-danger-ink">{inr(summary.overdue_amount)} overdue</span>
+                : 'Net outstanding for the period'}
+            />
+          </MetricStrip>
+
+          {/* Views */}
+          <div role="tablist" aria-label="Statement views"
+            className="flex gap-5 border-b border-line overflow-x-auto scrollbar-none">
+            {tabs.map((t) => {
+              const on = activeTab === t.key;
+              return (
+                <button
+                  key={t.key}
+                  role="tab"
+                  type="button"
+                  aria-selected={on}
+                  onClick={() => setActiveTab(t.key)}
+                  className={cx(
+                    'h-9 -mb-px border-b-2 text-sm whitespace-nowrap cursor-pointer inline-flex items-center gap-1.5',
+                    'transition-colors duration-[var(--duration-fast)]',
+                    on ? 'border-ink text-ink font-medium' : 'border-transparent text-ink-faint hover:text-ink'
+                  )}
+                >
+                  {t.key === 'profile' ? <><span className="sm:hidden">Info</span><span className="hidden sm:inline">{t.label}</span></> : t.label}
+                  {'count' in t && <span className="text-xs text-ink-faint tabular-nums">{t.count}</span>}
+                </button>
+              );
+            })}
+          </div>
+
+          {actionMessage && (
+            <div role="status" aria-live="polite"
+              className="px-3 py-2 bg-positive-soft border border-positive-line rounded-control text-positive-ink text-sm flex items-start gap-2">
+              <Check className="w-4 h-4 shrink-0 mt-0.5" aria-hidden="true" />
+              <span>{actionMessage}</span>
+            </div>
           )}
 
-          <div className="text-[11px] font-semibold text-ink-soft bg-surface border border-line px-2.5 py-1 rounded-control">
-            Active Range: <span className="text-accent-ink font-bold">{periodLabel}</span>
-          </div>
-        </div>
-
-        {/* Financial Summary Dashboard Cards */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 bg-surface p-4 border-b border-line">
-          <div className="bg-surface-muted border border-line rounded-card p-3">
-            <span className="text-ink-faint font-medium text-[11px] block">Opening Balance (B/F)</span>
-            <div className="text-base font-bold text-ink font-mono mt-0.5">
-              ₹{formatINR(summary.opening_balance)}
-            </div>
-            <span className="text-[11px] text-ink-faint block mt-0.5">Prior to period start</span>
-          </div>
-
-          <div className="bg-info-soft/50 border border-info-line rounded-card p-3">
-            <div className="flex items-center justify-between">
-              <span className="text-info-ink font-medium text-[11px]">Period Invoiced Sales</span>
-              <span className="text-[11px] font-semibold bg-info-soft text-info-ink px-1.5 py-0.2 rounded">
-                {invoices.length} Bills
-              </span>
-            </div>
-            <div className="text-base font-bold text-info-ink font-mono mt-0.5">
-              ₹{formatINR(summary.period_invoiced)}
-            </div>
-            <span className="text-[11px] text-info-ink/70 block mt-0.5">
-              Tax: ₹{formatINR(summary.period_gst)}
-            </span>
-          </div>
-
-          <div className="bg-positive-soft border border-positive-line rounded-card p-3">
-            <div className="flex items-center justify-between">
-              <span className="text-positive-ink font-medium text-[11px]">Payments Realised</span>
-              <span className="text-[11px] font-semibold bg-positive-soft text-positive-ink px-1.5 py-0.2 rounded">
-                {payments.length} Receipts
-              </span>
-            </div>
-            <div className="text-base font-bold text-positive-ink font-mono mt-0.5">
-              ₹{formatINR(summary.period_received)}
-            </div>
-            <span className="text-[11px] text-positive-ink/70 block mt-0.5">Settled in period</span>
-          </div>
-
-          <div className={`rounded-card p-3 border ${
-            (summary.closing_balance || 0) > 0.01 
-              ? 'bg-accent-soft border-accent-line' 
-              : 'bg-surface-muted border-line'
-          }`}>
-            <span className="text-ink-soft font-semibold text-[11px] block">Net Outstanding Balance</span>
-            <div className={`text-lg font-extrabold font-mono mt-0.5 ${
-              (summary.closing_balance || 0) > 0.01 ? 'text-accent-ink' : 'text-positive-ink'
-            }`}>
-              ₹{formatINR(summary.closing_balance)}
-            </div>
-            <div className="flex items-center justify-between text-[11px] text-ink-faint mt-0.5">
-              <span>Overall: ₹{formatINR(summary.total_overall_outstanding)}</span>
-              {summary.overdue_amount > 0 && (
-                <span className="text-danger-ink font-semibold">Overdue: ₹{formatINR(summary.overdue_amount)}</span>
-              )}
-            </div>
-          </div>
-        </div>
-
-        {/* Tab Selector */}
-        <div className="px-5 pt-3 bg-surface-muted border-b border-line flex gap-6 text-xs font-semibold overflow-x-auto whitespace-nowrap">
-          {[
-            { key: 'invoices', label: `Invoices (${invoices.length})`, icon: FileText },
-            { key: 'ledger', label: `Statement Ledger (${ledger.length})`, icon: Receipt },
-            { key: 'payments', label: `Payment Receipts (${payments.length})`, icon: DollarSign },
-            { key: 'profile', label: 'Customer Info', icon: Building2 },
-          ].map((tab) => {
-            const Icon = tab.icon;
-            return (
-              <button
-                key={tab.key}
-                onClick={() => setActiveTab(tab.key as any)}
-                className={`pb-2.5 transition border-b-2 font-medium flex items-center gap-1.5 cursor-pointer ${
-                  activeTab === tab.key
-                    ? 'border-accent text-accent-ink font-bold'
-                    : 'border-transparent text-ink-faint hover:text-ink'
-                }`}
-              >
-                <Icon className="w-3.5 h-3.5" />
-                <span>{tab.label}</span>
-              </button>
-            );
-          })}
-        </div>
-
-        {/* Tab Viewport */}
-        <div className="flex-1 overflow-y-auto p-4 sm:p-5 text-xs">
           {loading ? (
-            <div className="py-16 text-center text-ink-faint">
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-accent mx-auto"></div>
-              <p className="mt-2 text-xs text-ink-faint">Calculating period ledger & outstanding balance...</p>
+            <div className="panel overflow-hidden" role="status" aria-label="Loading statement">
+              <SkeletonRows rows={4} />
             </div>
           ) : (
             <>
-              {/* TAB 1: Itemized Invoices Breakdown */}
+              {/* Invoices */}
               {activeTab === 'invoices' && (
-                <div className="space-y-3">
-                  <div className="flex flex-wrap items-center gap-1.5">
-                    {([
-                      ['all', 'All'], ['unpaid', 'Unpaid'], ['overdue', 'Overdue'], ['paid', 'Paid'],
-                    ] as const).map(([k, label]) => (
-                      <button key={k} type="button" onClick={() => setInvFilter(k)} aria-pressed={invFilter === k}
-                        className={`px-2.5 py-1 rounded-full text-[11px] font-medium border transition cursor-pointer ${
-                          invFilter === k ? 'bg-accent-soft text-accent-ink border-accent-line font-semibold' : 'border-line text-ink-soft hover:bg-surface-muted'}`}>
-                        {label} ({countBy(k)})
-                      </button>
-                    ))}
-                    {onSelectInvoice && <span className="text-[11px] text-ink-faint ml-1">Tap a bill to open it.</span>}
-                  </div>
-                  <div className="flex items-center justify-between text-ink-faint text-[11px]">
-                    <span>Transport bills for {periodLabel}</span>
-                    <span className="font-semibold text-ink-soft">
-                      Total Invoiced: <strong className="text-ink font-mono">₹{formatINR(summary.period_invoiced)}</strong>
-                    </span>
-                  </div>
-
-                  <div className="bg-surface rounded-card border border-line overflow-hidden">
-                    <div className="overflow-x-auto">
-                      <table className="w-full text-left text-xs">
-                        <thead className="bg-surface-muted text-ink-soft font-semibold text-[11px] border-b border-line">
-                          <tr>
-                            <th className="py-2.5 px-3">Date</th>
-                            <th className="py-2.5 px-3">Invoice No</th>
-                            <th className="py-2.5 px-3">LR / Consignment</th>
-                            <th className="py-2.5 px-3">Route / Vehicle</th>
-                            <th className="py-2.5 px-3 text-right">Taxable (₹)</th>
-                            <th className="py-2.5 px-3 text-right">GST (₹)</th>
-                            <th className="py-2.5 px-3 text-right">Total (₹)</th>
-                            <th className="py-2.5 px-3 text-right">Paid (₹)</th>
-                            <th className="py-2.5 px-3 text-right">Balance Due (₹)</th>
-                            <th className="py-2.5 px-3 text-center">Status</th>
-                            <th className="py-2.5 px-3 text-center">Action</th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-line">
-                          {shownInvoices.length > 0 ? (
-                            shownInvoices.map((inv) => (
-                              <tr key={inv.id}
-                                onClick={onSelectInvoice ? () => onSelectInvoice(inv) : undefined}
-                                className={`hover:bg-surface-muted/80 transition ${onSelectInvoice ? 'cursor-pointer' : ''}`}>
-                                <td className="py-2.5 px-3 text-ink-faint font-mono">{inv.invoice_date}</td>
-                                <td className="py-2.5 px-3 font-mono font-bold text-accent-ink">
-                                  {inv.invoice_no}
-                                </td>
-                                <td className="py-2.5 px-3 text-ink-soft font-mono">
-                                  {inv.lr_no ? `#${inv.lr_no}` : '-'}
-                                </td>
-                                <td className="py-2.5 px-3 text-ink-soft">
-                                  {inv.origin && inv.destination ? (
-                                    <span>{inv.origin} → {inv.destination}</span>
-                                  ) : inv.vehicle_no ? (
-                                    <span className="font-mono">{inv.vehicle_no}</span>
-                                  ) : (
-                                    <span className="text-ink-faint">Logistics Service</span>
-                                  )}
-                                </td>
-                                <td className="py-2.5 px-3 text-right font-mono text-ink-soft">
-                                  ₹{formatINR(inv.taxable_amount || inv.totals?.taxable_amount)}
-                                </td>
-                                <td className="py-2.5 px-3 text-right font-mono text-ink-soft">
-                                  ₹{formatINR(inv.gst_amount || inv.totals?.gst_amount)}
-                                </td>
-                                <td className="py-2.5 px-3 text-right font-mono font-bold text-ink">
-                                  ₹{formatINR(inv.grand_total || inv.totals?.grand_total)}
-                                </td>
-                                <td className="py-2.5 px-3 text-right font-mono text-positive-ink font-semibold">
-                                  ₹{formatINR(inv.paid ?? 0)}
-                                </td>
-                                <td className="py-2.5 px-3 text-right font-mono font-bold text-accent-ink">
-                                  ₹{formatINR(inv.balance ?? inv.grand_total)}
-                                </td>
-                                <td className="py-2.5 px-3 text-center">
-                                  <span className={`inline-block px-2 py-0.5 rounded-full text-[11px] font-semibold ${
-                                    inv.display_status === 'paid' 
-                                      ? 'text-positive-ink bg-positive-soft border border-positive-line' 
-                                      : inv.display_status === 'overdue'
-                                      ? 'text-danger-ink bg-danger-soft border border-danger-line'
-                                      : 'text-accent-ink bg-accent-soft border border-accent-line'
-                                  }`}>
-                                    {inv.display_status || 'issued'}
-                                  </span>
-                                </td>
-                                <td className="py-2.5 px-3 text-center" onClick={(e) => e.stopPropagation()}>
-                                  <div className="flex items-center justify-center gap-1">
-                                    <button
-                                      onClick={() => printInvoicePDF(inv, companySettings, defaultBank)}
-                                      className="p-1 hover:bg-surface-sunken text-ink-soft hover:text-ink rounded transition cursor-pointer"
-                                      title="Print Single Invoice PDF"
-                                    >
-                                      <Printer className="w-3.5 h-3.5" />
-                                    </button>
-                                    <button
-                                      onClick={() => setInvoiceToDelete(inv)}
-                                      className="p-1 hover:bg-danger-soft text-danger hover:text-danger-ink rounded transition cursor-pointer"
-                                      title="Cancel or Delete Invoice"
-                                    >
-                                      <Trash2 className="w-3.5 h-3.5" />
-                                    </button>
-                                  </div>
-                                </td>
-                              </tr>
-                            ))
-                          ) : (
-                            <tr>
-                              <td colSpan={11} className="py-10 text-center text-ink-faint">
-                                {invoices.length === 0
-                                  ? `No invoices for this customer in ${periodLabel}.`
-                                  : 'No invoices match this filter.'}
-                              </td>
-                            </tr>
-                          )}
-                        </tbody>
-                        {invoices.length > 0 && (
-                          <tfoot className="bg-surface-muted font-semibold text-ink border-t border-line">
-                            <tr>
-                              <td colSpan={4} className="py-2.5 px-3 text-right text-[11px] text-ink-faint">
-                                Period Invoices Total:
-                              </td>
-                              <td className="py-2.5 px-3 text-right font-mono">
-                                ₹{formatINR(summary.period_taxable)}
-                              </td>
-                              <td className="py-2.5 px-3 text-right font-mono">
-                                ₹{formatINR(summary.period_gst)}
-                              </td>
-                              <td className="py-2.5 px-3 text-right font-mono font-bold text-ink">
-                                ₹{formatINR(summary.period_invoiced)}
-                              </td>
-                              <td className="py-2.5 px-3 text-right font-mono text-positive-ink">
-                                ₹{formatINR(summary.period_received)}
-                              </td>
-                              <td className="py-2.5 px-3 text-right font-mono font-bold text-accent-ink">
-                                ₹{formatINR(summary.closing_balance)}
-                              </td>
-                              <td colSpan={2}></td>
-                            </tr>
-                          </tfoot>
-                        )}
-                      </table>
+                <div className="space-y-2.5">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <Segmented<typeof invFilter> size="sm" label="Filter invoices" options={invFilterOptions} value={invFilter} onChange={setInvFilter} />
+                    <div className="flex items-center gap-3">
+                      {onSelectInvoice && <span className="hidden lg:inline text-xs text-ink-faint">Click a bill to open it</span>}
+                      <Total label="Invoiced" value={inr(summary.period_invoiced)} />
                     </div>
                   </div>
-                </div>
-              )}
 
-              {activeTab === 'profile' && (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                  {([
-                    ['Contact person', customer.contact_person],
-                    ['Phone', customer.phone],
-                    ['WhatsApp', customer.whatsapp],
-                    ['Email', customer.email],
-                    ['GSTIN', customer.gstin || 'Unregistered'],
-                    ['PAN', customer.pan],
-                    ['Billing address', [customer.address, customer.city, customer.state, customer.pin].filter(Boolean).join(', ')],
-                    ['Shipping address', customer.shipping_address && customer.shipping_address !== customer.address ? customer.shipping_address : 'Same as billing'],
-                    ['Payment terms', customer.payment_terms],
-                    ['Credit days', customer.credit_days != null ? `${customer.credit_days} days` : ''],
-                    ['Credit limit', customer.credit_limit ? `₹${formatINR(customer.credit_limit)}` : 'Not set'],
-                    ['Rate chart', rateChart === null ? '' : !rateChart.exists ? 'Global chart'
-                      : rateChart.use_custom ? 'Personal chart' : 'Global chart (personal chart kept, not in use)'],
-                    ['Bills (all time)', `${summary.invoice_count ?? invoices.length}`],
-                    ['Total outstanding', `₹${formatINR(summary.total_overall_outstanding)}`],
-                    ['Customer since', customer.created_at ? String(customer.created_at).slice(0, 10) : ''],
-                  ] as const).map(([label, value]) => (
-                    <div key={label} className="bg-surface border border-line rounded-card px-3 py-2.5">
-                      <div className="text-[11px] text-ink-faint font-semibold">{label}</div>
-                      <div className="text-ink text-[13px] mt-0.5 break-words">{value || '-'}</div>
-                    </div>
-                  ))}
-                  {customer.notes && (
-                    <div className="md:col-span-2 bg-surface border border-line rounded-card px-3 py-2.5">
-                      <div className="text-[11px] text-ink-faint font-semibold">Notes</div>
-                      <div className="text-ink text-[13px] mt-0.5 whitespace-pre-line">{customer.notes}</div>
-                    </div>
-                  )}
-                  {onEditCustomer && (
-                    <div className="md:col-span-2">
-                      <button onClick={() => onEditCustomer(customer)}
-                        className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-surface text-ink border border-line hover:bg-surface-muted rounded-control text-xs font-medium cursor-pointer">
-                        <Pencil className="w-3.5 h-3.5" /> Edit Details
-                      </button>
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {/* TAB 2: Statement of Account / Running Ledger */}
-              {actionMessage && (
-                <div role="status" aria-live="polite"
-                  className="mb-3 p-3 bg-positive-soft border border-positive-line rounded-card text-positive-ink text-xs
-                             font-medium flex items-start gap-2">
-                  <Check className="w-4 h-4 shrink-0 mt-0.5 text-positive-ink" aria-hidden="true" />
-                  <span>{actionMessage}</span>
-                </div>
-              )}
-
-              {activeTab === 'ledger' && (
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between text-ink-faint text-[11px]">
-                    <span>Chronological running ledger statement for {periodLabel}</span>
-                    <span className="font-semibold text-ink-soft">
-                      Closing Balance: <strong className="text-accent-ink font-mono">₹{formatINR(summary.closing_balance)}</strong>
-                    </span>
-                  </div>
-
-                  <div className="bg-surface rounded-card border border-line overflow-hidden">
-                    <table className="w-full text-left text-xs">
-                      <thead className="bg-surface-muted text-ink-soft font-semibold text-[11px] border-b border-line">
-                        <tr>
-                          <th className="py-2.5 px-3">Date</th>
-                          <th className="py-2.5 px-3">Particulars & Transaction Details</th>
-                          <th className="py-2.5 px-3 text-right">Debit (Invoice)</th>
-                          <th className="py-2.5 px-3 text-right">Credit (Receipt)</th>
-                          <th className="py-2.5 px-3 text-right">Running Balance</th>
-                          <th className="py-2.5 px-3 text-right w-12"><span className="sr-only">Actions</span></th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-line">
-                        {ledger.length > 0 ? (
-                          ledger.map((item, idx) => (
-                            <tr key={idx} className={`hover:bg-surface-muted/80 ${item.type === 'opening' ? 'bg-surface-muted font-semibold' : ''}`}>
-                              <td className="py-2.5 px-3 text-ink-faint font-mono">{item.date}</td>
-                              <td className="py-2.5 px-3 text-ink font-medium">
-                                <div className="flex items-center gap-1.5">
-                                  {item.type === 'invoice' && <FileText className="w-3.5 h-3.5 text-accent shrink-0" />}
-                                  {item.type === 'payment' && <Check className="w-3.5 h-3.5 text-positive shrink-0" />}
-                                  {item.type === 'opening' && <Calendar className="w-3.5 h-3.5 text-info shrink-0" />}
-                                  <span>{item.particulars}</span>
-                                </div>
-                              </td>
-                              <td className="py-2.5 px-3 text-right font-mono text-ink">
-                                {item.debit ? `₹${formatINR(item.debit)}` : '-'}
-                              </td>
-                              <td className="py-2.5 px-3 text-right font-mono text-positive-ink font-semibold">
-                                {item.credit ? `₹${formatINR(item.credit)}` : '-'}
-                              </td>
-                              <td className="py-2.5 px-3 text-right font-mono font-bold text-ink">
-                                ₹{formatINR(item.balance)}
-                              </td>
-                              <td className="py-2.5 px-3 text-right">
-                                {item.type === 'payment' && item.payment_id && (
-                                  <button
-                                    type="button"
-                                    onClick={() => {
-                                      setDeleteError(null);
-                                      setPaymentToDelete({
-                                        id: item.payment_id!,
-                                        amount: item.credit || 0,
-                                        date: item.date,
-                                        label: item.particulars,
-                                      });
-                                    }}
-                                    aria-label={`Delete receipt of ₹${formatINR(item.credit)} dated ${item.date}`}
-                                    title="Delete this receipt"
-                                    className="inline-flex items-center justify-center w-8 h-8 rounded-control text-danger
-                                               hover:text-danger-ink hover:bg-danger-soft transition-colors cursor-pointer"
-                                  >
-                                    <Trash2 className="w-3.5 h-3.5" />
-                                  </button>
-                                )}
-                              </td>
-                            </tr>
-                          ))
-                        ) : (
-                          <tr>
-                            <td colSpan={6} className="py-8 text-center text-ink-faint">
-                              No ledger entries recorded for this customer in {periodLabel}.
-                            </td>
-                          </tr>
-                        )}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              )}
-
-              {/* TAB 3: Payment Receipts */}
-              {activeTab === 'payments' && (
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between text-ink-faint text-[11px]">
-                    <span>Collections and payments received during {periodLabel}</span>
-                    <span className="font-semibold text-ink-soft">
-                      Total Received: <strong className="text-positive-ink font-mono">₹{formatINR(summary.period_received)}</strong>
-                    </span>
-                  </div>
-
-                  <div className="bg-surface rounded-card border border-line overflow-hidden">
-                    <table className="w-full text-left text-xs">
-                      <thead className="bg-surface-muted text-ink-soft font-semibold text-[11px] border-b border-line">
-                        <tr>
-                          <th className="py-2.5 px-3">Date</th>
-                          <th className="py-2.5 px-3">Mode & UTR / Cheque Ref</th>
-                          <th className="py-2.5 px-3">Invoice Ref</th>
-                          <th className="py-2.5 px-3 text-right">Amount Received (₹)</th>
-                          <th className="py-2.5 px-3 text-right w-12"><span className="sr-only">Actions</span></th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-line">
-                        {payments.length > 0 ? (
-                          payments.map((p) => (
-                            <tr key={p.id} className="hover:bg-surface-muted/80">
-                              <td className="py-2.5 px-3 text-ink-faint font-mono">{p.payment_date}</td>
-                              <td className="py-2.5 px-3 text-ink font-medium">
-                                <span>{p.method}</span>
-                                {p.reference && (
-                                  <span className="text-ink-faint ml-1.5 font-mono text-[11px]">
-                                    (Ref: {p.reference})
-                                  </span>
-                                )}
-                              </td>
-                              <td className="py-2.5 px-3 font-mono text-ink-soft">
-                                {p.invoice_no ? `Invoice #${p.invoice_no}` : 'General Settlement'}
-                              </td>
-                              <td className="py-2.5 px-3 text-right font-mono font-bold text-positive-ink">
-                                ₹{formatINR(p.amount)}
-                              </td>
-                              <td className="py-2.5 px-3 text-right">
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    setDeleteError(null);
-                                    setPaymentToDelete({
-                                      id: p.id,
-                                      amount: p.amount,
-                                      date: p.payment_date,
-                                      label: `${p.method}${p.reference ? ` · Ref: ${p.reference}` : ''}`,
-                                    });
-                                  }}
-                                  aria-label={`Delete receipt of ₹${formatINR(p.amount)} dated ${p.payment_date}`}
-                                  title="Delete this receipt"
-                                  className="inline-flex items-center justify-center w-8 h-8 rounded-control text-danger
-                                             hover:text-danger-ink hover:bg-danger-soft transition-colors cursor-pointer"
+                  <div className="panel overflow-hidden">
+                    {shownInvoices.length === 0 ? (
+                      <EmptyState
+                        title={invoices.length === 0 ? 'No invoices' : 'No invoices match'}
+                        message={invoices.length === 0
+                          ? `No invoices for this customer in ${periodLabel}.`
+                          : 'No invoices match this filter.'}
+                      />
+                    ) : (
+                      <>
+                        {/* Phone: one row per bill */}
+                        <ul className="md:hidden divide-y divide-line">
+                          {shownInvoices.map((inv) => {
+                            const bal = inv.balance ?? inv.grand_total;
+                            return (
+                              <li key={inv.id} className="flex items-center gap-1 pr-1.5">
+                                <div
+                                  role={onSelectInvoice ? 'button' : undefined}
+                                  tabIndex={onSelectInvoice ? 0 : undefined}
+                                  onClick={onSelectInvoice ? () => onSelectInvoice(inv) : undefined}
+                                  onKeyDown={onSelectInvoice ? (e) => { if (e.key === 'Enter') onSelectInvoice(inv); } : undefined}
+                                  className={cx('flex-1 min-w-0 flex items-start gap-3 pl-3 py-2.5', onSelectInvoice && 'cursor-pointer active:bg-surface-muted')}
                                 >
-                                  <Trash2 className="w-3.5 h-3.5" />
-                                </button>
-                              </td>
-                            </tr>
-                          ))
-                        ) : (
-                          <tr>
-                            <td colSpan={5} className="py-8 text-center text-ink-faint">
-                              No payments recorded during {periodLabel}.
-                            </td>
-                          </tr>
+                                  <div className="min-w-0 flex-1">
+                                    <div className="flex items-center gap-2 min-w-0">
+                                      <span className="font-mono text-[13px] text-ink truncate">{inv.invoice_no}</span>
+                                      <StatusBadge status={inv.display_status} />
+                                    </div>
+                                    <div className="text-xs text-ink-faint truncate mt-0.5">
+                                      <span className="tabular-nums">{inv.invoice_date}</span>
+                                      {inv.lr_no && <> · <span className="font-mono">{lrText(inv.lr_no)}</span></>}
+                                      {inv.origin && inv.destination && <> · {inv.origin} → {inv.destination}</>}
+                                    </div>
+                                  </div>
+                                  <div className="text-right shrink-0">
+                                    <div className={cx('tabular-nums font-medium text-sm', (Number(bal) || 0) > 0.01 ? 'text-warning-ink' : 'text-ink')}>
+                                      {inr(bal)}
+                                    </div>
+                                    <div className="text-xs text-ink-faint tabular-nums mt-0.5">
+                                      of {inr(inv.grand_total || inv.totals?.grand_total)}
+                                    </div>
+                                  </div>
+                                </div>
+                                <div className="flex flex-col shrink-0">
+                                  <IconButton label={`Print invoice ${inv.invoice_no}`} onClick={() => printInvoicePDF(inv, companySettings, defaultBank)}>
+                                    <Printer />
+                                  </IconButton>
+                                  <IconButton label={`Cancel or delete invoice ${inv.invoice_no}`} onClick={() => setInvoiceToDelete(inv)}
+                                    className="hover:text-danger-ink hover:bg-danger-soft">
+                                    <Trash2 />
+                                  </IconButton>
+                                </div>
+                              </li>
+                            );
+                          })}
+                        </ul>
+
+                        {/* Tablet and desktop: the full table */}
+                        <div className="hidden md:block overflow-x-auto">
+                          <table className="w-full text-left text-sm">
+                            <caption className="sr-only">Invoices for {periodLabel}</caption>
+                            <thead className="bg-surface-muted border-b border-line">
+                              <tr>
+                                <th scope="col" className={th}>Date</th>
+                                <th scope="col" className={th}>Invoice · LR · route</th>
+                                <th scope="col" className={cx(th, 'text-right hidden lg:table-cell')}>Taxable</th>
+                                <th scope="col" className={cx(th, 'text-right hidden lg:table-cell')}>GST</th>
+                                <th scope="col" className={cx(th, 'text-right')}>Total</th>
+                                <th scope="col" className={cx(th, 'text-right')}>Paid</th>
+                                <th scope="col" className={cx(th, 'text-right')}>Balance</th>
+                                <th scope="col" className={th}>Status</th>
+                                <th scope="col" className={th}><span className="sr-only">Actions</span></th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-line">
+                              {shownInvoices.map((inv) => {
+                                const bal = inv.balance ?? inv.grand_total;
+                                return (
+                                  <tr key={inv.id}
+                                    onClick={onSelectInvoice ? () => onSelectInvoice(inv) : undefined}
+                                    className={cx('transition-colors duration-[var(--duration-fast)]',
+                                      onSelectInvoice && 'cursor-pointer hover:bg-surface-muted')}>
+                                    <td className={cx(td, 'text-ink-soft tabular-nums whitespace-nowrap')}>{inv.invoice_date}</td>
+                                    <td className={cx(td, 'max-w-[260px]')}>
+                                      <div className="font-mono text-[13px] text-ink whitespace-nowrap">{inv.invoice_no}</div>
+                                      <div className="text-xs text-ink-faint truncate">
+                                        {inv.lr_no && <span className="font-mono">{lrText(inv.lr_no)}</span>}
+                                        {inv.lr_no && ' · '}
+                                        {inv.origin && inv.destination ? (
+                                          <span>{inv.origin} → {inv.destination}</span>
+                                        ) : inv.vehicle_no ? (
+                                          <span className="font-mono">{inv.vehicle_no}</span>
+                                        ) : (
+                                          <span>Logistics service</span>
+                                        )}
+                                      </div>
+                                    </td>
+                                    <td className={cx(td, 'text-right tabular-nums text-ink-soft hidden lg:table-cell whitespace-nowrap')}>
+                                      {inr(inv.taxable_amount || inv.totals?.taxable_amount)}
+                                    </td>
+                                    <td className={cx(td, 'text-right tabular-nums text-ink-soft hidden lg:table-cell whitespace-nowrap')}>
+                                      {inr(inv.gst_amount || inv.totals?.gst_amount)}
+                                    </td>
+                                    <td className={cx(td, 'text-right tabular-nums font-medium text-ink whitespace-nowrap')}>
+                                      {inr(inv.grand_total || inv.totals?.grand_total)}
+                                    </td>
+                                    <td className={cx(td, 'text-right tabular-nums text-ink-soft whitespace-nowrap')}>
+                                      {inr(inv.paid ?? 0)}
+                                    </td>
+                                    <td className={cx(td, 'text-right tabular-nums font-medium whitespace-nowrap',
+                                      (Number(bal) || 0) > 0.01 ? 'text-warning-ink' : 'text-ink')}>
+                                      {inr(bal)}
+                                    </td>
+                                    <td className={td}><StatusBadge status={inv.display_status} /></td>
+                                    <td className={cx(td, 'text-right whitespace-nowrap')} onClick={(e) => e.stopPropagation()}>
+                                      <span className="inline-flex items-center gap-0.5">
+                                        <IconButton label="Print single invoice PDF" onClick={() => printInvoicePDF(inv, companySettings, defaultBank)}>
+                                          <Printer />
+                                        </IconButton>
+                                        <IconButton label="Cancel or delete invoice" onClick={() => setInvoiceToDelete(inv)}
+                                          className="hover:text-danger-ink hover:bg-danger-soft">
+                                          <Trash2 />
+                                        </IconButton>
+                                      </span>
+                                    </td>
+                                  </tr>
+                                );
+                              })}
+                            </tbody>
+                            {invoices.length > 0 && (
+                              <tfoot className="bg-surface-muted border-t border-line">
+                                <tr>
+                                  <td colSpan={2} className={cx(td, 'text-xs text-ink-faint')}>Period total</td>
+                                  <td className={cx(td, 'text-right tabular-nums text-ink-soft hidden lg:table-cell whitespace-nowrap')}>
+                                    {inr(summary.period_taxable)}
+                                  </td>
+                                  <td className={cx(td, 'text-right tabular-nums text-ink-soft hidden lg:table-cell whitespace-nowrap')}>
+                                    {inr(summary.period_gst)}
+                                  </td>
+                                  <td className={cx(td, 'text-right tabular-nums font-semibold text-ink whitespace-nowrap')}>
+                                    {inr(summary.period_invoiced)}
+                                  </td>
+                                  <td className={cx(td, 'text-right tabular-nums font-medium text-positive-ink whitespace-nowrap')}>
+                                    {inr(summary.period_received)}
+                                  </td>
+                                  <td className={cx(td, 'text-right tabular-nums font-semibold whitespace-nowrap',
+                                    closing > 0.01 ? 'text-warning-ink' : 'text-ink')}>
+                                    {inr(summary.closing_balance)}
+                                  </td>
+                                  <td colSpan={2} />
+                                </tr>
+                              </tfoot>
+                            )}
+                          </table>
+                        </div>
+
+                        {/* Phone footer: the period totals in one line */}
+                        {invoices.length > 0 && (
+                          <div className="md:hidden flex flex-wrap justify-between gap-x-3 gap-y-1 px-3 py-2 border-t border-line bg-surface-muted">
+                            <Total label="Taxable" value={inr(summary.period_taxable)} className="text-ink-soft" />
+                            <Total label="GST" value={inr(summary.period_gst)} className="text-ink-soft" />
+                            <Total label="Total" value={inr(summary.period_invoiced)} />
+                          </div>
                         )}
-                      </tbody>
-                    </table>
+                      </>
+                    )}
                   </div>
+                </div>
+              )}
+
+              {/* Running ledger */}
+              {activeTab === 'ledger' && (
+                <div className="space-y-2.5">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <span className="text-xs text-ink-faint">Running ledger for {periodLabel}</span>
+                    <Total label="Closing" value={inr(summary.closing_balance)}
+                      className={closing > 0.01 ? 'text-warning-ink' : 'text-ink'} />
+                  </div>
+
+                  <div className="panel overflow-hidden">
+                    {ledger.length === 0 ? (
+                      <EmptyState title="No ledger entries" message={`No ledger entries recorded for this customer in ${periodLabel}.`} />
+                    ) : (
+                      <>
+                        <ul className="sm:hidden divide-y divide-line">
+                          {ledger.map((item, idx) => (
+                            <li key={idx} className={cx('flex items-center gap-1 pr-1.5', item.type === 'opening' && 'bg-surface-muted')}>
+                              <div className="flex-1 min-w-0 flex items-start gap-3 pl-3 py-2.5">
+                                <div className="min-w-0 flex-1">
+                                  <div className={cx('text-sm text-ink truncate', item.type === 'opening' && 'font-medium')}>{item.particulars}</div>
+                                  <div className="text-xs text-ink-faint tabular-nums mt-0.5">{item.date}</div>
+                                </div>
+                                <div className="text-right shrink-0">
+                                  {item.debit ? (
+                                    <div className="tabular-nums font-medium text-sm text-ink">{inr(item.debit)} <span className="text-xs text-ink-faint font-normal">Dr</span></div>
+                                  ) : item.credit ? (
+                                    <div className="tabular-nums font-medium text-sm text-positive-ink">{inr(item.credit)} <span className="text-xs text-ink-faint font-normal">Cr</span></div>
+                                  ) : <div className="text-sm text-ink-faint">-</div>}
+                                  <div className="text-xs text-ink-faint tabular-nums mt-0.5">Bal {inr(item.balance)}</div>
+                                </div>
+                              </div>
+                              <div className="w-8 shrink-0">
+                                {item.type === 'payment' && item.payment_id && deleteBtn(
+                                  () => askDeletePayment({ id: item.payment_id!, amount: item.credit || 0, date: item.date, label: item.particulars }),
+                                  `Delete receipt of ₹${formatINR(item.credit)} dated ${item.date}`
+                                )}
+                              </div>
+                            </li>
+                          ))}
+                        </ul>
+
+                        <div className="hidden sm:block overflow-x-auto">
+                          <table className="w-full text-left text-sm">
+                            <caption className="sr-only">Ledger for {periodLabel}</caption>
+                            <thead className="bg-surface-muted border-b border-line">
+                              <tr>
+                                <th scope="col" className={th}>Date</th>
+                                <th scope="col" className={th}>Particulars</th>
+                                <th scope="col" className={cx(th, 'text-right')}>Debit</th>
+                                <th scope="col" className={cx(th, 'text-right')}>Credit</th>
+                                <th scope="col" className={cx(th, 'text-right')}>Balance</th>
+                                <th scope="col" className={cx(th, 'w-12')}><span className="sr-only">Actions</span></th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-line">
+                              {ledger.map((item, idx) => (
+                                <tr key={idx} className={cx('hover:bg-surface-muted', item.type === 'opening' && 'bg-surface-muted')}>
+                                  <td className={cx(td, 'text-ink-soft tabular-nums whitespace-nowrap')}>{item.date}</td>
+                                  <td className={cx(td, 'text-ink', item.type === 'opening' && 'font-medium')}>{item.particulars}</td>
+                                  <td className={cx(td, 'text-right tabular-nums text-ink whitespace-nowrap')}>
+                                    {item.debit ? inr(item.debit) : <span className="text-ink-faint">-</span>}
+                                  </td>
+                                  <td className={cx(td, 'text-right tabular-nums text-positive-ink whitespace-nowrap')}>
+                                    {item.credit ? inr(item.credit) : <span className="text-ink-faint">-</span>}
+                                  </td>
+                                  <td className={cx(td, 'text-right tabular-nums font-medium text-ink whitespace-nowrap')}>
+                                    {inr(item.balance)}
+                                  </td>
+                                  <td className={cx(td, 'text-right')}>
+                                    {item.type === 'payment' && item.payment_id && deleteBtn(
+                                      () => askDeletePayment({ id: item.payment_id!, amount: item.credit || 0, date: item.date, label: item.particulars }),
+                                      `Delete receipt of ₹${formatINR(item.credit)} dated ${item.date}`
+                                    )}
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* Receipts */}
+              {activeTab === 'payments' && (
+                <div className="space-y-2.5">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <span className="text-xs text-ink-faint">Payments received in {periodLabel}</span>
+                    <Total label="Received" value={inr(summary.period_received)} className="text-positive-ink" />
+                  </div>
+
+                  <div className="panel overflow-hidden">
+                    {payments.length === 0 ? (
+                      <EmptyState title="No payments" message={`No payments recorded during ${periodLabel}.`} />
+                    ) : (
+                      <>
+                        <ul className="sm:hidden divide-y divide-line">
+                          {payments.map((p) => (
+                            <li key={p.id} className="flex items-center gap-1 pr-1.5">
+                              <div className="flex-1 min-w-0 flex items-start gap-3 pl-3 py-2.5">
+                                <div className="min-w-0 flex-1">
+                                  <div className="text-sm text-ink truncate">
+                                    {p.method}
+                                    {p.reference && <span className="font-mono text-xs text-ink-faint ml-1.5">{p.reference}</span>}
+                                  </div>
+                                  <div className="text-xs text-ink-faint truncate mt-0.5">
+                                    <span className="tabular-nums">{p.payment_date}</span> ·{' '}
+                                    {p.invoice_no ? <span className="font-mono">{p.invoice_no}</span> : 'General settlement'}
+                                  </div>
+                                </div>
+                                <div className="tabular-nums font-medium text-sm text-positive-ink shrink-0">{inr(p.amount)}</div>
+                              </div>
+                              {deleteBtn(
+                                () => askDeletePayment({ id: p.id, amount: p.amount, date: p.payment_date, label: `${p.method}${p.reference ? ` · Ref: ${p.reference}` : ''}` }),
+                                `Delete receipt of ₹${formatINR(p.amount)} dated ${p.payment_date}`
+                              )}
+                            </li>
+                          ))}
+                        </ul>
+
+                        <div className="hidden sm:block overflow-x-auto">
+                          <table className="w-full text-left text-sm">
+                            <caption className="sr-only">Payments in {periodLabel}</caption>
+                            <thead className="bg-surface-muted border-b border-line">
+                              <tr>
+                                <th scope="col" className={th}>Date</th>
+                                <th scope="col" className={th}>Mode</th>
+                                <th scope="col" className={th}>UTR / cheque ref</th>
+                                <th scope="col" className={th}>Invoice</th>
+                                <th scope="col" className={cx(th, 'text-right')}>Amount</th>
+                                <th scope="col" className={cx(th, 'w-12')}><span className="sr-only">Actions</span></th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-line">
+                              {payments.map((p) => (
+                                <tr key={p.id} className="hover:bg-surface-muted">
+                                  <td className={cx(td, 'text-ink-soft tabular-nums whitespace-nowrap')}>{p.payment_date}</td>
+                                  <td className={cx(td, 'text-ink')}>{p.method}</td>
+                                  <td className={cx(td, 'font-mono text-[13px] text-ink-soft')}>{p.reference || <span className="text-ink-faint">-</span>}</td>
+                                  <td className={cx(td, 'text-ink-soft')}>
+                                    {p.invoice_no ? <span className="font-mono text-[13px]">{p.invoice_no}</span> : 'General settlement'}
+                                  </td>
+                                  <td className={cx(td, 'text-right tabular-nums font-medium text-positive-ink whitespace-nowrap')}>{inr(p.amount)}</td>
+                                  <td className={cx(td, 'text-right')}>
+                                    {deleteBtn(
+                                      () => askDeletePayment({ id: p.id, amount: p.amount, date: p.payment_date, label: `${p.method}${p.reference ? ` · Ref: ${p.reference}` : ''}` }),
+                                      `Delete receipt of ₹${formatINR(p.amount)} dated ${p.payment_date}`
+                                    )}
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* Customer profile */}
+              {activeTab === 'profile' && (
+                <div className="space-y-3">
+                  <dl className="panel grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-x-6 gap-y-3 p-3 sm:p-4">
+                    <KV label="Contact person" value={customer.contact_person} />
+                    <KV label="Phone" value={customer.phone} />
+                    <KV label="WhatsApp" value={customer.whatsapp} />
+                    <KV label="Email" value={customer.email} />
+                    <KV label="GSTIN" value={customer.gstin || 'Unregistered'} mono={Boolean(customer.gstin)} />
+                    <KV label="PAN" value={customer.pan} mono />
+                    <KV label="Billing address" wide
+                      value={[customer.address, customer.city, customer.state, customer.pin].filter(Boolean).join(', ')} />
+                    <KV label="Shipping address"
+                      value={customer.shipping_address && customer.shipping_address !== customer.address ? customer.shipping_address : 'Same as billing'} />
+                    <KV label="Payment terms" value={customer.payment_terms} />
+                    <KV label="Credit days" value={customer.credit_days != null ? `${customer.credit_days} days` : ''} />
+                    <KV label="Credit limit" value={customer.credit_limit ? inr(customer.credit_limit) : 'Not set'} />
+                    <KV label="Rate chart" value={rateChart === null ? '' : !rateChart.exists ? 'Global chart'
+                      : rateChart.use_custom ? 'Personal chart' : 'Global chart (personal chart kept, not in use)'} />
+                    <KV label="Bills (all time)" value={<span className="tabular-nums">{summary.invoice_count ?? invoices.length}</span>} />
+                    <KV label="Total outstanding" value={<span className="tabular-nums font-medium">{inr(summary.total_overall_outstanding)}</span>} />
+                    <KV label="Customer since" value={customer.created_at ? <span className="tabular-nums">{String(customer.created_at).slice(0, 10)}</span> : ''} />
+                    {customer.notes && (
+                      <div className="min-w-0 sm:col-span-2 lg:col-span-3 pt-3 border-t border-line">
+                        <dt className="text-xs text-ink-faint">Notes</dt>
+                        <dd className="mt-0.5 text-sm text-ink whitespace-pre-line break-words">{customer.notes}</dd>
+                      </div>
+                    )}
+                  </dl>
+                  {onEditCustomer && (
+                    <Button size="sm" icon={<Pencil />} onClick={() => onEditCustomer(customer)}>Edit details</Button>
+                  )}
                 </div>
               )}
             </>
           )}
 
-          {/* Delete-receipt confirmation. Money is leaving the customer's account, so this
-          spells out exactly what will change before anything is removed. */}
-      {paymentToDelete && (
-        <div
-          className="fixed inset-0 z-[60] flex items-end sm:items-center justify-center sm:p-4 bg-scrim"
-          onMouseDown={(e) => { if (e.target === e.currentTarget && !deletingPayment) setPaymentToDelete(null); }}
-          onKeyDown={(e) => { if (e.key === 'Escape' && !deletingPayment) setPaymentToDelete(null); }}
-        >
-          <div
-            role="alertdialog"
-            aria-modal="true"
-            aria-labelledby="del-pay-title"
-            aria-describedby="del-pay-desc"
-            className="bg-surface w-full sm:max-w-md rounded-t-2xl sm:rounded-card shadow-overlay p-5 space-y-4"
-          >
-            <div className="flex items-start gap-3">
-              <span className="w-10 h-10 rounded-card bg-danger-soft border border-danger-line text-danger-ink flex items-center justify-center shrink-0">
-                <AlertTriangle className="w-5 h-5" aria-hidden="true" />
-              </span>
-              <div className="min-w-0">
-                <h3 id="del-pay-title" className="font-bold text-ink">Delete this receipt?</h3>
-                <p id="del-pay-desc" className="text-xs text-ink-faint mt-0.5">
-                  This permanently removes the payment. The invoice balance and the customer&rsquo;s
-                  outstanding will go back up by this amount.
-                </p>
-              </div>
-            </div>
-
-            <div className="bg-surface-muted border border-line rounded-card p-3 text-xs space-y-1">
-              <div className="flex justify-between gap-3">
-                <span className="text-ink-faint">Amount</span>
-                <span className="font-mono font-bold text-danger-ink">₹{formatINR(paymentToDelete.amount)}</span>
-              </div>
-              <div className="flex justify-between gap-3">
-                <span className="text-ink-faint">Date</span>
-                <span className="font-mono text-ink">{paymentToDelete.date}</span>
-              </div>
-              <div className="flex justify-between gap-3">
-                <span className="text-ink-faint shrink-0">Details</span>
-                <span className="text-ink text-right truncate">{paymentToDelete.label}</span>
-              </div>
-            </div>
-
-            {deleteError && (
-              <div role="alert" className="p-3 bg-danger-soft border border-danger-line rounded-card text-danger-ink text-xs">
-                {deleteError}
-              </div>
-            )}
-
-            <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-2 pt-1">
-              <button
-                type="button"
-                onClick={() => setPaymentToDelete(null)}
-                disabled={deletingPayment}
-                className="px-4 py-2.5 min-h-[44px] rounded-card bg-surface-sunken hover:bg-surface-sunken text-ink-soft
-                           text-xs font-semibold transition cursor-pointer disabled:opacity-50"
-              >
-                Keep it
-              </button>
-              <button
-                type="button"
-                onClick={confirmDeletePayment}
-                disabled={deletingPayment}
-                className="px-4 py-2.5 min-h-[44px] rounded-card bg-surface text-danger-ink border border-danger-line hover:bg-danger-soft hover:border-danger
-                           text-xs font-semibold transition cursor-pointer disabled:opacity-50
-                           inline-flex items-center justify-center gap-2"
-              >
-                {deletingPayment
-                  ? <><Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" />Deleting…</>
-                  : <><Trash2 className="w-4 h-4" aria-hidden="true" />Delete receipt</>}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Bank Remittance Info Card */}
+          {/* Where the customer should pay */}
           {defaultBank && defaultBank.account_number && (
-            <div className="mt-4 bg-surface-muted border border-line rounded-card p-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs text-ink-soft">
-              <div>
-                <div className="font-semibold text-ink flex items-center gap-1.5 text-[11px]">
-                  <CreditCard className="w-3.5 h-3.5 text-accent-ink" />
-                  <span>Company Remittance Bank Account</span>
-                </div>
-                <div className="text-ink-faint text-[11px] mt-0.5">
-                  Bank: <strong className="text-ink-soft">{defaultBank.bank_name}</strong> · 
-                  A/C: <strong className="text-ink-soft font-mono">{defaultBank.account_number}</strong> · 
-                  IFSC: <strong className="text-ink-soft font-mono">{defaultBank.ifsc || '-'}</strong>
-                  {defaultBank.upi_id && ` · UPI: ${defaultBank.upi_id}`}
+            <div className="panel px-3 sm:px-4 py-2.5 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+              <div className="min-w-0">
+                <div className="text-xs text-ink-faint">Remittance account</div>
+                <div className="text-sm text-ink mt-0.5 flex flex-wrap gap-x-2">
+                  <span>{defaultBank.bank_name}</span>
+                  <span className="text-ink-faint">A/C <span className="font-mono text-[13px] text-ink">{defaultBank.account_number}</span></span>
+                  <span className="text-ink-faint">IFSC <span className="font-mono text-[13px] text-ink">{defaultBank.ifsc || '-'}</span></span>
+                  {defaultBank.upi_id && <span className="text-ink-faint">UPI <span className="font-mono text-[13px] text-ink">{defaultBank.upi_id}</span></span>}
                 </div>
               </div>
-
-              <button
-                onClick={handleShareWhatsApp}
-                className="text-accent-ink hover:text-accent-ink font-semibold text-xs flex items-center gap-1 shrink-0 cursor-pointer"
-              >
-                <span>Share Account Details</span>
-                <ArrowUpRight className="w-3.5 h-3.5" />
-              </button>
+              <Button size="sm" variant="ghost" onClick={handleShareWhatsApp} className="self-start sm:self-auto -ml-2.5 sm:ml-0 text-accent-ink">
+                Share account details <ArrowUpRight />
+              </Button>
             </div>
           )}
         </div>
+      </Modal>
 
-        {/* Footer */}
-        <div className="p-3.5 sm:p-4 border-t border-line bg-surface-muted flex items-center justify-between">
-          <div className="text-[11px] text-ink-faint">
-            Total Statement Period: <strong className="text-ink">{periodLabel}</strong> · Outstanding: <strong className="text-accent-ink font-mono font-bold">₹{formatINR(summary.closing_balance)}</strong>
+      {/* Delete-receipt confirmation. Money is leaving the customer's account, so this
+          spells out exactly what will change before anything is removed. */}
+      {paymentToDelete && (
+        <Modal
+          size="sm"
+          title="Delete this receipt?"
+          onClose={() => { if (!deletingPayment) setPaymentToDelete(null); }}
+          footer={
+            <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-2">
+              <Button variant="ghost" onClick={() => setPaymentToDelete(null)} disabled={deletingPayment}>Keep it</Button>
+              <Button variant="danger" onClick={confirmDeletePayment} loading={deletingPayment} icon={<Trash2 />}>
+                {deletingPayment ? 'Deleting…' : 'Delete receipt'}
+              </Button>
+            </div>
+          }
+        >
+          <div className="space-y-3">
+            <p className="text-sm text-ink-soft">
+              This permanently removes the payment. The invoice balance and the customer&rsquo;s
+              outstanding will go back up by this amount.
+            </p>
+            <dl className="rounded-control border border-line divide-y divide-line text-sm">
+              <div className="flex justify-between gap-3 px-3 py-2">
+                <dt className="text-ink-faint">Amount</dt>
+                <dd className="tabular-nums font-medium text-danger-ink">{inr(paymentToDelete.amount)}</dd>
+              </div>
+              <div className="flex justify-between gap-3 px-3 py-2">
+                <dt className="text-ink-faint">Date</dt>
+                <dd className="tabular-nums text-ink">{paymentToDelete.date}</dd>
+              </div>
+              <div className="flex justify-between gap-3 px-3 py-2">
+                <dt className="text-ink-faint shrink-0">Details</dt>
+                <dd className="text-ink text-right truncate">{paymentToDelete.label}</dd>
+              </div>
+            </dl>
+            <FormError message={deleteError} />
           </div>
-
-          <button
-            onClick={onClose}
-            className="px-4 py-2 bg-surface-sunken hover:bg-line-strong text-ink-soft rounded-card text-xs font-semibold transition cursor-pointer"
-          >
-            Close Statement
-          </button>
-        </div>
-      </div>
+        </Modal>
+      )}
 
       {/* Delete / Cancel Invoice Confirmation Modal */}
       {invoiceToDelete && (
@@ -1022,6 +983,6 @@ export const CustomerDetailModal: React.FC<CustomerDetailModalProps> = ({
           }}
         />
       )}
-    </div>
+    </>
   );
 };

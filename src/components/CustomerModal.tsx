@@ -1,9 +1,9 @@
 import React, { useState } from 'react';
-import { X, Building2, Save, Sparkles, Check, Loader2, AlertCircle, AlertTriangle, ShieldCheck } from 'lucide-react';
+import { Check, Loader2, AlertCircle, AlertTriangle, ShieldCheck } from 'lucide-react';
 import { apiRequest } from '../services/api.js';
 import { lookupGSTIN, lookupPincode, isValidGSTINFormat, GSTLookupResult } from '../utils/gstLookup.js';
 import { Customer } from '../types.js';
-import { useBackLayer } from '../utils/backNav.js';
+import { Modal, Button, Field, Input, Textarea, FormError, cx } from './ui.js';
 
 interface CustomerModalProps {
   /** When given, the form edits this customer instead of registering a new one. */
@@ -13,8 +13,6 @@ interface CustomerModalProps {
 }
 
 export const CustomerModal: React.FC<CustomerModalProps> = ({ customerToEdit, onClose, onSuccess }) => {
-  // Phone Back button closes this instead of leaving the app
-  useBackLayer(onClose);
   const isEdit = Boolean(customerToEdit?.id);
   const c0 = customerToEdit || ({} as Partial<Customer>);
   const [name, setName] = useState(c0.name || '');
@@ -217,315 +215,198 @@ export const CustomerModal: React.FC<CustomerModalProps> = ({ customerToEdit, on
     }
   };
 
+  const fetchAction = (busy: boolean, disabled: boolean, onClick: () => void, idle: string, busyText: string) => (
+    <button
+      type="button"
+      disabled={disabled}
+      onClick={onClick}
+      className="text-xs font-medium text-accent-ink hover:underline inline-flex items-center gap-1 cursor-pointer
+                 disabled:opacity-40 disabled:no-underline disabled:cursor-not-allowed"
+    >
+      {busy ? <><Loader2 className="w-3 h-3 animate-spin" aria-hidden="true" />{busyText}</> : idle}
+    </button>
+  );
+
+  const feedbackTone = lookupFeedback?.type === 'verified'
+    ? 'bg-positive-soft border-positive-line text-positive-ink'
+    : lookupFeedback?.type === 'unavailable'
+    ? 'bg-warning-soft border-warning-line text-warning-ink'
+    : 'bg-danger-soft border-danger-line text-danger-ink';
+
   return (
-    <div className="fixed inset-0 bg-scrim flex items-center justify-center p-4 z-50 overflow-y-auto">
-      <div className="sheet border border-line rounded-overlay max-w-2xl w-full max-h-[92vh] flex flex-col shadow-overlay text-ink my-auto">
-        {/* Header */}
-        <div className="p-4 border-b border-line flex items-center justify-between">
-          <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-card bg-accent-soft border border-accent-line flex items-center justify-center text-accent-ink">
-              <Building2 className="w-4 h-4" />
-            </div>
-            <div>
-              <h2 className="text-base font-bold text-ink">{isEdit ? `Edit customer: ${customerToEdit!.name}` : 'Register Consignee / Customer'}</h2>
-              <p className="text-[11px] text-ink-faint">Authoritative GSTVerify Integration & PIN Lookup</p>
-            </div>
-          </div>
-
-          <button onClick={onClose} className="p-1 text-ink-faint hover:text-ink rounded-control transition cursor-pointer">
-            <X className="w-5 h-5" />
-          </button>
+    <Modal
+      onClose={onClose}
+      title={isEdit ? 'Edit customer' : 'New customer'}
+      subtitle={isEdit ? customerToEdit!.name : 'Enter the GSTIN or PIN to fill in the rest'}
+      size="lg"
+      footer={
+        <div className="flex items-center justify-end gap-2">
+          <Button variant="ghost" type="button" onClick={onClose}>Cancel</Button>
+          <Button variant="primary" type="submit" form="customer-form" loading={saving} icon={<Check />}>
+            {saving ? 'Saving…' : isEdit ? 'Save changes' : 'Add customer'}
+          </Button>
         </div>
+      }
+    >
+      <form id="customer-form" onSubmit={handleSave} className="space-y-5">
+        <FormError message={error} />
 
-        {/* Form */}
-        <form onSubmit={handleSave} className="flex-1 overflow-y-auto p-6 space-y-4 text-xs">
-          {error && (
-            <div className="p-3 bg-danger-soft border border-danger-line rounded-card text-danger-ink flex items-center gap-2">
-              <AlertCircle className="w-4 h-4 shrink-0" />
-              <span>{error}</span>
-            </div>
-          )}
+        {/* Tax registration */}
+        <section className="space-y-3">
+          <h3 className="text-sm font-semibold text-ink pb-1.5 border-b border-line">Tax registration</h3>
 
-          {/* Dynamic Verification Badge */}
           {lookupFeedback && (
-            <div
-              className={`p-3 rounded-card border flex items-start gap-2.5 text-xs transition ${
-                lookupFeedback.type === 'verified'
-                  ? 'bg-positive-soft border-positive-line text-positive-ink'
-                  : lookupFeedback.type === 'unavailable'
-                  ? 'bg-warning-soft border-warning-line text-warning-ink'
-                  : 'bg-danger-soft border-danger-line text-danger-ink'
-              }`}
-            >
+            <div role="status" className={cx('px-3 py-2 rounded-control border flex items-start gap-2 text-sm', feedbackTone)}>
               {lookupFeedback.type === 'verified' ? (
-                <ShieldCheck className="w-4 h-4 text-positive-ink shrink-0 mt-0.5" />
+                <ShieldCheck className="w-4 h-4 shrink-0 mt-0.5" aria-hidden="true" />
               ) : lookupFeedback.type === 'unavailable' ? (
-                <AlertTriangle className="w-4 h-4 text-warning-ink shrink-0 mt-0.5" />
+                <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" aria-hidden="true" />
               ) : (
-                <AlertCircle className="w-4 h-4 text-danger-ink shrink-0 mt-0.5" />
+                <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" aria-hidden="true" />
               )}
-              <div className="flex-1">
-                <div className="font-semibold">{lookupFeedback.text}</div>
-                {lookupFeedback.subText && (
-                  <div className="text-[11px] opacity-85 mt-0.5">{lookupFeedback.subText}</div>
-                )}
+              <div className="min-w-0">
+                <div className="font-medium">{lookupFeedback.text}</div>
+                {lookupFeedback.subText && <div className="text-xs opacity-90 mt-0.5">{lookupFeedback.subText}</div>}
               </div>
             </div>
           )}
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div>
-              <div className="flex items-center justify-between mb-1">
-                <label className="text-ink-soft font-semibold">GSTIN (15 chars)</label>
-                <button
-                  type="button"
-                  disabled={fetchingGst || gstin.length !== 15}
-                  onClick={() => fetchGST(gstin, true)}
-                  className="text-[11px] text-accent-ink hover:text-accent-ink font-semibold flex items-center gap-1 cursor-pointer disabled:opacity-40"
-                >
-                  {fetchingGst ? (
-                    <>
-                      <Loader2 className="w-3 h-3 animate-spin" />
-                      <span>Verifying...</span>
-                    </>
-                  ) : (
-                    <>
-                      <Sparkles className="w-3 h-3 text-accent" />
-                      <span>Auto Fetch</span>
-                    </>
-                  )}
-                </button>
-              </div>
-              <input
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <Field
+              label="GSTIN"
+              htmlFor="cust-gstin"
+              hint="15 characters. Details are fetched automatically."
+              action={fetchAction(fetchingGst, fetchingGst || gstin.length !== 15, () => fetchGST(gstin, true), 'Fetch details', 'Verifying…')}
+            >
+              <Input
+                id="cust-gstin"
                 type="text"
                 maxLength={15}
                 value={gstin}
                 onChange={(e) => handleGSTINChange(e.target.value)}
-                className="w-full bg-surface-muted border border-line rounded-card px-3 py-2 font-mono text-ink text-xs uppercase focus:outline-none focus:border-accent"
+                className="font-mono uppercase"
                 placeholder="24AABCS1429B1Z8"
+                autoComplete="off"
               />
-            </div>
+            </Field>
 
-            <div>
-              <label className="block text-ink-soft font-semibold mb-1">PAN Number</label>
-              <input
+            <Field label="PAN" htmlFor="cust-pan">
+              <Input
+                id="cust-pan"
                 type="text"
                 maxLength={10}
                 value={pan}
                 onChange={(e) => setPan(e.target.value.toUpperCase())}
-                className="w-full bg-surface-muted border border-line rounded-card px-3 py-2 font-mono text-ink text-xs uppercase focus:outline-none focus:border-accent"
+                className="font-mono uppercase"
                 placeholder="AABCS1429B"
+                autoComplete="off"
               />
-            </div>
+            </Field>
+          </div>
+        </section>
 
-            <div className="sm:col-span-2">
-              <label className="block text-ink-soft font-semibold mb-1">Company / Customer Name *</label>
-              <input
+        {/* Business and contact */}
+        <section className="space-y-3">
+          <h3 className="text-sm font-semibold text-ink pb-1.5 border-b border-line">Business and contact</h3>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <Field label="Customer name" htmlFor="cust-name" required className="sm:col-span-2">
+              <Input
+                id="cust-name"
                 type="text"
                 required
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                className="w-full bg-surface-muted border border-line rounded-card px-3 py-2 text-ink text-xs focus:outline-none focus:border-accent font-medium"
                 placeholder="e.g. Reliance Logistics Hub"
               />
-            </div>
+            </Field>
 
             {legalName && legalName !== name && (
-              <div className="sm:col-span-2">
-                <label className="block text-ink-faint font-medium mb-1">Registered Legal Name (from GSTVerify)</label>
-                <input
-                  type="text"
-                  readOnly
-                  value={legalName}
-                  className="w-full bg-surface-sunken border border-line rounded-card px-3 py-2 text-ink-soft text-xs focus:outline-none cursor-default"
-                />
-              </div>
+              <Field label="Registered legal name (from GST)" htmlFor="cust-legal" className="sm:col-span-2">
+                <Input id="cust-legal" type="text" readOnly value={legalName} />
+              </Field>
             )}
 
-            <div>
-              <label className="block text-ink-soft font-semibold mb-1">Contact Person</label>
-              <input
-                type="text"
-                value={contactPerson}
-                onChange={(e) => setContactPerson(e.target.value)}
-                className="w-full bg-surface-muted border border-line rounded-card px-3 py-2 text-ink text-xs focus:outline-none focus:border-accent"
-                placeholder="e.g. Ramesh Patel"
-              />
-            </div>
+            <Field label="Contact person" htmlFor="cust-contact">
+              <Input id="cust-contact" type="text" value={contactPerson} onChange={(e) => setContactPerson(e.target.value)}
+                placeholder="e.g. Ramesh Patel" />
+            </Field>
 
-            <div>
-              <label className="block text-ink-soft font-semibold mb-1">Phone Number</label>
-              <input
-                type="text"
-                value={phone}
-                onChange={(e) => setPhone(e.target.value)}
-                className="w-full bg-surface-muted border border-line rounded-card px-3 py-2 text-ink text-xs focus:outline-none focus:border-accent"
-                placeholder="+91 98765 43210"
-              />
-            </div>
+            <Field label="Phone" htmlFor="cust-phone">
+              <Input id="cust-phone" type="tel" value={phone} onChange={(e) => setPhone(e.target.value)}
+                placeholder="+91 98765 43210" />
+            </Field>
 
-            <div>
-              <label className="block text-ink-soft font-semibold mb-1">WhatsApp for Invoices</label>
-              <input
-                type="text"
-                value={whatsapp}
-                onChange={(e) => setWhatsapp(e.target.value)}
-                className="w-full bg-surface-muted border border-line rounded-card px-3 py-2 text-ink text-xs focus:outline-none focus:border-accent"
-                placeholder="+91 98765 43210"
-              />
-            </div>
+            <Field label="WhatsApp for invoices" htmlFor="cust-wa">
+              <Input id="cust-wa" type="tel" value={whatsapp} onChange={(e) => setWhatsapp(e.target.value)}
+                placeholder="+91 98765 43210" />
+            </Field>
 
-            <div>
-              <label className="block text-ink-soft font-semibold mb-1">Email Address</label>
-              <input
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                className="w-full bg-surface-muted border border-line rounded-card px-3 py-2 text-ink text-xs focus:outline-none focus:border-accent"
-                placeholder="accounts@customer.com"
-              />
-            </div>
-
-            <div className="sm:col-span-2">
-              <label className="block text-ink-soft font-semibold mb-1">Billing Address (Principal Place of Business)</label>
-              <textarea
-                rows={2}
-                value={address}
-                onChange={(e) => setAddress(e.target.value)}
-                className="w-full bg-surface-muted border border-line rounded-card px-3 py-2 text-ink text-xs focus:outline-none focus:border-accent"
-                placeholder="Plot No. 42, GIDC Industrial Estate..."
-              />
-            </div>
-
-            <div className="sm:col-span-2">
-              <label className="block text-ink-soft font-semibold mb-1">Shipping / Delivery Address (Optional, if different from billing)</label>
-              <textarea
-                rows={2}
-                value={shippingAddress}
-                onChange={(e) => setShippingAddress(e.target.value)}
-                className="w-full bg-surface-muted border border-line rounded-card px-3 py-2 text-ink text-xs focus:outline-none focus:border-accent"
-                placeholder="Warehouse / Plant delivery location (leave blank if same as billing)"
-              />
-            </div>
-
-            <div>
-              <div className="flex items-center justify-between mb-1">
-                <label className="text-ink-soft font-semibold">PIN Code (6 digits)</label>
-                <button
-                  type="button"
-                  disabled={fetchingPin || pin.length !== 6}
-                  onClick={() => fetchPIN(pin)}
-                  className="text-[11px] text-accent-ink hover:text-accent-ink font-semibold flex items-center gap-1 cursor-pointer disabled:opacity-40"
-                >
-                  {fetchingPin ? (
-                    <>
-                      <Loader2 className="w-3 h-3 animate-spin" />
-                      <span>Fetching...</span>
-                    </>
-                  ) : (
-                    <>
-                      <Sparkles className="w-3 h-3 text-accent" />
-                      <span>Fetch City/State</span>
-                    </>
-                  )}
-                </button>
-              </div>
-              <input
-                type="text"
-                maxLength={6}
-                value={pin}
-                onChange={(e) => handlePinChange(e.target.value)}
-                className="w-full bg-surface-muted border border-line rounded-card px-3 py-2 text-ink text-xs focus:outline-none focus:border-accent"
-                placeholder="382443"
-              />
-            </div>
-
-            <div>
-              <label className="block text-ink-soft font-semibold mb-1">City / District</label>
-              <input
-                type="text"
-                value={city}
-                onChange={(e) => setCity(e.target.value)}
-                className="w-full bg-surface-muted border border-line rounded-card px-3 py-2 text-ink text-xs focus:outline-none focus:border-accent"
-                placeholder="Ahmedabad"
-              />
-            </div>
-
-            <div>
-              <label className="block text-ink-soft font-semibold mb-1">State</label>
-              <input
-                type="text"
-                value={state}
-                onChange={(e) => setState(e.target.value)}
-                className="w-full bg-surface-muted border border-line rounded-card px-3 py-2 text-ink text-xs focus:outline-none focus:border-accent"
-                placeholder="Gujarat"
-              />
-            </div>
-
-            <div>
-              <label className="block text-ink-soft font-semibold mb-1">Credit Days</label>
-              <input
-                type="number"
-                value={creditDays}
-                onChange={(e) => setCreditDays(parseInt(e.target.value) || 0)}
-                className="w-full bg-surface-muted border border-line rounded-card px-3 py-2 text-ink text-xs focus:outline-none focus:border-accent"
-              />
-            </div>
-
-            <div>
-              <label className="block text-ink-soft font-semibold mb-1">Payment Terms</label>
-              <input
-                type="text"
-                value={paymentTerms}
-                onChange={(e) => setPaymentTerms(e.target.value)}
-                className="w-full bg-surface-muted border border-line rounded-card px-3 py-2 text-ink text-xs focus:outline-none focus:border-accent"
-                placeholder="Net 15 Days"
-              />
-            </div>
-
-            <div>
-              <label className="block text-ink-soft font-semibold mb-1">Credit Limit (₹)</label>
-              <input
-                type="number"
-                min="0"
-                value={creditLimit}
-                onChange={(e) => setCreditLimit(parseFloat(e.target.value) || 0)}
-                className="w-full bg-surface-muted border border-line rounded-card px-3 py-2 text-ink text-xs focus:outline-none focus:border-accent"
-              />
-            </div>
-
-            <div className="sm:col-span-2">
-              <label className="block text-ink-soft font-semibold mb-1">Notes</label>
-              <textarea
-                rows={3}
-                value={notes}
-                onChange={(e) => setNotes(e.target.value)}
-                className="w-full bg-surface-muted border border-line rounded-card px-3 py-2 text-ink text-xs focus:outline-none focus:border-accent"
-                placeholder="Internal notes about this customer"
-              />
-            </div>
+            <Field label="Email" htmlFor="cust-email">
+              <Input id="cust-email" type="email" value={email} onChange={(e) => setEmail(e.target.value)}
+                placeholder="accounts@customer.com" />
+            </Field>
           </div>
+        </section>
 
-          {/* Footer */}
-          <div className="flex items-center justify-end gap-3 pt-4 border-t border-line">
-            <button
-              type="button"
-              onClick={onClose}
-              className="px-4 py-2 bg-surface-sunken hover:bg-surface-sunken text-ink-soft rounded-card text-xs font-medium transition cursor-pointer"
+        {/* Address */}
+        <section className="space-y-3">
+          <h3 className="text-sm font-semibold text-ink pb-1.5 border-b border-line">Address</h3>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <Field label="Billing address" htmlFor="cust-addr" hint="Principal place of business" className="sm:col-span-2">
+              <Textarea id="cust-addr" rows={2} className="min-h-16" value={address} onChange={(e) => setAddress(e.target.value)}
+                placeholder="Plot No. 42, GIDC Industrial Estate…" />
+            </Field>
+
+            <Field label="Shipping address" htmlFor="cust-ship" hint="Leave blank if same as billing" className="sm:col-span-2">
+              <Textarea id="cust-ship" rows={2} className="min-h-16" value={shippingAddress} onChange={(e) => setShippingAddress(e.target.value)}
+                placeholder="Warehouse or plant delivery location" />
+            </Field>
+
+            <Field
+              label="PIN code"
+              htmlFor="cust-pin"
+              action={fetchAction(fetchingPin, fetchingPin || pin.length !== 6, () => fetchPIN(pin), 'Fetch city', 'Fetching…')}
             >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              disabled={saving}
-              className="px-5 py-2 bg-accent-strong hover:bg-accent-strong-hover text-on-accent rounded-card text-xs font-semibold transition flex items-center gap-2 disabled:opacity-50 cursor-pointer"
-            >
-              <Save className="w-4 h-4" />
-              <span>{saving ? 'Saving...' : isEdit ? 'Save Changes' : 'Register Customer'}</span>
-            </button>
+              <Input id="cust-pin" type="text" inputMode="numeric" maxLength={6} value={pin}
+                onChange={(e) => handlePinChange(e.target.value)} className="tabular-nums" placeholder="382443" />
+            </Field>
+
+            <Field label="City / district" htmlFor="cust-city">
+              <Input id="cust-city" type="text" value={city} onChange={(e) => setCity(e.target.value)} placeholder="Ahmedabad" />
+            </Field>
+
+            <Field label="State" htmlFor="cust-state">
+              <Input id="cust-state" type="text" value={state} onChange={(e) => setState(e.target.value)} placeholder="Gujarat" />
+            </Field>
           </div>
-        </form>
-      </div>
-    </div>
+        </section>
+
+        {/* Billing terms */}
+        <section className="space-y-3">
+          <h3 className="text-sm font-semibold text-ink pb-1.5 border-b border-line">Billing terms</h3>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <Field label="Payment terms" htmlFor="cust-terms">
+              <Input id="cust-terms" type="text" value={paymentTerms} onChange={(e) => setPaymentTerms(e.target.value)}
+                placeholder="Net 15 Days" />
+            </Field>
+
+            <Field label="Credit days" htmlFor="cust-days">
+              <Input id="cust-days" type="number" value={creditDays}
+                onChange={(e) => setCreditDays(parseInt(e.target.value) || 0)} />
+            </Field>
+
+            <Field label="Credit limit (₹)" htmlFor="cust-limit">
+              <Input id="cust-limit" type="number" min="0" value={creditLimit}
+                onChange={(e) => setCreditLimit(parseFloat(e.target.value) || 0)} />
+            </Field>
+
+            <Field label="Notes" htmlFor="cust-notes" className="sm:col-span-2">
+              <Textarea id="cust-notes" rows={3} className="min-h-20" value={notes} onChange={(e) => setNotes(e.target.value)}
+                placeholder="Internal notes about this customer" />
+            </Field>
+          </div>
+        </section>
+      </form>
+    </Modal>
   );
 };

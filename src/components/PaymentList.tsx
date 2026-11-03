@@ -1,11 +1,11 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { CreditCard, Plus, Search, Printer, ChevronLeft, ChevronRight, Receipt } from 'lucide-react';
+import { CreditCard, Plus, Search, Printer, ChevronLeft, ChevronRight } from 'lucide-react';
 import { apiRequest } from '../services/api.js';
 import { Payment, CompanySettings } from '../types.js';
 import { formatINR } from '../utils/format.js';
 import { printReceiptPDF } from '../utils/pdf.js';
 import {
-  Button, IconButton, Card, StatCard, DataTable, Column, EmptyState, ErrorState, Badge, Input,
+  Button, IconButton, Card, Metric, DataTable, Column, EmptyState, ErrorState, Input,
 } from './ui.js';
 
 interface PaymentListProps {
@@ -53,95 +53,97 @@ export const PaymentList: React.FC<PaymentListProps> = ({ onNewPayment, companyS
     {
       key: 'date',
       header: 'Date',
-      cell: (p) => <span className="font-mono text-ink-soft">{p.payment_date}</span>,
+      cell: (p) => <span className="tabular-nums text-ink-soft whitespace-nowrap">{p.payment_date}</span>,
     },
     {
       key: 'customer',
       header: 'Customer',
-      cell: (p) => <span className="font-semibold text-ink truncate block max-w-[220px]">{p.customer_name || '-'}</span>,
+      cell: (p) => <span className="font-medium text-ink truncate block max-w-[240px]">{p.customer_name || '-'}</span>,
     },
     {
       key: 'invoice',
       header: 'Invoice',
-      cell: (p) => <span className="font-mono font-bold text-accent-ink">{p.invoice_no || '-'}</span>,
+      cell: (p) => <span className="font-mono text-[13px] text-ink whitespace-nowrap">{p.invoice_no || '-'}</span>,
     },
     {
       key: 'method',
       header: 'Method',
       hideBelow: 'md',
-      cell: (p) => <Badge>{p.method}</Badge>,
+      cell: (p) => <span className="text-ink-soft whitespace-nowrap">{p.method}</span>,
     },
     {
       key: 'reference',
       header: 'Reference',
       hideBelow: 'lg',
-      cell: (p) => <span className="font-mono text-xs text-ink-faint truncate block max-w-[150px]">{p.reference || '-'}</span>,
+      cell: (p) => <span className="font-mono text-[13px] text-ink-faint truncate block max-w-[170px]">{p.reference || '-'}</span>,
     },
     {
       key: 'amount',
       header: 'Amount',
       align: 'right',
-      cell: (p) => <span className="font-mono font-bold text-positive-ink">₹{formatINR(p.amount)}</span>,
+      cell: (p) => <span className="tabular-nums font-medium text-positive-ink whitespace-nowrap">₹{formatINR(p.amount)}</span>,
     },
     {
       key: 'actions',
-      header: 'Receipt',
+      header: '',
       align: 'right',
+      className: 'w-12',
       cell: (p) => (
         <IconButton label={`Print receipt for ${p.invoice_no || 'payment'}`} onClick={() => printReceiptPDF(p, companySettings)}>
-          <Printer className="w-4 h-4" />
+          <Printer />
         </IconButton>
       ),
     },
   ];
 
   const mobileCard = (p: Payment) => (
-    <div className="space-y-2">
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <div className="font-semibold text-ink truncate">{p.customer_name || '-'}</div>
-          <div className="font-mono text-xs text-accent-ink">{p.invoice_no || '-'}</div>
+    <div className="flex items-center gap-2">
+      <div className="min-w-0 flex-1">
+        <div className="flex items-baseline justify-between gap-3">
+          <span className="font-medium text-sm text-ink truncate">{p.customer_name || '-'}</span>
+          <span className="tabular-nums font-medium text-sm text-positive-ink shrink-0">₹{formatINR(p.amount)}</span>
         </div>
-        <span className="font-mono font-bold text-positive-ink text-base shrink-0">+₹{formatINR(p.amount)}</span>
+        <div className="text-xs text-ink-faint truncate mt-0.5">
+          <span className="font-mono">{p.invoice_no || '-'}</span>
+          {' · '}<span className="tabular-nums">{p.payment_date}</span>
+          {' · '}{p.method}
+          {p.reference && <> · <span className="font-mono">{p.reference}</span></>}
+        </div>
       </div>
-      <div className="flex items-center justify-between gap-2">
-        <span className="flex items-center gap-2 text-xs text-ink-faint min-w-0">
-          <span className="font-mono">{p.payment_date}</span>
-          <Badge>{p.method}</Badge>
-        </span>
-        <IconButton
-          label={`Print receipt for ${p.invoice_no || 'payment'}`}
-          onClick={(e) => { e.stopPropagation(); printReceiptPDF(p, companySettings); }}
-        >
-          <Printer className="w-4 h-4" />
-        </IconButton>
-      </div>
+      <IconButton
+        label={`Print receipt for ${p.invoice_no || 'payment'}`}
+        onClick={(e) => { e.stopPropagation(); printReceiptPDF(p, companySettings); }}
+        className="-mr-1"
+      >
+        <Printer />
+      </IconButton>
     </div>
   );
 
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
   return (
-    <div className="space-y-4 sm:space-y-5">
-      <div className="grid grid-cols-2 gap-3 sm:gap-4">
-        <StatCard label="Receipts" value={total} icon={<Receipt className="w-4 h-4" />} loading={loading} />
-        <StatCard label="Amount realised" value={`₹${formatINR(received)}`} tone="positive" loading={loading} />
+    <div className="space-y-3 sm:space-y-4">
+      <div className="panel overflow-hidden grid grid-cols-2 divide-x divide-line">
+        <Metric label="Receipts" value={<span className="tabular-nums">{total}</span>} loading={loading} />
+        <Metric label="Amount realised" value={`₹${formatINR(received)}`} tone="positive" loading={loading} />
       </div>
 
-      <div className="flex flex-col sm:flex-row sm:items-center gap-3">
-        <div className="relative flex-1 sm:max-w-sm">
-          <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-ink-faint pointer-events-none z-10" aria-hidden="true" />
+      <div className="flex flex-wrap items-center gap-2">
+        <div className="relative flex-1 min-w-0 sm:max-w-sm">
+          <Search className="w-4 h-4 absolute left-2.5 top-1/2 -translate-y-1/2 text-ink-faint pointer-events-none z-10" aria-hidden="true" />
           <Input
             type="search"
             value={searchInput}
             onChange={(e) => setSearchInput(e.target.value)}
-            placeholder="Search reference, customer or invoice"
+            placeholder="Search UTR, customer or invoice"
             aria-label="Search payments"
-            className="pl-9"
+            className="pl-8"
           />
         </div>
-        <Button variant="success" size="sm" icon={<Plus className="w-4 h-4" />} onClick={onNewPayment} className="sm:ml-auto">
-          Record Payment
+        <Button variant="primary" icon={<Plus />} onClick={onNewPayment} className="sm:ml-auto">
+          <span className="sm:hidden">Record</span>
+          <span className="hidden sm:inline">Record payment</span>
         </Button>
       </div>
 
@@ -157,14 +159,14 @@ export const PaymentList: React.FC<PaymentListProps> = ({ onNewPayment, companyS
             caption="Payment receipts"
             empty={
               <EmptyState
-                icon={<CreditCard className="w-6 h-6" />}
+                icon={<CreditCard />}
                 title={search ? 'No matching payments' : 'No payments recorded'}
                 message={search ? 'Try a different search term.' : 'Payments you record against invoices will appear here.'}
                 action={
                   search ? (
                     <Button variant="secondary" onClick={() => setSearchInput('')}>Clear search</Button>
                   ) : (
-                    <Button variant="success" icon={<Plus className="w-4 h-4" />} onClick={onNewPayment}>Record payment</Button>
+                    <Button variant="secondary" icon={<Plus />} onClick={onNewPayment}>Record payment</Button>
                   )
                 }
               />
@@ -173,16 +175,16 @@ export const PaymentList: React.FC<PaymentListProps> = ({ onNewPayment, companyS
         )}
 
         {totalPages > 1 && !loadError && (
-          <div className="flex items-center justify-between gap-3 px-4 py-3 border-t border-line bg-surface-muted">
-            <span className="text-xs text-ink-faint">
-              Page <strong className="text-ink">{page}</strong> of {totalPages} · {total} receipts
+          <div className="flex items-center justify-between gap-3 px-3 sm:px-4 py-2 border-t border-line">
+            <span className="text-xs text-ink-faint tabular-nums">
+              Page <span className="text-ink font-medium">{page}</span> of {totalPages} · {total} receipts
             </span>
             <div className="flex items-center gap-1">
               <IconButton label="Previous page" disabled={page <= 1} onClick={() => setPage((p) => Math.max(1, p - 1))} variant="secondary">
-                <ChevronLeft className="w-4 h-4" />
+                <ChevronLeft />
               </IconButton>
               <IconButton label="Next page" disabled={page >= totalPages} onClick={() => setPage((p) => p + 1)} variant="secondary">
-                <ChevronRight className="w-4 h-4" />
+                <ChevronRight />
               </IconButton>
             </div>
           </div>
