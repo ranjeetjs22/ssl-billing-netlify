@@ -9,6 +9,7 @@
  */
 import React, { useEffect, useRef, useCallback, useState } from 'react';
 import { X, Loader2, Inbox, AlertCircle, Check, Info, AlertTriangle, ArrowUpRight, ArrowDownRight } from 'lucide-react';
+import { useBackLayer } from '../utils/backNav.js';
 
 export const cx = (...parts: (string | false | null | undefined)[]) => parts.filter(Boolean).join(' ');
 
@@ -342,6 +343,8 @@ export const Modal: React.FC<{
   const panelRef = useRef<HTMLDivElement>(null);
   const restoreFocusRef = useRef<HTMLElement | null>(null);
   const titleId = React.useId();
+  // Phone Back button closes the dialog instead of leaving the app
+  useBackLayer(onClose);
 
   useEffect(() => {
     restoreFocusRef.current = document.activeElement as HTMLElement;

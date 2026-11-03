@@ -12,6 +12,7 @@ import {
 import { Invoice } from '../types.js';
 import { formatINR } from '../utils/format.js';
 import { apiRequest } from '../services/api.js';
+import { useBackLayer } from '../utils/backNav.js';
 
 interface DeleteInvoiceModalProps {
   invoice: Invoice;
@@ -24,6 +25,8 @@ export const DeleteInvoiceModal: React.FC<DeleteInvoiceModalProps> = ({
   onClose,
   onSuccess,
 }) => {
+  // Phone Back button closes this instead of leaving the app
+  useBackLayer(onClose);
   const [actionType, setActionType] = useState<'cancel' | 'delete'>('cancel');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);

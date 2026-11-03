@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useBackLayer } from '../utils/backNav.js';
 import { 
   UserCheck, 
   Plus, 
@@ -21,6 +22,7 @@ export const UserManagementView: React.FC = () => {
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
   const [showAdd, setShowAdd] = useState(false);
+  useBackLayer(() => setShowAdd(false), showAdd);
 
   // New User Form
   const [email, setEmail] = useState('');

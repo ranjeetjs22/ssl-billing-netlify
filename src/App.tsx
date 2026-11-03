@@ -16,6 +16,7 @@ import { CompanySettingsView } from './components/CompanySettings.js';
 import { UserManagementView } from './components/UserManagement.js';
 import { Invoice, Customer, CompanySettings, BankAccount } from './types.js';
 import { apiRequest } from './services/api.js';
+import { useBackLayer } from './utils/backNav.js';
 
 // The dashboard (charts) is the heaviest screen - load it on demand.
 const Dashboard = React.lazy(() => import('./components/Dashboard.js').then(m => ({ default: m.Dashboard })));
@@ -44,6 +45,9 @@ function MainApp() {
       return next;
     });
   };
+
+  // Back from any screen returns to the dashboard; Back from the dashboard leaves the app.
+  useBackLayer(() => setActiveTab('dashboard'), Boolean(user) && activeTab !== 'dashboard', 0);
 
   // Modals state
   const [showInvoiceModal, setShowInvoiceModal] = useState(false);

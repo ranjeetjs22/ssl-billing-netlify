@@ -1,4 +1,5 @@
 import React from 'react';
+import { useBackLayer } from '../utils/backNav.js';
 import {
   LayoutGrid,
   FileText,
@@ -148,6 +149,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const manage = visible.filter((i) => i.group === 'manage');
 
   const go = (tab: string) => { setActiveTab(tab); setIsOpenMobile(false); };
+
+  // Back closes the open mobile drawer
+  useBackLayer(() => setIsOpenMobile(false), isOpenMobile);
 
   React.useEffect(() => {
     if (!isOpenMobile) return;

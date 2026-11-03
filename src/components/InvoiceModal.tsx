@@ -26,6 +26,7 @@ import { lookupGSTIN, lookupPincode, isValidGSTINFormat } from '../utils/gstLook
 import { compute, r2, splitInclusive, VENDOR_GST_RATE } from '../utils/calc.js';
 import { resolveRate, placeFromName } from '../utils/rates.js';
 import type { SpecialRate, MatrixRow, PlaceLookup } from '../utils/rates.js';
+import { useBackLayer } from '../utils/backNav.js';
 
 /** The slice of GET /rates/card the invoice form needs to suggest Rate / Kg. */
 interface InvoiceRateCard extends PlaceLookup {
@@ -122,6 +123,8 @@ function buildInitialLrLines(inv?: Invoice | null): LrLine[] {
 const lrInputCls = 'w-full bg-surface border border-line rounded-control px-2.5 py-1.5 text-ink text-xs focus:outline-none focus:border-accent';
 
 export const InvoiceModal: React.FC<InvoiceModalProps> = ({ invoiceToEdit, initialCustomerId, onClose, onSuccess }) => {
+  // Phone Back button closes this instead of leaving the app
+  useBackLayer(onClose);
   const isEditMode = Boolean(invoiceToEdit && invoiceToEdit.id);
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [selectedCustomerId, setSelectedCustomerId] = useState(invoiceToEdit?.customer_id || '');
@@ -205,6 +208,7 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({ invoiceToEdit, initi
   const [fetchingGstQuick, setFetchingGstQuick] = useState(false);
   const [fetchingPinQuick, setFetchingPinQuick] = useState(false);
   const [quickLookupMsg, setQuickLookupMsg] = useState<string | null>(null);
+  useBackLayer(() => setShowQuickAddCust(false), showQuickAddCust);
 
   // Load Customers and Next Invoice Number
   useEffect(() => {

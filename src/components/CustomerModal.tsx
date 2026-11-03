@@ -3,6 +3,7 @@ import { X, Building2, Save, Sparkles, Check, Loader2, AlertCircle, AlertTriangl
 import { apiRequest } from '../services/api.js';
 import { lookupGSTIN, lookupPincode, isValidGSTINFormat, GSTLookupResult } from '../utils/gstLookup.js';
 import { Customer } from '../types.js';
+import { useBackLayer } from '../utils/backNav.js';
 
 interface CustomerModalProps {
   /** When given, the form edits this customer instead of registering a new one. */
@@ -12,6 +13,8 @@ interface CustomerModalProps {
 }
 
 export const CustomerModal: React.FC<CustomerModalProps> = ({ customerToEdit, onClose, onSuccess }) => {
+  // Phone Back button closes this instead of leaving the app
+  useBackLayer(onClose);
   const isEdit = Boolean(customerToEdit?.id);
   const c0 = customerToEdit || ({} as Partial<Customer>);
   const [name, setName] = useState(c0.name || '');

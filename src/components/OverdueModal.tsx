@@ -2,12 +2,15 @@ import React, { useState, useEffect } from 'react';
 import { X, AlertTriangle, MessageSquare, Copy, Check, ExternalLink } from 'lucide-react';
 import { apiRequest } from '../services/api.js';
 import { formatINR } from '../utils/format.js';
+import { useBackLayer } from '../utils/backNav.js';
 
 interface OverdueModalProps {
   onClose: () => void;
 }
 
 export const OverdueModal: React.FC<OverdueModalProps> = ({ onClose }) => {
+  // Phone Back button closes this instead of leaving the app
+  useBackLayer(onClose);
   const [items, setItems] = useState<any[]>([]);
   const [totalOverdue, setTotalOverdue] = useState(0);
   const [loading, setLoading] = useState(true);

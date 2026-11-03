@@ -1,12 +1,15 @@
 import React, { useState, useEffect } from 'react';
 import { X, ShieldAlert, Clock, User, FileText } from 'lucide-react';
 import { apiRequest } from '../services/api.js';
+import { useBackLayer } from '../utils/backNav.js';
 
 interface AuditLogsModalProps {
   onClose: () => void;
 }
 
 export const AuditLogsModal: React.FC<AuditLogsModalProps> = ({ onClose }) => {
+  // Phone Back button closes this instead of leaving the app
+  useBackLayer(onClose);
   const [logs, setLogs] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 

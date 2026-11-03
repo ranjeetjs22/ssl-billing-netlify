@@ -19,6 +19,7 @@ import { printInvoicePDF } from '../utils/pdf.js';
 import { apiRequest } from '../services/api.js';
 import { SslLogo } from './SslLogo.js';
 import { DeleteInvoiceModal } from './DeleteInvoiceModal.js';
+import { useBackLayer } from '../utils/backNav.js';
 
 interface InvoiceDetailModalProps {
   invoice: Invoice;
@@ -39,6 +40,8 @@ export const InvoiceDetailModal: React.FC<InvoiceDetailModalProps> = ({
   companySettings,
   defaultBank,
 }) => {
+  // Phone Back button closes this instead of leaving the app
+  useBackLayer(onClose);
   const [inv, setInv] = useState<Invoice>(initialInvoice);
   const [payments, setPayments] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);

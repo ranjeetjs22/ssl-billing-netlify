@@ -31,6 +31,7 @@ import { formatINR } from '../utils/format.js';
 import { printStatementPDF, printInvoicePDF } from '../utils/pdf.js';
 import { apiRequest } from '../services/api.js';
 import { DeleteInvoiceModal } from './DeleteInvoiceModal.js';
+import { useBackLayer } from '../utils/backNav.js';
 
 interface CustomerDetailModalProps {
   customer: Customer;
@@ -54,6 +55,8 @@ export const CustomerDetailModal: React.FC<CustomerDetailModalProps> = ({
   companySettings,
   onRefresh,
 }) => {
+  // Phone Back button closes this instead of leaving the app
+  useBackLayer(onClose);
   const [customer, setCustomer] = useState<Customer>(initialCustomer);
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [payments, setPayments] = useState<Payment[]>([]);
