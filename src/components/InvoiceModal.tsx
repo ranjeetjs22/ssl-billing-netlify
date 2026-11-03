@@ -1,24 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { 
-  X, 
-  Calculator, 
-  Plus, 
-  Trash2, 
-  Save, 
-  Truck, 
-  CheckCircle,
-  Building2,
-  MapPin,
-  FileText,
-  UserPlus,
-  ArrowRight,
-  Sparkles,
-  Phone,
-  ShieldCheck,
-  Check,
-  Loader2,
-  Navigation
-} from 'lucide-react';
+import { Plus, Trash2, Save, UserPlus, Check, Loader2 } from 'lucide-react';
 import { apiRequest } from '../services/api.js';
 import { Customer, ChargeItem, CostItem, InvoiceTotals, Invoice } from '../types.js';
 import { formatINR } from '../utils/format.js';
@@ -26,7 +7,9 @@ import { lookupGSTIN, lookupPincode, isValidGSTINFormat } from '../utils/gstLook
 import { compute, r2, splitInclusive, VENDOR_GST_RATE } from '../utils/calc.js';
 import { resolveRate, placeFromName } from '../utils/rates.js';
 import type { SpecialRate, MatrixRow, PlaceLookup } from '../utils/rates.js';
-import { useBackLayer } from '../utils/backNav.js';
+import {
+  Modal, Button, IconButton, Badge, Field, Input, Select, Textarea, Segmented, FormError, cx,
+} from './ui.js';
 
 /** The slice of GET /rates/card the invoice form needs to suggest Rate / Kg. */
 interface InvoiceRateCard extends PlaceLookup {
@@ -120,11 +103,15 @@ function buildInitialLrLines(inv?: Invoice | null): LrLine[] {
   return [newLrLine()];
 }
 
-const lrInputCls = 'w-full bg-surface border border-line rounded-control px-2.5 py-1.5 text-ink text-xs focus:outline-none focus:border-accent';
+/** Compact cell input for the LR grid: same look as `inputCls`, 32px tall at every width. */
+const lrInputCls =
+  'w-full h-8 bg-surface border border-line rounded-control px-2 text-sm text-ink tabular-nums ' +
+  'placeholder:text-ink-faint transition-[border-color,box-shadow] duration-[var(--duration-fast)] ' +
+  'hover:border-line-strong focus:border-accent focus:outline-none focus:ring-focus';
 
 export const InvoiceModal: React.FC<InvoiceModalProps> = ({ invoiceToEdit, initialCustomerId, onClose, onSuccess }) => {
-  // Phone Back button closes this instead of leaving the app
-  useBackLayer(onClose);
+  // <Modal> registers the phone Back button, so it closes this instead of leaving the app
+  const formId = React.useId();
   const isEditMode = Boolean(invoiceToEdit && invoiceToEdit.id);
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [selectedCustomerId, setSelectedCustomerId] = useState(invoiceToEdit?.customer_id || '');
@@ -208,7 +195,7 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({ invoiceToEdit, initi
   const [fetchingGstQuick, setFetchingGstQuick] = useState(false);
   const [fetchingPinQuick, setFetchingPinQuick] = useState(false);
   const [quickLookupMsg, setQuickLookupMsg] = useState<string | null>(null);
-  useBackLayer(() => setShowQuickAddCust(false), showQuickAddCust);
+  // The quick-add dialog is its own <Modal>, which handles the phone Back button
 
   // Load Customers and Next Invoice Number
   useEffect(() => {
@@ -753,1081 +740,747 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({ invoiceToEdit, initi
   };
 
   const curBuyer = customers.find(c => c.id === selectedCustomerId);
+  const lrCount = calcResult?.lr_count || lrLines.length;
 
   return (
-    <div className="fixed inset-0 bg-scrim flex items-center justify-center p-4 z-50 overflow-y-auto">
-      <div className="sheet border border-line rounded-overlay max-w-6xl w-full max-h-[94vh] flex flex-col shadow-overlay text-ink my-auto">
-        {/* Header */}
-        <div className="p-4 border-b border-line flex items-center justify-between">
-          <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-card bg-accent-soft border border-accent-line flex items-center justify-center text-accent-ink">
-              <Truck className="w-4 h-4" />
+    <>
+      <Modal
+        onClose={onClose}
+        title={isEditMode
+          ? `Edit ${isInternal ? 'non-GST bill' : 'tax invoice'}`
+          : isInternal ? 'New non-GST bill' : 'New GST tax invoice'}
+        subtitle={isEditMode ? (invoiceNo || invoiceToEdit?.invoice_no) : 'Bill to, ship to, consignments and tax'}
+        size="xl"
+        footer={
+          <div className="flex items-center gap-3">
+            <div className="min-w-0 mr-auto leading-tight">
+              <div className="text-xs text-ink-faint">Grand total</div>
+              <div className="numeral text-base text-ink truncate">₹{formatINR(calcResult?.grand_total || 0)}</div>
             </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <h2 className="text-base font-bold text-ink">
-                  {isEditMode
-                    ? `Edit ${isInternal ? 'non-GST bill' : 'tax invoice'}: ${invoiceNo || invoiceToEdit?.invoice_no}`
-                    : isInternal ? 'New non-GST bill' : 'New GST tax invoice'}
-                </h2>
-                {isEditMode && (
-                  <span className="px-2 py-0.5 bg-accent-soft text-accent-ink text-[11px] font-bold rounded-md">
-                    EDIT MODE
-                  </span>
-                )}
-              </div>
-              <p className="text-[11px] text-ink-faint">
-                {isEditMode
-                  ? 'Update freight rates, consignee details, tax breakdown, or payment terms'
-                  : 'Bill To / Ship To Logistics Billing & Consignment'}
-              </p>
-            </div>
+            <Button variant="ghost" onClick={onClose}>Cancel</Button>
+            <Button variant="primary" type="submit" form={formId} loading={saving} icon={<Save />}>
+              {saving
+                ? isEditMode ? 'Updating…' : 'Saving…'
+                : isEditMode
+                ? (isInternal ? 'Update bill' : 'Update invoice')
+                : (isInternal ? 'Save bill' : 'Save invoice')}
+            </Button>
           </div>
-
-          <button onClick={onClose} className="p-1 text-ink-faint hover:text-ink rounded-control transition">
-            <X className="w-5 h-5" />
-          </button>
-        </div>
-
-        {/* Content Form */}
-        <form onSubmit={handleSave} className="flex-1 overflow-y-auto p-6 space-y-5 text-xs">
-          {error && (
-            <div className="p-3 bg-danger-soft border border-danger-line rounded-card text-danger-ink text-xs">
-              {error}
-            </div>
-          )}
+        }
+      >
+        <form id={formId} onSubmit={handleSave} className="min-w-0">
+          {error && <div className="mb-4"><FormError message={error} /></div>}
 
           {isEditMode && (invoiceToEdit?.paid || 0) > 0 && (
-            <div className="p-3 bg-warning-soft border border-warning-line rounded-card text-warning-ink text-xs flex items-center justify-between">
-              <div>
-                <strong>Recorded Collections:</strong> ₹{formatINR(invoiceToEdit?.paid || 0)} already collected against this invoice.
-                <span className="text-warning-ink ml-1">New calculated balance will adjust automatically.</span>
-              </div>
+            <div className="mb-4 px-3 py-2 rounded-control border border-warning-line bg-warning-soft text-sm text-warning-ink flex flex-wrap items-center justify-between gap-x-4 gap-y-1">
+              <span>₹{formatINR(invoiceToEdit?.paid || 0)} already received; the balance adjusts automatically.</span>
               {calcResult && (
-                <div className="font-mono font-bold text-warning-ink text-xs">
-                  New Balance: ₹{formatINR(Math.max(0, calcResult.grand_total - (invoiceToEdit?.paid || 0)))}
-                </div>
+                <span className="tabular-nums font-medium">
+                  New balance ₹{formatINR(Math.max(0, calcResult.grand_total - (invoiceToEdit?.paid || 0)))}
+                </span>
               )}
             </div>
           )}
 
-          {quickAddSuccessMsg && (
-            <div className="p-3 bg-positive-soft border border-positive-line rounded-card text-positive-ink text-xs flex items-center gap-2 font-medium">
-              <Check className="w-4 h-4 text-positive-ink" />
-              <span>{quickAddSuccessMsg}</span>
-            </div>
-          )}
-
-          {/* Bill type. Decides the number series, whether GST applies, and
-              whether this bill can ever appear in a GST return. */}
-          <div className="flex flex-wrap items-center gap-3">
-            <div role="radiogroup" aria-label="Bill type"
-              className="inline-flex p-0.5 rounded-control bg-surface-sunken border border-line">
-              {([
-                { v: 'tax_invoice', label: 'GST tax invoice' },
-                { v: 'internal', label: 'Non-GST bill' },
-              ] as const).map(o => (
-                <button key={o.v} type="button" role="radio" aria-checked={docType === o.v}
-                  disabled={isEditMode && docType !== o.v}
-                  onClick={() => setDocType(o.v)}
-                  className={`px-3 h-8 rounded-[6px] text-xs whitespace-nowrap transition-colors cursor-pointer disabled:cursor-not-allowed disabled:opacity-40 ${
-                    docType === o.v ? 'bg-surface-muted text-ink font-semibold' : 'text-ink-faint hover:text-ink'}`}>
-                  {o.label}
-                </button>
-              ))}
-            </div>
-            <p className="text-[11px] text-ink-faint">
-              {isEditMode
-                ? 'The type is fixed once a bill is created, because its number belongs to that series.'
+          {/* ============================================================ Bill details */}
+          <FormSection title="Bill details" first>
+            <div className="grid grid-cols-1 sm:grid-cols-[auto_minmax(0,1fr)_minmax(0,1fr)] gap-3 sm:gap-4 items-start">
+              <Field label="Bill type" hint={isEditMode
+                ? 'Fixed once created: the number belongs to that series.'
                 : isInternal
-                  ? 'Own number series, no GST, never included in GSTR-1 or any GST report.'
-                  : 'Numbered in the GST series and reported in GSTR-1.'}
-            </p>
-          </div>
-
-          {/* Top Bar: Invoice No & Date */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 bg-surface-muted p-4 rounded-card border border-line">
-            <div>
-              <label className="block text-ink-soft font-semibold mb-1">{isInternal ? 'Bill number' : 'Invoice number'} (auto or custom) *</label>
-              <input
-                type="text"
-                required
-                value={invoiceNo}
-                onChange={(e) => setInvoiceNo(e.target.value)}
-                className="w-full bg-surface border border-line rounded-control px-3 py-2 font-mono font-bold text-accent-ink focus:outline-none focus:border-accent"
-                placeholder={isInternal ? 'TRP/2026-27/0001' : 'SSL/2026-27/0001'}
-              />
-            </div>
-
-            <div>
-              <label className="block text-ink-soft font-semibold mb-1">{isInternal ? 'Bill date' : 'Invoice date'} *</label>
-              <input
-                type="date"
-                required
-                value={invoiceDate}
-                onChange={(e) => setInvoiceDate(e.target.value)}
-                className="w-full bg-surface border border-line rounded-control px-3 py-2 text-ink focus:outline-none focus:border-accent"
-              />
-            </div>
-          </div>
-
-          {/* ========================================================================= */}
-          {/* BILL TO & SHIP TO SECTION */}
-          {/* ========================================================================= */}
-          <div className="border border-line rounded-card overflow-hidden">
-            <div className="bg-surface-sunken px-4 py-2.5 border-b border-line flex items-center justify-between">
-              <div className="flex items-center gap-2 font-bold text-ink text-xs">
-                <Building2 className="w-4 h-4 text-accent-ink" />
-                <span>Bill To & Ship To (Parties & Consignment Routing)</span>
-              </div>
-              <span className="text-[11px] text-ink-faint font-medium">GST Compliant Two-Party Dispatch Model</span>
-            </div>
-
-            <div className="p-4 grid grid-cols-1 md:grid-cols-2 gap-5 bg-surface">
-              {/* BILL TO (BUYER) CARD */}
-              <div className="space-y-3 p-3.5 bg-surface-muted rounded-card border border-line">
-                <div className="flex items-center justify-between">
-                  <div className="text-[11px] font-bold text-accent-ink flex items-center gap-1.5">
-                    <span>1. Bill To (Billed Party / Buyer) *</span>
+                  ? 'Own series, no GST, never in GSTR-1.'
+                  : 'GST series, reported in GSTR-1.'}>
+                {isEditMode ? (
+                  <div className="h-10 sm:h-9 flex items-center">
+                    <Badge>{isInternal ? 'Non-GST bill' : 'GST tax invoice'}</Badge>
                   </div>
+                ) : (
+                  <Segmented
+                    label="Bill type"
+                    options={[
+                      { value: 'tax_invoice', label: 'GST tax invoice' },
+                      { value: 'internal', label: 'Non-GST bill' },
+                    ] as const}
+                    value={docType}
+                    onChange={(v) => setDocType(v as 'tax_invoice' | 'internal')}
+                  />
+                )}
+              </Field>
+              <Field label={isInternal ? 'Bill number' : 'Invoice number'} htmlFor={`${formId}-no`} required>
+                <Input
+                  id={`${formId}-no`}
+                  type="text"
+                  required
+                  value={invoiceNo}
+                  onChange={(e) => setInvoiceNo(e.target.value)}
+                  className="font-mono"
+                  placeholder={isInternal ? 'TRP/2026-27/0001' : 'SSL/2026-27/0001'}
+                />
+              </Field>
+              <Field label={isInternal ? 'Bill date' : 'Invoice date'} htmlFor={`${formId}-date`} required>
+                <Input
+                  id={`${formId}-date`}
+                  type="date"
+                  required
+                  value={invoiceDate}
+                  onChange={(e) => setInvoiceDate(e.target.value)}
+                />
+              </Field>
+            </div>
+          </FormSection>
 
-                  {/* Quick Add Customer Trigger */}
-                  <button
-                    type="button"
-                    onClick={() => setShowQuickAddCust(true)}
-                    className="inline-flex items-center gap-1 px-2.5 py-1 bg-accent-strong hover:bg-accent-strong-hover text-on-accent rounded-control text-[11px] font-semibold transition cursor-pointer"
-                  >
-                    <UserPlus className="w-3 h-3" />
-                    <span>+ Quick Add Customer</span>
-                  </button>
-                </div>
-
-                <div>
-                  <label className="block text-ink-soft font-medium mb-1">Select Registered Customer</label>
-                  <select
+          {/* ================================================================ Parties */}
+          <FormSection title="Parties">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-5">
+              {/* Bill to */}
+              <div className="min-w-0 space-y-2">
+                <Field
+                  label="Bill to"
+                  htmlFor={`${formId}-cust`}
+                  required
+                  action={
+                    <button type="button" onClick={() => setShowQuickAddCust(true)}
+                      className="tap-44 inline-flex items-center gap-1 text-xs font-medium text-accent-ink hover:underline cursor-pointer">
+                      <UserPlus className="w-3.5 h-3.5" aria-hidden="true" />
+                      New customer
+                    </button>
+                  }
+                >
+                  <Select
+                    id={`${formId}-cust`}
                     required
                     value={selectedCustomerId}
                     onChange={(e) => handleCustomerChange(e.target.value)}
-                    className="w-full bg-surface border border-line rounded-control px-3 py-2 text-ink focus:outline-none focus:border-accent font-medium"
                   >
                     {customers.map((c) => (
                       <option key={c.id} value={c.id}>
-                        {c.name} {c.city ? `(${c.city})` : ''} {c.gstin ? `· GST: ${c.gstin}` : ''}
+                        {c.name}{c.city ? ` · ${c.city}` : ''}
                       </option>
                     ))}
-                  </select>
-                </div>
+                  </Select>
+                </Field>
+
+                {quickAddSuccessMsg && (
+                  <p className="flex items-center gap-1.5 text-xs text-positive-ink">
+                    <Check className="w-3.5 h-3.5 shrink-0" aria-hidden="true" />
+                    {quickAddSuccessMsg}
+                  </p>
+                )}
 
                 {curBuyer && (
-                  <div className="p-2.5 bg-surface rounded-control border border-line text-[11px] text-ink-soft space-y-1">
-                    <div className="font-bold text-ink">{curBuyer.name}</div>
+                  <div className="text-xs text-ink-soft space-y-0.5 pl-0.5">
                     <div>{curBuyer.address || 'Address not specified'}</div>
                     <div>{[curBuyer.city, curBuyer.state, curBuyer.pin].filter(Boolean).join(', ')}</div>
-                    <div className="flex items-center gap-3 pt-1 text-[11px] text-ink-faint font-mono">
-                      <span>GSTIN: <strong className="text-ink">{curBuyer.gstin || 'Unregistered'}</strong></span>
-                      <span>·</span>
-                      <span>Terms: <strong className="text-ink font-sans">{curBuyer.payment_terms || 'Net 15 Days'}</strong></span>
+                    <div className="text-ink-faint">
+                      GSTIN <span className="font-mono text-ink-soft">{curBuyer.gstin || 'Unregistered'}</span>
+                      <span className="mx-1">·</span>
+                      {curBuyer.payment_terms || 'Net 15 Days'}
                     </div>
                   </div>
                 )}
               </div>
 
-              {/* SHIP TO (CONSIGNEE / DELIVERY SITE) CARD */}
-              <div className="space-y-3 p-3.5 bg-surface-muted rounded-card border border-line">
-                <div className="flex items-center justify-between">
-                  <div className="text-[11px] font-bold text-accent-ink flex items-center gap-1.5">
-                    <span>2. Ship To (Consignee / Delivery Site)</span>
-                  </div>
-
-                  {/* Toggle Same as Buyer */}
-                  <label className="flex items-center gap-1.5 text-xs text-ink-soft cursor-pointer font-semibold select-none">
+              {/* Ship to */}
+              <div className="min-w-0 space-y-2">
+                <div className="flex items-center justify-between gap-2 min-h-4">
+                  <span className="text-xs font-medium text-ink-soft">Ship to</span>
+                  <label className="tap-44 inline-flex items-center gap-1.5 text-xs text-ink-soft cursor-pointer select-none">
                     <input
                       type="checkbox"
                       checked={sameAsBuyer}
                       onChange={(e) => toggleSameAsBuyer(e.target.checked)}
-                      className="rounded text-accent-ink focus:ring-accent w-3.5 h-3.5"
+                      className="w-4 h-4"
                     />
-                    <span>Same as Bill To</span>
+                    Same as bill to
                   </label>
                 </div>
 
                 {sameAsBuyer ? (
-                  <div className="p-3 bg-surface rounded-control border border-dashed border-line-strong text-ink-soft text-xs space-y-1.5">
-                    <div className="flex items-center gap-1.5 text-positive-ink font-semibold text-[11px]">
-                      <CheckCircle className="w-3.5 h-3.5 text-positive-ink" />
-                      <span>Shipping to Buyer's Registered Address</span>
+                  <div className="rounded-control border border-line px-3 py-2.5 text-sm text-ink-soft">
+                    <div>
+                      Delivering to <span className="text-ink">{curBuyer?.name || 'the buyer'}</span>
+                      {curBuyer?.city ? `, ${curBuyer.city}` : ''}
                     </div>
-                    <p className="text-[11px] text-ink-faint">
-                      Deliver to: <strong className="text-ink">{curBuyer?.name || 'Same as Bill To'}</strong> ({curBuyer?.city || ''}, {curBuyer?.state || 'Gujarat'})
-                    </p>
-                    <div className="text-[11px] text-accent-ink font-medium bg-accent-soft p-2 rounded-control border border-accent-line flex items-center gap-1.5">
-                      <Navigation className="w-3.5 h-3.5 text-accent-ink shrink-0" />
-                      <span>Place of Supply auto-set to: <strong>{curBuyer?.state || 'Gujarat'}</strong></span>
+                    <div className="text-xs text-ink-faint mt-0.5">
+                      Place of supply: <span className="text-ink-soft">{curBuyer?.state || 'Gujarat'}</span>
                     </div>
-                    <button
-                      type="button"
-                      onClick={() => toggleSameAsBuyer(false)}
-                      className="text-xs text-accent-ink hover:text-accent-ink font-semibold underline mt-1 cursor-pointer"
-                    >
-                      Ship to a different branch / site / consignee?
+                    <button type="button" onClick={() => toggleSameAsBuyer(false)}
+                      className="mt-1.5 text-xs font-medium text-accent-ink hover:underline cursor-pointer">
+                      Ship to a different site or consignee
                     </button>
                   </div>
                 ) : (
-                  <div className="space-y-2 pt-1">
-                    {shipToLookupMsg && (
-                      <div className="p-2 bg-positive-soft border border-positive-line rounded-control text-positive-ink flex items-center gap-1.5 text-[11px]">
-                        <Check className="w-3.5 h-3.5 text-positive-ink shrink-0" />
-                        <span>{shipToLookupMsg}</span>
-                      </div>
-                    )}
-
-                    {/* Consignee GSTIN Auto-fetch */}
-                    <div>
-                      <div className="flex items-center justify-between mb-0.5">
-                        <label className="text-ink-soft font-medium text-[11px]">Consignee GSTIN (Optional)</label>
-                        <button
-                          type="button"
-                          disabled={fetchingGstShipTo || shipToGstin.length !== 15}
-                          onClick={() => fetchShipToGST(shipToGstin, true)}
-                          className="text-[11px] text-accent-ink hover:text-accent-ink font-semibold flex items-center gap-1 cursor-pointer disabled:opacity-40"
-                        >
-                          {fetchingGstShipTo ? (
-                            <>
-                              <Loader2 className="w-3 h-3 animate-spin" />
-                              <span>Fetching...</span>
-                            </>
-                          ) : (
-                            <>
-                              <Sparkles className="w-3 h-3 text-accent" />
-                              <span>Auto Fetch</span>
-                            </>
-                          )}
-                        </button>
-                      </div>
-                      <input
-                        type="text"
-                        maxLength={15}
-                        value={shipToGstin}
+                  <div className="grid grid-cols-6 gap-x-3 gap-y-2.5">
+                    {shipToLookupMsg && <LookupNote msg={shipToLookupMsg} className="col-span-6" />}
+                    <Field label="Consignee GSTIN" htmlFor={`${formId}-sg`} className="col-span-6 sm:col-span-3"
+                      action={<FetchLink busy={fetchingGstShipTo} disabled={shipToGstin.length !== 15}
+                        onClick={() => fetchShipToGST(shipToGstin, true)} />}>
+                      <Input id={`${formId}-sg`} type="text" maxLength={15} value={shipToGstin}
                         onChange={(e) => handleShipToGstinChange(e.target.value)}
-                        className="w-full bg-surface border border-line rounded-control px-2.5 py-1.5 font-mono text-ink text-xs uppercase focus:outline-none focus:border-accent"
-                        placeholder="24AABCS1429B1Z8"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-ink-soft font-medium mb-0.5 text-[11px]">Consignee / Site Name *</label>
-                      <input
-                        type="text"
-                        required={!sameAsBuyer}
-                        value={shipToName}
-                        onChange={(e) => setShipToName(e.target.value)}
-                        className="w-full bg-surface border border-line rounded-control px-2.5 py-1.5 text-ink text-xs focus:outline-none focus:border-accent font-medium"
-                        placeholder="e.g. Warehouse 3 / Consignee Plant"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-ink-soft font-medium mb-0.5 text-[11px]">Delivery Address</label>
-                      <input
-                        type="text"
-                        value={shipToAddress}
-                        onChange={(e) => setShipToAddress(e.target.value)}
-                        className="w-full bg-surface border border-line rounded-control px-2.5 py-1.5 text-ink text-xs focus:outline-none focus:border-accent"
-                        placeholder="Plot No / Industrial Road"
-                      />
-                    </div>
-
-                    <div className="grid grid-cols-3 gap-2">
-                      <div>
-                        <div className="flex items-center justify-between mb-0.5">
-                          <label className="text-ink-soft font-medium text-[11px]">PIN Code</label>
-                          <button
-                            type="button"
-                            disabled={fetchingPinShipTo || shipToPin.length !== 6}
-                            onClick={() => fetchShipToPIN(shipToPin)}
-                            className="text-[11px] text-accent-ink font-semibold cursor-pointer disabled:opacity-40"
-                          >
-                            {fetchingPinShipTo ? '...' : 'Fetch'}
-                          </button>
-                        </div>
-                        <input
-                          type="text"
-                          maxLength={6}
-                          value={shipToPin}
-                          onChange={(e) => handleShipToPinChange(e.target.value)}
-                          className="w-full bg-surface border border-line rounded-control px-2.5 py-1.5 text-ink text-xs focus:outline-none focus:border-accent font-mono"
-                          placeholder="395003"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-ink-soft font-medium mb-0.5 text-[11px]">City</label>
-                        <input
-                          type="text"
-                          value={shipToCity}
-                          // LR "To" follows this city (see the consignee sync effect)
-                          onChange={(e) => setShipToCity(e.target.value)}
-                          className="w-full bg-surface border border-line rounded-control px-2.5 py-1.5 text-ink text-xs focus:outline-none focus:border-accent"
-                          placeholder="Surat"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-ink-soft font-medium mb-0.5 text-[11px]">State (Place of Supply)</label>
-                        <input
-                          type="text"
-                          value={shipToState}
-                          onChange={(e) => {
-                            setShipToState(e.target.value);
-                            setPlaceOfSupply(e.target.value);
-                          }}
-                          className="w-full bg-surface border border-line rounded-control px-2.5 py-1.5 text-ink text-xs focus:outline-none focus:border-accent font-semibold"
-                          placeholder="Gujarat"
-                        />
-                      </div>
-                    </div>
-
-                    <div>
-                      <label className="block text-ink-soft font-medium mb-0.5 text-[11px]">Consignee Phone</label>
-                      <input
-                        type="text"
-                        value={shipToPhone}
-                        onChange={(e) => setShipToPhone(e.target.value)}
-                        className="w-full bg-surface border border-line rounded-control px-2.5 py-1.5 text-ink text-xs focus:outline-none focus:border-accent"
-                        placeholder="+91 98765 43210"
-                      />
-                    </div>
+                        className="font-mono uppercase" placeholder="Optional" />
+                    </Field>
+                    <Field label="Phone" htmlFor={`${formId}-sph`} className="col-span-6 sm:col-span-3">
+                      <Input id={`${formId}-sph`} type="text" value={shipToPhone}
+                        onChange={(e) => setShipToPhone(e.target.value)} placeholder="+91 98765 43210" />
+                    </Field>
+                    <Field label="Consignee / site name" htmlFor={`${formId}-sn`} required className="col-span-6">
+                      <Input id={`${formId}-sn`} type="text" required={!sameAsBuyer} value={shipToName}
+                        onChange={(e) => setShipToName(e.target.value)} placeholder="e.g. Warehouse 3" />
+                    </Field>
+                    <Field label="Delivery address" htmlFor={`${formId}-sa`} className="col-span-6">
+                      <Input id={`${formId}-sa`} type="text" value={shipToAddress}
+                        onChange={(e) => setShipToAddress(e.target.value)} placeholder="Plot no, road" />
+                    </Field>
+                    <Field label="PIN" htmlFor={`${formId}-sp`} className="col-span-3 sm:col-span-2"
+                      action={<FetchLink busy={fetchingPinShipTo} disabled={shipToPin.length !== 6}
+                        onClick={() => fetchShipToPIN(shipToPin)} />}>
+                      <Input id={`${formId}-sp`} type="text" inputMode="numeric" maxLength={6} value={shipToPin}
+                        onChange={(e) => handleShipToPinChange(e.target.value)} className="font-mono" placeholder="395003" />
+                    </Field>
+                    <Field label="City" htmlFor={`${formId}-sc`} className="col-span-3 sm:col-span-2">
+                      {/* LR "To" follows this city (see the consignee sync effect) */}
+                      <Input id={`${formId}-sc`} type="text" value={shipToCity}
+                        onChange={(e) => setShipToCity(e.target.value)} placeholder="Surat" />
+                    </Field>
+                    <Field label="State (place of supply)" htmlFor={`${formId}-ss`} className="col-span-6 sm:col-span-2">
+                      <Input id={`${formId}-ss`} type="text" value={shipToState}
+                        onChange={(e) => { setShipToState(e.target.value); setPlaceOfSupply(e.target.value); }}
+                        placeholder="Gujarat" />
+                    </Field>
                   </div>
                 )}
               </div>
             </div>
-          </div>
+          </FormSection>
 
-          {/* Consignments / LR Lines - a single bill can cover many LRs */}
-          <div className="bg-surface-muted p-4 rounded-card border border-line space-y-3">
-            <div className="flex items-center justify-between border-b border-line pb-2">
-              <span className="font-bold text-ink text-[11px] flex items-center gap-1.5">
-                <Truck className="w-3.5 h-3.5 text-accent-ink" />
-                <span>Consignments / LR Details</span>
-                <span className="ml-1 px-1.5 py-0.5 rounded-md bg-accent-soft text-accent-ink text-[11px] font-bold normal-case tracking-normal">
-                  {lrLines.length} LR{lrLines.length === 1 ? '' : 's'}
-                </span>
-              </span>
-              <button
-                type="button"
-                onClick={addLrLine}
-                className="text-xs text-accent-ink hover:text-accent-ink flex items-center gap-1 font-semibold cursor-pointer"
-              >
-                <Plus className="w-3.5 h-3.5" />
-                <span>Add LR to this bill</span>
-              </button>
-            </div>
-            <p className="text-[11px] text-ink-faint -mt-1">
-              Add every LR / bilty covered by this single bill. Freight per LR = Weight × Rate, or type the amount directly.
-            </p>
-
+          {/* =========================================================== Consignments */}
+          <FormSection
+            title="Consignments"
+            hint="Every LR / bilty on this bill. Freight = weight × rate, or type the amount."
+            actions={
+              <Button type="button" variant="secondary" size="sm" icon={<Plus />} onClick={addLrLine}>
+                Add LR
+              </Button>
+            }
+          >
             {rateCard && (
-              <div className="flex flex-wrap items-center gap-2 text-[11px] text-ink-soft">
-                <span className="font-semibold">Rate / Kg from:</span>
+              <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5 mb-3">
+                <span className="text-xs font-medium text-ink-soft">Rate / kg from</span>
                 {rateCard.customer_card?.exists ? (
-                  <div role="radiogroup" aria-label="Rate chart for this bill"
-                    className="inline-flex p-0.5 rounded-control bg-surface-sunken border border-line">
-                    {([['custom', 'Personal chart'], ['global', 'Global chart']] as const).map(([v, label]) => {
-                      const on = rateCard.source === (v === 'custom' ? 'customer' : 'global');
-                      return (
-                        <button key={v} type="button" role="radio" aria-checked={on}
-                          onClick={() => {
-                            setRateMode(v);
-                            // Switching charts re-prices every line, including ones typed by hand
-                            setLrLines(prev => prev.map(l => ({ ...l, rate_auto: true })));
-                          }}
-                          className={`px-2.5 h-7 rounded-[6px] whitespace-nowrap transition-colors cursor-pointer ${
-                            on ? 'bg-accent-strong text-on-accent font-semibold' : 'text-ink-faint hover:text-ink'}`}>
-                          {label}
-                        </button>
-                      );
-                    })}
-                  </div>
+                  <Segmented
+                    size="sm"
+                    label="Rate chart for this bill"
+                    options={[
+                      { value: 'custom', label: 'Personal chart' },
+                      { value: 'global', label: 'Global chart' },
+                    ] as const}
+                    value={rateCard.source === 'customer' ? 'custom' : 'global'}
+                    onChange={(v) => {
+                      setRateMode(v);
+                      // Switching charts re-prices every line, including ones typed by hand
+                      setLrLines(prev => prev.map(l => ({ ...l, rate_auto: true })));
+                    }}
+                  />
                 ) : (
-                  <span className="px-2 py-0.5 rounded-md bg-surface border border-line">Global chart</span>
+                  <Badge>Global chart</Badge>
                 )}
-                <span className="text-ink-faint">Filled automatically from From/To; type a rate to override it.</span>
+                <span className="text-xs text-ink-faint">Filled from From / To; type a rate to override.</span>
               </div>
             )}
 
-            <div className="overflow-x-auto -mx-1 px-1">
-              <table className="w-full min-w-[1080px] text-xs border-separate border-spacing-y-1.5 [&_tbody_td]:align-top">
-                <thead>
-                  <tr className="text-[11px] text-ink-faint">
-                    <th className="text-left font-semibold pl-1 w-6">#</th>
-                    <th className="text-left font-semibold">LR / Bilty No</th>
-                    <th className="text-left font-semibold">LR Date</th>
-                    <th className="text-left font-semibold">From</th>
-                    <th className="text-left font-semibold">To</th>
-                    <th className="text-right font-semibold">Weight (Kg)</th>
-                    <th className="text-right font-semibold">Rate / Kg</th>
-                    <th className="text-right font-semibold">Freight (₹)</th>
-                    <th className="text-right font-semibold" title="What we paid for this trip, including the vendor's GST">Our cost incl. GST (₹)</th>
-                    <th className="text-right font-semibold" title={`Tick when the amount includes ${VENDOR_GST_RATE}% GST; the GST inside it is worked out as amount × ${VENDOR_GST_RATE}/${100 + VENDOR_GST_RATE}`}>{VENDOR_GST_RATE}% GST in it</th>
-                    <th className="text-center font-semibold" title={isInternal
+            <div className="border border-line rounded-card overflow-x-auto overscroll-x-contain">
+              <table className="w-full min-w-[980px] table-fixed text-sm">
+                <colgroup>
+                  <col className="w-7" />
+                  <col className="w-[100px]" />
+                  <col className="w-[120px]" />
+                  <col className="w-[84px]" />
+                  <col className="w-[84px]" />
+                  <col className="w-[72px]" />
+                  <col className="w-[72px]" />
+                  <col className="w-[88px]" />
+                  <col className="w-[88px]" />
+                  <col className="w-[96px]" />
+                  <col className="w-9" />
+                  <col />
+                  <col className="w-9" />
+                </colgroup>
+                <thead className="bg-surface-muted border-b border-line">
+                  <tr className="text-xs text-ink-faint">
+                    <th className="h-8 pl-2.5 text-left font-medium">#</th>
+                    <th className="h-8 px-1 text-left font-medium">LR no</th>
+                    <th className="h-8 px-1 text-left font-medium">LR date</th>
+                    <th className="h-8 px-1 text-left font-medium">From</th>
+                    <th className="h-8 px-1 text-left font-medium">To</th>
+                    <th className="h-8 px-1 text-right font-medium">Weight kg</th>
+                    <th className="h-8 px-1 text-right font-medium">Rate / kg</th>
+                    <th className="h-8 px-1 text-right font-medium">Freight ₹</th>
+                    <th className="h-8 px-1 text-right font-medium border-l border-line" title="What we paid for this trip, including the vendor's GST">Our cost ₹</th>
+                    <th className="h-8 px-1 text-right font-medium" title={`Tick when the amount includes ${VENDOR_GST_RATE}% GST; the GST inside it is worked out as amount × ${VENDOR_GST_RATE}/${100 + VENDOR_GST_RATE}`}>GST in it</th>
+                    <th className="h-8 px-1 text-center font-medium" title={isInternal
                       ? 'Non-GST bill: vendor GST is counted as cost, not claimed as credit'
-                      : 'Tick if you can claim this GST back as input credit'}>Credit</th>
-                    <th className="text-left font-semibold">Vendor</th>
-                    <th className="w-8"></th>
+                      : 'Tick if you can claim this GST back as input credit'}>ITC</th>
+                    <th className="h-8 px-1 text-left font-medium">Vendor</th>
+                    <th className="h-8" aria-label="Remove"></th>
                   </tr>
                 </thead>
-                <tbody>
-                  {lrLines.map((line, idx) => (
-                    <tr key={line.key}>
-                      <td className="pl-1 text-ink-faint font-mono">{idx + 1}</td>
-                      <td className="pr-1.5">
-                        <input
-                          type="text"
-                          value={line.lr_no}
-                          onChange={(e) => updateLrLine(line.key, { lr_no: e.target.value })}
-                          className={`${lrInputCls} font-mono`}
-                          placeholder="LR-88910"
-                        />
-                      </td>
-                      <td className="pr-1.5">
-                        <input
-                          type="date"
-                          value={line.lr_date}
-                          onChange={(e) => updateLrLine(line.key, { lr_date: e.target.value })}
-                          className={lrInputCls}
-                        />
-                      </td>
-                      <td className="pr-1.5">
-                        <input
-                          type="text"
-                          value={line.origin}
-                          onChange={(e) => updateLrLine(line.key, { origin: e.target.value })}
-                          className={lrInputCls}
-                          placeholder="Ahmedabad"
-                        />
-                      </td>
-                      <td className="pr-1.5">
-                        <input
-                          type="text"
-                          value={line.destination}
-                          onChange={(e) => updateLrLine(line.key, { destination: e.target.value })}
-                          className={lrInputCls}
-                          placeholder="Surat"
-                        />
-                      </td>
-                      <td className="pr-1.5">
-                        <input
-                          type="number"
-                          min="0"
-                          step="any"
-                          value={line.weight || ''}
-                          onChange={(e) => updateLrLine(line.key, { weight: parseFloat(e.target.value) || 0 })}
-                          className={`${lrInputCls} text-right font-mono`}
-                          placeholder="0"
-                        />
-                      </td>
-                      <td className="pr-1.5">
-                        <input
-                          type="number"
-                          min="0"
-                          step="any"
-                          value={line.rate_kg || ''}
-                          onChange={(e) => updateLrLine(line.key, { rate_kg: parseFloat(e.target.value) || 0 })}
-                          className={`${lrInputCls} text-right font-mono`}
-                          placeholder="0.00"
-                        />
-                        {(() => {
-                          const sug = rateSuggestions[line.key];
-                          if (!sug) return null;
-                          if (line.rate_auto || line.rate_kg === sug.rate) {
-                            return <div className="text-[11px] text-ink-faint text-right mt-0.5 whitespace-nowrap">{sug.label}</div>;
-                          }
-                          return (
-                            <button type="button"
-                              onClick={() => updateLrLine(line.key, { rate_kg: sug.rate, rate_auto: true })}
-                              className="block w-full text-[11px] text-accent-ink text-right mt-0.5 whitespace-nowrap hover:underline cursor-pointer"
-                              title={sug.label}>
-                              Chart: ₹{sug.rate}
-                            </button>
-                          );
-                        })()}
-                      </td>
-                      <td className="pr-1.5">
-                        <input
-                          type="number"
-                          min="0"
-                          step="any"
-                          value={line.amount || ''}
-                          onChange={(e) => updateLrLine(line.key, { amount: parseFloat(e.target.value) || 0 })}
-                          className={`${lrInputCls} text-right font-mono font-bold text-accent-ink`}
-                          placeholder="0.00"
-                        />
-                      </td>
-                      <td className="pr-1.5">
-                        <input
-                          type="number"
-                          min="0"
-                          step="any"
-                          value={line.cost_incl_gst ?? ''}
-                          onChange={(e) => updateLrLine(line.key, {
-                            cost_incl_gst: e.target.value === '' ? null : parseFloat(e.target.value) || 0,
-                          })}
-                          className={`${lrInputCls} text-right font-mono`}
-                          placeholder="Not costed"
-                          aria-label={`Our cost including GST for LR ${idx + 1}`}
-                        />
-                      </td>
-                      <td className="pr-1.5">
-                        {(() => {
-                          // The split shown here is the same one the server saves (server/calc.ts).
-                          const split = line.cost_incl_gst !== null && line.gst_included
-                            ? splitInclusive(line.cost_incl_gst) : null;
-                          return (
-                            <label className="flex items-center justify-end gap-1.5 cursor-pointer whitespace-nowrap"
-                              title={split ? `Cost ₹${formatINR(split.base)} + GST ₹${formatINR(split.gst)}` : 'No GST charged by this vendor'}>
-                              <span className="font-mono text-[11px] text-ink-soft w-[64px] text-right">
-                                {split ? `₹${formatINR(split.gst)}` : '-'}
-                              </span>
-                              <input
-                                type="checkbox"
-                                checked={line.gst_included}
-                                onChange={(e) => updateLrLine(line.key, { gst_included: e.target.checked })}
-                                className="w-4 h-4 cursor-pointer"
-                                aria-label={`Amount for LR ${idx + 1} includes ${VENDOR_GST_RATE}% GST`}
-                              />
-                            </label>
-                          );
-                        })()}
-                      </td>
-                      <td className="pr-1.5 text-center">
-                        {isInternal ? (
-                          <span className="text-[11px] text-ink-faint" title="On non-GST bills vendor GST is part of the cost">cost</span>
-                        ) : (
-                          <input
-                            type="checkbox"
-                            checked={line.itc}
-                            disabled={!line.gst_included || !line.cost_incl_gst}
-                            onChange={(e) => updateLrLine(line.key, { itc: e.target.checked })}
-                            className="w-4 h-4 cursor-pointer disabled:opacity-30"
-                            aria-label={`Claim vendor GST as credit for LR ${idx + 1}`}
-                          />
-                        )}
-                      </td>
-                      <td className="pr-1.5">
-                        <input
-                          type="text"
-                          value={line.vendor}
-                          onChange={(e) => updateLrLine(line.key, { vendor: e.target.value })}
-                          className={lrInputCls}
-                          placeholder="Lorry owner"
-                          aria-label={`Vendor for LR ${idx + 1}`}
-                        />
-                      </td>
-                      <td>
-                        <button
-                          type="button"
-                          onClick={() => removeLrLine(line.key)}
-                          disabled={lrLines.length <= 1}
-                          title="Remove this LR"
-                          className="p-1.5 text-ink-faint hover:text-danger-ink disabled:opacity-30 disabled:hover:text-ink-faint transition cursor-pointer"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
+                <tbody className="divide-y divide-line [&_td]:align-top [&_td]:py-1.5">
+                  {lrLines.map((line, idx) => {
+                    const sug = rateSuggestions[line.key];
+                    // The split shown here is the same one the server saves (server/calc.ts).
+                    const split = line.cost_incl_gst !== null && line.gst_included
+                      ? splitInclusive(line.cost_incl_gst) : null;
+                    return (
+                      <tr key={line.key}>
+                        <td className="pl-2.5 pt-3! text-xs text-ink-faint tabular-nums">{idx + 1}</td>
+                        <td className="px-1">
+                          <input type="text" value={line.lr_no}
+                            onChange={(e) => updateLrLine(line.key, { lr_no: e.target.value })}
+                            className={cx(lrInputCls, 'font-mono')} placeholder="LR-88910"
+                            aria-label={`LR number, line ${idx + 1}`} />
+                        </td>
+                        <td className="px-1">
+                          <input type="date" value={line.lr_date}
+                            onChange={(e) => updateLrLine(line.key, { lr_date: e.target.value })}
+                            className={cx(lrInputCls, 'px-1.5')} aria-label={`LR date, line ${idx + 1}`} />
+                        </td>
+                        <td className="px-1">
+                          <input type="text" value={line.origin}
+                            onChange={(e) => updateLrLine(line.key, { origin: e.target.value })}
+                            className={lrInputCls} placeholder="Ahmedabad" aria-label={`From, line ${idx + 1}`} />
+                        </td>
+                        <td className="px-1">
+                          <input type="text" value={line.destination}
+                            onChange={(e) => updateLrLine(line.key, { destination: e.target.value })}
+                            className={lrInputCls} placeholder="Surat" aria-label={`To, line ${idx + 1}`} />
+                        </td>
+                        <td className="px-1">
+                          <input type="number" min="0" step="any" value={line.weight || ''}
+                            onChange={(e) => updateLrLine(line.key, { weight: parseFloat(e.target.value) || 0 })}
+                            className={cx(lrInputCls, 'text-right')} placeholder="0" aria-label={`Weight in kg, line ${idx + 1}`} />
+                        </td>
+                        <td className="px-1">
+                          <input type="number" min="0" step="any" value={line.rate_kg || ''}
+                            onChange={(e) => updateLrLine(line.key, { rate_kg: parseFloat(e.target.value) || 0 })}
+                            className={cx(lrInputCls, 'text-right')} placeholder="0.00" aria-label={`Rate per kg, line ${idx + 1}`} />
+                          {sug && (
+                            // Right-aligned and allowed to run left under the weight cell
+                            <div className="flex justify-end mt-0.5">
+                              {line.rate_auto || line.rate_kg === sug.rate ? (
+                                <span className="text-[11px] text-ink-faint whitespace-nowrap">{sug.label}</span>
+                              ) : (
+                                <button type="button"
+                                  onClick={() => updateLrLine(line.key, { rate_kg: sug.rate, rate_auto: true })}
+                                  className="text-[11px] text-accent-ink whitespace-nowrap hover:underline cursor-pointer"
+                                  title={sug.label}>
+                                  Use chart ₹{sug.rate}
+                                </button>
+                              )}
+                            </div>
+                          )}
+                        </td>
+                        <td className="px-1">
+                          <input type="number" min="0" step="any" value={line.amount || ''}
+                            onChange={(e) => updateLrLine(line.key, { amount: parseFloat(e.target.value) || 0 })}
+                            className={cx(lrInputCls, 'text-right font-medium')} placeholder="0.00"
+                            aria-label={`Freight amount, line ${idx + 1}`} />
+                        </td>
+                        <td className="px-1 border-l border-line">
+                          <input type="number" min="0" step="any" value={line.cost_incl_gst ?? ''}
+                            onChange={(e) => updateLrLine(line.key, {
+                              cost_incl_gst: e.target.value === '' ? null : parseFloat(e.target.value) || 0,
+                            })}
+                            className={cx(lrInputCls, 'text-right')} placeholder="Not costed"
+                            aria-label={`Our cost including GST for LR ${idx + 1}`} />
+                        </td>
+                        <td className="px-1">
+                          <label className="flex items-center justify-end gap-1.5 h-8 cursor-pointer whitespace-nowrap"
+                            title={split ? `Cost ₹${formatINR(split.base)} + GST ₹${formatINR(split.gst)}` : 'No GST charged by this vendor'}>
+                            <span className="text-xs text-ink-soft tabular-nums truncate">
+                              {split ? `₹${formatINR(split.gst)}` : '-'}
+                            </span>
+                            <input type="checkbox" checked={line.gst_included}
+                              onChange={(e) => updateLrLine(line.key, { gst_included: e.target.checked })}
+                              className="w-4 h-4 shrink-0 cursor-pointer"
+                              aria-label={`Amount for LR ${idx + 1} includes ${VENDOR_GST_RATE}% GST`} />
+                          </label>
+                        </td>
+                        <td className="px-1">
+                          <div className="h-8 flex items-center justify-center">
+                            {isInternal ? (
+                              <span className="text-[11px] text-ink-faint" title="On non-GST bills vendor GST is part of the cost">cost</span>
+                            ) : (
+                              <input type="checkbox" checked={line.itc}
+                                disabled={!line.gst_included || !line.cost_incl_gst}
+                                onChange={(e) => updateLrLine(line.key, { itc: e.target.checked })}
+                                className="w-4 h-4 cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed"
+                                aria-label={`Claim vendor GST as credit for LR ${idx + 1}`} />
+                            )}
+                          </div>
+                        </td>
+                        <td className="px-1">
+                          <input type="text" value={line.vendor}
+                            onChange={(e) => updateLrLine(line.key, { vendor: e.target.value })}
+                            className={lrInputCls} placeholder="Lorry owner" aria-label={`Vendor for LR ${idx + 1}`} />
+                        </td>
+                        <td className="pr-1 text-center">
+                          <IconButton label={`Remove LR ${idx + 1}`} type="button"
+                            onClick={() => removeLrLine(line.key)} disabled={lrLines.length <= 1}
+                            className="hover:text-danger-ink">
+                            <Trash2 />
+                          </IconButton>
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
+                <tfoot className="border-t border-line bg-surface-muted">
+                  <tr className="text-xs">
+                    <td colSpan={5} className="h-8 pl-2.5 text-ink-faint">
+                      {lrLines.length} LR{lrLines.length === 1 ? '' : 's'}
+                    </td>
+                    <td className="px-2 text-right tabular-nums text-ink-soft">{formatINR(totalWeight)}</td>
+                    <td className="px-1 text-right text-ink-faint">Total</td>
+                    <td className="px-2 text-right tabular-nums font-semibold text-ink text-sm">₹{formatINR(freight)}</td>
+                    <td colSpan={5} className="border-l border-line"></td>
+                  </tr>
+                </tfoot>
               </table>
             </div>
+          </FormSection>
 
-            <div className="flex flex-wrap items-center justify-between gap-3 pt-2 border-t border-line text-xs">
-              <div className="text-ink-faint">
-                Total Weight: <span className="font-mono font-semibold text-ink">{formatINR(totalWeight)} Kg</span>
-                <span className="mx-2 text-ink-faint">|</span>
-                LRs on this bill: <span className="font-mono font-semibold text-ink">{lrLines.length}</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="text-ink-soft font-semibold">Total Freight (₹)</span>
-                <span className="font-mono font-extrabold text-accent-ink text-base">₹{formatINR(freight)}</span>
-              </div>
-            </div>
-          </div>
-
-          {/* Our costs beyond lorry hire: commission, POD, detention paid out.
-              Never printed on the bill; used only for profit. */}
-          <div className="space-y-2">
-            <div className="flex items-center justify-between">
-              <label className="text-ink font-semibold">Other costs <span className="text-ink-faint font-normal">(internal, not printed)</span></label>
-              <button type="button"
-                onClick={() => setOtherCosts(prev => [...prev, { label: 'Commission', amount_incl_gst: 0, gst_included: true, amount: 0, gst: 0, itc: true }])}
-                className="text-xs text-accent-ink flex items-center gap-1 font-semibold cursor-pointer">
-                <Plus className="w-3.5 h-3.5" /><span>Add cost</span>
-              </button>
-            </div>
-            {otherCosts.map((item, idx) => (
-              <div key={idx} className="flex items-center gap-2">
-                <input type="text" value={item.label}
-                  onChange={(e) => updateOtherCost(idx, 'label', e.target.value)}
-                  className="flex-1 bg-surface-muted border border-line rounded-control px-3 py-2 text-ink text-xs focus:outline-none focus:border-accent"
-                  placeholder="Commission / POD / detention" />
-                <div className="relative w-32">
-                  <span className="absolute left-2.5 top-2 text-ink-faint font-mono">₹</span>
-                  <input type="number" min="0" step="any" value={item.amount_incl_gst || ''}
-                    onChange={(e) => updateOtherCost(idx, 'amount_incl_gst', e.target.value)}
-                    className="w-full bg-surface-muted border border-line rounded-control pl-6 pr-3 py-2 text-ink font-mono text-xs focus:outline-none focus:border-accent"
-                    placeholder="Paid incl. GST" aria-label="Amount paid including GST" />
+          {/* ================================================ Charges & tax + Totals */}
+          <div className="lg:grid lg:grid-cols-[minmax(0,1fr)_288px] lg:gap-8 border-t border-line">
+            <div className="min-w-0">
+              <FormSection title="Charges and tax" flush
+                hint="Printed on the bill"
+                actions={
+                  <Button type="button" variant="ghost" size="sm" icon={<Plus />} onClick={addChargeItem}>
+                    Add charge
+                  </Button>
+                }
+              >
+                <div className="space-y-2">
+                  {extraCharges.length === 0 && <p className="text-xs text-ink-faint">No additional charges.</p>}
+                  {extraCharges.map((item, idx) => (
+                    <div key={idx} className="flex items-center gap-2">
+                      <Input type="text" value={item.label}
+                        onChange={(e) => updateChargeItem(idx, 'label', e.target.value)}
+                        className="flex-1 min-w-0" placeholder="Loading / detention / insurance"
+                        aria-label={`Charge ${idx + 1} description`} />
+                      <AmountInput value={item.amount || ''} onChange={(v) => updateChargeItem(idx, 'amount', v)}
+                        className="w-28 sm:w-36" placeholder="0.00" label={`Charge ${idx + 1} amount`} />
+                      <IconButton type="button" label={`Remove charge ${idx + 1}`} onClick={() => removeChargeItem(idx)}
+                        className="hover:text-danger-ink">
+                        <Trash2 />
+                      </IconButton>
+                    </div>
+                  ))}
                 </div>
-                <label className="flex items-center gap-1.5 text-[11px] text-ink-faint whitespace-nowrap cursor-pointer w-36"
-                  title={`Tick when the amount includes ${VENDOR_GST_RATE}% GST`}>
-                  <input type="checkbox" checked={item.gst_included !== false}
-                    onChange={(e) => updateOtherCost(idx, 'gst_included', e.target.checked)} className="w-4 h-4" />
-                  {item.gst_included !== false && (item.amount_incl_gst || 0) > 0
-                    ? <span className="font-mono">GST ₹{formatINR(splitInclusive(item.amount_incl_gst || 0).gst)}</span>
-                    : <span>{VENDOR_GST_RATE}% GST in it</span>}
-                </label>
-                {!isInternal && (
-                  <label className="flex items-center gap-1 text-[11px] text-ink-faint whitespace-nowrap cursor-pointer" title="Claim this GST back as input credit">
-                    <input type="checkbox" checked={item.itc !== false} disabled={item.gst_included === false || !item.amount_incl_gst}
-                      onChange={(e) => updateOtherCost(idx, 'itc', e.target.checked)} className="w-4 h-4 disabled:opacity-30" />
-                    Credit
-                  </label>
+
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-4">
+                  <Field label="Discount" htmlFor={`${formId}-disc`} className="col-span-2 sm:col-span-2">
+                    <div className="flex items-center gap-2">
+                      <Segmented
+                        label="Discount type"
+                        options={[
+                          { value: 'percent', label: '%' },
+                          { value: 'fixed', label: '₹' },
+                        ] as const}
+                        value={discountType}
+                        onChange={(v) => setDiscountType(v as 'percent' | 'fixed')}
+                        className="shrink-0"
+                      />
+                      <Input id={`${formId}-disc`} type="number" min="0" step="any"
+                        value={discountValue || ''}
+                        onChange={(e) => setDiscountValue(parseFloat(e.target.value) || 0)}
+                        className="text-right tabular-nums"
+                        placeholder={discountType === 'percent' ? '0 %' : '0.00'} />
+                    </div>
+                  </Field>
+                  {!isInternal && (<>
+                    <Field label="GST type" htmlFor={`${formId}-gt`}>
+                      <Select id={`${formId}-gt`} value={gstType} onChange={(e) => setGstType(e.target.value as any)}>
+                        <option value="intra">Intra-state (CGST + SGST)</option>
+                        <option value="igst">Inter-state (IGST)</option>
+                        <option value="exempt">Exempt / nil</option>
+                      </Select>
+                    </Field>
+                    <Field label="GST rate %" htmlFor={`${formId}-gr`}>
+                      <Input id={`${formId}-gr`} type="number"
+                        disabled={gstType === 'exempt'}
+                        value={gstType === 'exempt' ? 0 : gstRate}
+                        onChange={(e) => setGstRate(parseFloat(e.target.value) || 18)}
+                        className="text-right tabular-nums" />
+                    </Field>
+                  </>)}
+                </div>
+              </FormSection>
+
+              {/* Our costs beyond lorry hire: commission, POD, detention paid out.
+                  Never printed on the bill; used only for profit. */}
+              <FormSection title="Other costs" hint="Internal, not printed"
+                actions={
+                  <Button type="button" variant="ghost" size="sm" icon={<Plus />}
+                    onClick={() => setOtherCosts(prev => [...prev, { label: 'Commission', amount_incl_gst: 0, gst_included: true, amount: 0, gst: 0, itc: true }])}>
+                    Add cost
+                  </Button>
+                }
+              >
+                {otherCosts.length === 0 ? (
+                  <p className="text-xs text-ink-faint">Commission, POD or detention you paid out. Used for profit only.</p>
+                ) : (
+                  <div className="divide-y divide-line">
+                    {otherCosts.map((item, idx) => (
+                      <div key={idx} className="flex flex-wrap items-center gap-x-3 gap-y-1.5 py-2 first:pt-0 last:pb-0">
+                        <Input type="text" value={item.label}
+                          onChange={(e) => updateOtherCost(idx, 'label', e.target.value)}
+                          className="flex-1 min-w-[140px]" placeholder="Commission / POD / detention"
+                          aria-label={`Cost ${idx + 1} description`} />
+                        <AmountInput value={item.amount_incl_gst || ''}
+                          onChange={(v) => updateOtherCost(idx, 'amount_incl_gst', v)}
+                          className="w-32" placeholder="Paid incl. GST" label="Amount paid including GST" />
+                        <div className="flex items-center gap-3 ml-auto sm:ml-0">
+                          <label className="inline-flex items-center gap-1.5 text-xs text-ink-soft whitespace-nowrap cursor-pointer"
+                            title={`Tick when the amount includes ${VENDOR_GST_RATE}% GST`}>
+                            <input type="checkbox" checked={item.gst_included !== false}
+                              onChange={(e) => updateOtherCost(idx, 'gst_included', e.target.checked)} className="w-4 h-4" />
+                            {item.gst_included !== false && (item.amount_incl_gst || 0) > 0
+                              ? <span className="tabular-nums">GST ₹{formatINR(splitInclusive(item.amount_incl_gst || 0).gst)}</span>
+                              : <span>{VENDOR_GST_RATE}% GST in it</span>}
+                          </label>
+                          {!isInternal && (
+                            <label className="inline-flex items-center gap-1.5 text-xs text-ink-soft whitespace-nowrap cursor-pointer" title="Claim this GST back as input credit">
+                              <input type="checkbox" checked={item.itc !== false} disabled={item.gst_included === false || !item.amount_incl_gst}
+                                onChange={(e) => updateOtherCost(idx, 'itc', e.target.checked)} className="w-4 h-4 disabled:opacity-30" />
+                              ITC
+                            </label>
+                          )}
+                          <IconButton type="button" label={`Remove cost ${idx + 1}`}
+                            onClick={() => setOtherCosts(prev => prev.filter((_, i) => i !== idx))}
+                            className="hover:text-danger-ink">
+                            <Trash2 />
+                          </IconButton>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
                 )}
-                <button type="button" onClick={() => setOtherCosts(prev => prev.filter((_, i) => i !== idx))}
-                  className="p-2 text-ink-faint hover:text-danger-ink transition" aria-label="Remove cost">
-                  <Trash2 className="w-4 h-4" />
-                </button>
-              </div>
-            ))}
-          </div>
+              </FormSection>
 
-          {/* Additional / Surcharge Items */}
-          <div className="space-y-2">
-            <div className="flex items-center justify-between">
-              <label className="text-ink font-semibold">Additional Charges & Surcharges</label>
-              <button
-                type="button"
-                onClick={addChargeItem}
-                className="text-xs text-accent-ink hover:text-accent-ink flex items-center gap-1 font-semibold"
-              >
-                <Plus className="w-3.5 h-3.5" />
-                <span>Add charge item</span>
-              </button>
+              <FormSection title="Notes">
+                <Textarea rows={2} value={notes} onChange={(e) => setNotes(e.target.value)}
+                  placeholder="Optional note for this bill" aria-label="Notes" />
+              </FormSection>
             </div>
 
-            <div className="space-y-2">
-              {extraCharges.map((item, idx) => (
-                <div key={idx} className="flex items-center gap-2">
-                  <input
-                    type="text"
-                    value={item.label}
-                    onChange={(e) => updateChargeItem(idx, 'label', e.target.value)}
-                    className="flex-1 bg-surface-muted border border-line rounded-control px-3 py-2 text-ink text-xs focus:outline-none focus:border-accent"
-                    placeholder="e.g. Loading / Detention / Insurance"
-                  />
-                  <div className="relative w-40">
-                    <span className="absolute left-2.5 top-2 text-ink-faint font-mono">₹</span>
-                    <input
-                      type="number"
-                      min="0"
-                      step="any"
-                      value={item.amount || ''}
-                      onChange={(e) => updateChargeItem(idx, 'amount', e.target.value)}
-                      className="w-full bg-surface-muted border border-line rounded-control pl-6 pr-3 py-2 text-ink font-mono text-xs focus:outline-none focus:border-accent"
-                      placeholder="0.00"
-                    />
+            {/* Totals: right-hand column on desktop, last section on phones */}
+            {calcResult && (
+              <aside className="min-w-0 pt-4 lg:pt-4 border-t border-line lg:border-t-0 lg:border-l lg:pl-6 pb-1">
+                <div className="lg:sticky lg:top-0">
+                  <div className="flex items-baseline justify-between gap-2 mb-2">
+                    <h3 className="text-sm font-semibold text-ink">Totals</h3>
+                    {!isInternal && <span className="text-xs text-ink-faint">SAC <span className="font-mono">{sac}</span></span>}
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => removeChargeItem(idx)}
-                    className="p-2 text-ink-faint hover:text-danger-ink transition"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* Discount & GST Controls */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 bg-surface-muted p-4 rounded-card border border-line">
-            <div>
-              <label className="block text-ink-soft font-medium mb-1">Discount Type</label>
-              <select
-                value={discountType}
-                onChange={(e) => setDiscountType(e.target.value as any)}
-                className="w-full bg-surface border border-line rounded-control px-3 py-2 text-ink focus:outline-none focus:border-accent"
-              >
-                <option value="percent">Percentage (%)</option>
-                <option value="fixed">Fixed Amount (₹)</option>
-              </select>
-            </div>
-
-            <div>
-              <label className="block text-ink-soft font-medium mb-1">
-                {discountType === 'percent' ? 'Discount Rate (%)' : 'Discount Amount (₹)'}
-              </label>
-              <input
-                type="number"
-                min="0"
-                step="any"
-                value={discountValue || ''}
-                onChange={(e) => setDiscountValue(parseFloat(e.target.value) || 0)}
-                className="w-full bg-surface border border-line rounded-control px-3 py-2 font-mono text-ink focus:outline-none focus:border-accent"
-                placeholder="0"
-              />
-            </div>
-
-            {!isInternal && (<>
-            <div>
-              <label className="block text-ink-soft font-medium mb-1">GST Tax Type</label>
-              <select
-                value={gstType}
-                onChange={(e) => setGstType(e.target.value as any)}
-                className="w-full bg-surface border border-line rounded-control px-3 py-2 text-ink focus:outline-none focus:border-accent"
-              >
-                <option value="intra">Intra-State (CGST 9% + SGST 9%)</option>
-                <option value="igst">Inter-State (IGST 18%)</option>
-                <option value="exempt">GST Exempt / Nil</option>
-              </select>
-            </div>
-
-            <div>
-              <label className="block text-ink-soft font-medium mb-1">GST Rate (%)</label>
-              <input
-                type="number"
-                disabled={gstType === 'exempt'}
-                value={gstType === 'exempt' ? 0 : gstRate}
-                onChange={(e) => setGstRate(parseFloat(e.target.value) || 18)}
-                className="w-full bg-surface border border-line rounded-control px-3 py-2 font-mono text-ink disabled:opacity-50 focus:outline-none focus:border-accent"
-              />
-            </div>
-            </>)}
-          </div>
-
-          {/* Live Calculation Preview Banner */}
-          {calcResult && (
-            <div className="bg-accent-soft p-4 rounded-card border border-accent-line">
-              <div className="flex items-center justify-between text-xs mb-3 border-b border-accent-line pb-2">
-                <span className="font-bold text-accent-ink">{isInternal ? 'Bill summary (no GST)' : 'GST invoice summary'}</span>
-                {!isInternal && <span className="text-ink-faint">SAC Code: {sac}</span>}
-              </div>
-
-              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4 text-xs">
-                <div>
-                  <div className="text-ink-faint">Freight ({calcResult.lr_count || lrLines.length} LR{(calcResult.lr_count || lrLines.length) === 1 ? '' : 's'})</div>
-                  <div className="font-mono font-semibold text-ink mt-0.5">₹{formatINR(calcResult.freight)}</div>
-                </div>
-
-                <div>
-                  <div className="text-ink-faint">Additional Charges</div>
-                  <div className="font-mono font-semibold text-ink mt-0.5">+₹{formatINR(calcResult.additional_total)}</div>
-                </div>
-
-                <div>
-                  <div className="text-ink-faint">Gross Amount</div>
-                  <div className="font-mono font-semibold text-ink mt-0.5">₹{formatINR(calcResult.gross_amount)}</div>
-                </div>
-
-                <div>
-                  <div className="text-ink-faint">Discount ({calcResult.discount_type})</div>
-                  <div className="font-mono font-semibold text-danger-ink mt-0.5">-₹{formatINR(calcResult.discount_amount)}</div>
-                </div>
-
-                <div>
-                  <div className="text-ink-faint">{isInternal ? 'Sub total' : 'Taxable Value'}</div>
-                  <div className="font-mono font-semibold text-ink mt-0.5">₹{formatINR(calcResult.taxable_amount)}</div>
-                </div>
-
-                {!isInternal && <div>
-                  <div className="text-ink-faint">
-                    {calcResult.gst_type === 'igst'
-                      ? `IGST ${calcResult.gst_rate}%`
-                      : calcResult.gst_type === 'intra'
-                      ? `CGST+SGST ${calcResult.gst_rate}%`
-                      : 'GST Exempt'}
+                  <div className="space-y-1.5 text-sm">
+                    <SumRow label={`Freight · ${lrCount} LR${lrCount === 1 ? '' : 's'}`} value={`₹${formatINR(calcResult.freight)}`} />
+                    <SumRow label="Additional charges" value={`₹${formatINR(calcResult.additional_total)}`} />
+                    <SumRow label="Gross amount" value={`₹${formatINR(calcResult.gross_amount)}`} />
+                    {calcResult.discount_amount > 0 && (
+                      <SumRow label={`Discount (${calcResult.discount_type})`} value={`−₹${formatINR(calcResult.discount_amount)}`} />
+                    )}
+                    <SumRow label={isInternal ? 'Sub total' : 'Taxable value'} value={`₹${formatINR(calcResult.taxable_amount)}`} strong />
+                    {!isInternal && (
+                      <SumRow
+                        label={calcResult.gst_type === 'igst'
+                          ? `IGST ${calcResult.gst_rate}%`
+                          : calcResult.gst_type === 'intra'
+                          ? `CGST + SGST ${calcResult.gst_rate}%`
+                          : 'GST exempt'}
+                        value={`₹${formatINR(calcResult.gst_amount)}`} />
+                    )}
+                    <SumRow label="Round off" value={`₹${formatINR(calcResult.round_off)}`} faint />
                   </div>
-                  <div className="font-mono font-semibold text-info-ink mt-0.5">₹{formatINR(calcResult.gst_amount)}</div>
-                </div>}
-              </div>
+                  <div className="flex items-baseline justify-between gap-3 mt-3 pt-3 border-t border-line">
+                    <span className="text-sm text-ink-soft">Grand total</span>
+                    <span className="numeral text-xl text-ink">₹{formatINR(calcResult.grand_total)}</span>
+                  </div>
+                  <div className="text-xs text-ink-faint mt-0.5">Place of supply: {placeOfSupply || '-'}</div>
 
-              {/* Profit, on the taxable value: GST collected is not income. */}
-              <div className="mt-3 pt-3 border-t border-accent-line grid grid-cols-2 sm:grid-cols-5 gap-4 text-xs">
-                <div>
-                  <div className="text-ink-faint">Our cost</div>
-                  <div className="font-mono font-semibold text-ink mt-0.5">
-                    {calcResult.total_cost === null || calcResult.total_cost === undefined
-                      ? <span className="text-ink-faint font-normal">Not costed</span>
-                      : `₹${formatINR(calcResult.total_cost)}`}
-                  </div>
-                </div>
-                <div>
-                  <div className="text-ink-faint">Gross profit</div>
-                  <div className={`font-mono font-semibold mt-0.5 ${(calcResult.gross_profit ?? 0) < 0 ? 'text-danger-ink' : 'text-positive-ink'}`}>
-                    {calcResult.gross_profit === null || calcResult.gross_profit === undefined ? '-' : `₹${formatINR(calcResult.gross_profit)}`}
-                  </div>
-                </div>
-                <div>
-                  <div className="text-ink-faint">Margin</div>
-                  <div className="font-mono font-semibold text-ink mt-0.5">
-                    {calcResult.margin_pct === null || calcResult.margin_pct === undefined ? '-' : `${calcResult.margin_pct}%`}
-                    {calcResult.partly_costed && <span className="text-warning-ink font-normal"> (some LRs uncosted)</span>}
-                  </div>
-                </div>
-                <div>
-                  <div className="text-ink-faint" title={isInternal ? 'Non-GST bill: vendor GST is counted in cost' : 'Vendor GST you can claim back'}>
-                    {isInternal ? 'Vendor GST (in cost)' : 'Input GST credit'}
-                  </div>
-                  <div className="font-mono font-semibold text-ink mt-0.5">
-                    ₹{formatINR(isInternal ? (calcResult.blocked_gst || 0) : (calcResult.input_gst || 0))}
-                  </div>
-                </div>
-                {!isInternal && (
-                  <div>
-                    <div className="text-ink-faint" title="GST on this bill minus the input credit">Net GST to pay</div>
-                    <div className="font-mono font-semibold text-info-ink mt-0.5">
-                      ₹{formatINR((calcResult.gst_amount || 0) - (calcResult.input_gst || 0))}
+                  {/* Profit, on the taxable value: GST collected is not income. */}
+                  <div className="mt-4 pt-3 border-t border-line">
+                    <div className="flex items-center justify-between mb-1.5">
+                      <span className="text-xs font-medium text-ink-soft">Profit</span>
+                      <Badge>Not printed</Badge>
+                    </div>
+                    <div className="space-y-1 text-sm">
+                      <SumRow label="Our cost"
+                        value={calcResult.total_cost === null || calcResult.total_cost === undefined ? 'Not costed' : `₹${formatINR(calcResult.total_cost)}`}
+                        faint={calcResult.total_cost === null || calcResult.total_cost === undefined} />
+                      <SumRow label="Gross profit"
+                        value={calcResult.gross_profit === null || calcResult.gross_profit === undefined ? '-' : `₹${formatINR(calcResult.gross_profit)}`}
+                        strong tone={(calcResult.gross_profit ?? 0) < 0 ? 'text-danger-ink' : undefined} />
+                      <SumRow label="Margin"
+                        value={calcResult.margin_pct === null || calcResult.margin_pct === undefined ? '-' : `${calcResult.margin_pct}%`} />
+                      {calcResult.partly_costed && <p className="text-xs text-warning-ink">Some LRs are not costed yet.</p>}
+                      <SumRow label={isInternal ? 'Vendor GST (in cost)' : 'Input GST credit'}
+                        value={`₹${formatINR(isInternal ? (calcResult.blocked_gst || 0) : (calcResult.input_gst || 0))}`} />
+                      {!isInternal && (
+                        <SumRow label="Net GST to pay"
+                          value={`₹${formatINR((calcResult.gst_amount || 0) - (calcResult.input_gst || 0))}`} />
+                      )}
                     </div>
                   </div>
-                )}
-              </div>
-
-              <div className="mt-3 pt-3 border-t border-accent-line flex items-center justify-between">
-                <div className="text-xs text-ink-faint">
-                  Round Off: <span className="font-mono text-ink-soft">₹{formatINR(calcResult.round_off)}</span>
                 </div>
-                <div className="text-base font-bold text-ink flex items-center gap-2">
-                  <span className="text-ink-faint text-xs font-normal">GRAND TOTAL:</span>
-                  <span className="font-mono text-accent-ink text-xl font-extrabold">₹{formatINR(calcResult.grand_total)}</span>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* Footer Actions */}
-          <div className="flex items-center justify-end gap-3 pt-3 border-t border-line">
-            <button
-              type="button"
-              onClick={onClose}
-              className="px-4 py-2 bg-surface-sunken hover:bg-surface-sunken text-ink-soft rounded-card text-xs font-medium transition cursor-pointer"
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              disabled={saving}
-              className="px-5 py-2 bg-accent-strong hover:bg-accent-strong-hover text-on-accent rounded-card text-xs font-semibold transition flex items-center gap-2 disabled:opacity-50 cursor-pointer"
-            >
-              <Save className="w-4 h-4" />
-              <span>
-                {saving
-                  ? isEditMode
-                    ? 'Updating Invoice...'
-                    : 'Creating Invoice...'
-                  : isEditMode
-                  ? (isInternal ? 'Update bill' : 'Update tax invoice')
-                  : (isInternal ? 'Save non-GST bill' : 'Save and issue invoice')}
-              </span>
-            </button>
+              </aside>
+            )}
           </div>
         </form>
-      </div>
+      </Modal>
 
-      {/* ========================================================================= */}
-      {/* QUICK ADD CUSTOMER SUB-MODAL */}
-      {/* ========================================================================= */}
+      {/* ================================================ Quick add customer */}
       {showQuickAddCust && (
-        <div className="fixed inset-0 bg-scrim flex items-center justify-center p-4 z-60 overflow-y-auto">
-          <div className="sheet border border-line rounded-overlay max-w-xl w-full p-5 shadow-overlay text-ink my-auto">
-            <div className="flex items-center justify-between pb-3 border-b border-line">
-              <div className="flex items-center gap-2">
-                <div className="w-8 h-8 rounded-card bg-accent-soft border border-accent-line flex items-center justify-center text-accent-ink font-bold">
-                  <UserPlus className="w-4 h-4" />
-                </div>
-                <div>
-                  <h3 className="text-sm font-bold text-ink">Quick Register New Customer</h3>
-                  <p className="text-[11px] text-ink-faint">Will be instantly selected for this invoice</p>
-                </div>
-              </div>
+        <Modal
+          onClose={() => setShowQuickAddCust(false)}
+          title="New customer"
+          subtitle="Selected for this invoice once saved"
+          size="md"
+          footer={
+            <div className="flex items-center justify-end gap-2">
+              <Button variant="ghost" type="button" onClick={() => setShowQuickAddCust(false)}>Cancel</Button>
+              <Button variant="primary" type="submit" form={`${formId}-qc`} loading={savingCust} icon={<Check />}>
+                {savingCust ? 'Saving…' : 'Save and select'}
+              </Button>
+            </div>
+          }
+        >
+          <form id={`${formId}-qc`} onSubmit={handleCreateQuickCustomer} className="space-y-3">
+            <FormError message={custError} />
+            {quickLookupMsg && <LookupNote msg={quickLookupMsg} />}
 
-              <button
-                type="button"
-                onClick={() => setShowQuickAddCust(false)}
-                className="p-1 text-ink-faint hover:text-ink rounded-control"
-              >
-                <X className="w-4 h-4" />
-              </button>
+            <div className="grid grid-cols-2 gap-3">
+              <Field label="GSTIN" htmlFor={`${formId}-qg`}
+                action={<FetchLink busy={fetchingGstQuick} disabled={newCustGstin.length !== 15}
+                  onClick={() => fetchQuickGST(newCustGstin, true)} />}>
+                <Input id={`${formId}-qg`} type="text" maxLength={15} value={newCustGstin}
+                  onChange={(e) => handleNewCustGSTIN(e.target.value)}
+                  className="font-mono uppercase" placeholder="24AABCS1429B1Z8" />
+              </Field>
+              <Field label="PAN" htmlFor={`${formId}-qp`}>
+                <Input id={`${formId}-qp`} type="text" maxLength={10} value={newCustPan}
+                  onChange={(e) => setNewCustPan(e.target.value.toUpperCase())}
+                  className="font-mono uppercase" placeholder="AABCS1429B" />
+              </Field>
             </div>
 
-            <form onSubmit={handleCreateQuickCustomer} className="space-y-3.5 pt-4 text-xs">
-              {custError && (
-                <div className="p-2.5 bg-danger-soft border border-danger-line rounded-card text-danger-ink text-xs">
-                  {custError}
-                </div>
-              )}
+            <Field label="Company / customer name" htmlFor={`${formId}-qn`} required>
+              <Input id={`${formId}-qn`} type="text" required value={newCustName}
+                onChange={(e) => setNewCustName(e.target.value)} placeholder="e.g. Maruti Freight Express Ltd" />
+            </Field>
 
-              {quickLookupMsg && (
-                <div className="p-2 bg-positive-soft border border-positive-line rounded-control text-positive-ink flex items-center gap-1.5 text-xs">
-                  <Check className="w-3.5 h-3.5 text-positive-ink shrink-0" />
-                  <span>{quickLookupMsg}</span>
-                </div>
-              )}
+            <div className="grid grid-cols-2 gap-3">
+              <Field label="Contact person" htmlFor={`${formId}-qcp`}>
+                <Input id={`${formId}-qcp`} type="text" value={newCustPerson}
+                  onChange={(e) => setNewCustPerson(e.target.value)} placeholder="e.g. Sanjay Sharma" />
+              </Field>
+              <Field label="Phone" htmlFor={`${formId}-qph`}>
+                <Input id={`${formId}-qph`} type="text" value={newCustPhone}
+                  onChange={(e) => setNewCustPhone(e.target.value)} placeholder="+91 98765 43210" />
+              </Field>
+            </div>
 
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <div className="flex items-center justify-between mb-1">
-                    <label className="text-ink-soft font-semibold">GSTIN (15 chars)</label>
-                    <button
-                      type="button"
-                      disabled={fetchingGstQuick || newCustGstin.length !== 15}
-                      onClick={() => fetchQuickGST(newCustGstin, true)}
-                      className="text-[11px] text-accent-ink hover:text-accent-ink font-semibold flex items-center gap-1 cursor-pointer disabled:opacity-40"
-                    >
-                      {fetchingGstQuick ? (
-                        <>
-                          <Loader2 className="w-3 h-3 animate-spin" />
-                          <span>Fetching...</span>
-                        </>
-                      ) : (
-                        <>
-                          <Sparkles className="w-3 h-3 text-accent" />
-                          <span>Auto Fetch</span>
-                        </>
-                      )}
-                    </button>
-                  </div>
-                  <input
-                    type="text"
-                    maxLength={15}
-                    value={newCustGstin}
-                    onChange={(e) => handleNewCustGSTIN(e.target.value)}
-                    className="w-full bg-surface-muted border border-line rounded-card px-3 py-2 font-mono text-ink uppercase focus:outline-none focus:border-accent"
-                    placeholder="24AABCS1429B1Z8"
-                  />
-                </div>
+            <Field label="Billing address" htmlFor={`${formId}-qa`}>
+              <Textarea id={`${formId}-qa`} rows={2} value={newCustAddress}
+                onChange={(e) => setNewCustAddress(e.target.value)} placeholder="Plot 10, GIDC Logistics Park…" />
+            </Field>
 
-                <div>
-                  <label className="block text-ink-soft font-semibold mb-1">PAN Number</label>
-                  <input
-                    type="text"
-                    maxLength={10}
-                    value={newCustPan}
-                    onChange={(e) => setNewCustPan(e.target.value.toUpperCase())}
-                    className="w-full bg-surface-muted border border-line rounded-card px-3 py-2 font-mono text-ink uppercase focus:outline-none focus:border-accent"
-                    placeholder="AABCS1429B"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-ink-soft font-semibold mb-1">Company / Customer Name *</label>
-                <input
-                  type="text"
-                  required
-                  value={newCustName}
-                  onChange={(e) => setNewCustName(e.target.value)}
-                  className="w-full bg-surface-muted border border-line rounded-card px-3 py-2 text-ink focus:outline-none focus:border-accent font-medium"
-                  placeholder="e.g. Maruti Freight Express Ltd"
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-ink-soft font-semibold mb-1">Contact Person</label>
-                  <input
-                    type="text"
-                    value={newCustPerson}
-                    onChange={(e) => setNewCustPerson(e.target.value)}
-                    className="w-full bg-surface-muted border border-line rounded-card px-3 py-2 text-ink focus:outline-none focus:border-accent"
-                    placeholder="e.g. Sanjay Sharma"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-ink-soft font-semibold mb-1">Phone Number</label>
-                  <input
-                    type="text"
-                    value={newCustPhone}
-                    onChange={(e) => setNewCustPhone(e.target.value)}
-                    className="w-full bg-surface-muted border border-line rounded-card px-3 py-2 text-ink focus:outline-none focus:border-accent"
-                    placeholder="+91 98765 43210"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-ink-soft font-semibold mb-1">Billing Address</label>
-                <textarea
-                  rows={2}
-                  value={newCustAddress}
-                  onChange={(e) => setNewCustAddress(e.target.value)}
-                  className="w-full bg-surface-muted border border-line rounded-card px-3 py-2 text-ink focus:outline-none focus:border-accent"
-                  placeholder="Plot 10, GIDC Logistics Park..."
-                />
-              </div>
-
-              <div className="grid grid-cols-3 gap-3">
-                <div>
-                  <div className="flex items-center justify-between mb-1">
-                    <label className="text-ink-soft font-semibold">PIN Code</label>
-                    <button
-                      type="button"
-                      disabled={fetchingPinQuick || newCustPin.length !== 6}
-                      onClick={() => fetchQuickPIN(newCustPin)}
-                      className="text-[11px] text-accent-ink font-semibold cursor-pointer disabled:opacity-40"
-                    >
-                      {fetchingPinQuick ? '...' : 'Fetch'}
-                    </button>
-                  </div>
-                  <input
-                    type="text"
-                    maxLength={6}
-                    value={newCustPin}
-                    onChange={(e) => handleNewCustPinChange(e.target.value)}
-                    className="w-full bg-surface-muted border border-line rounded-card px-3 py-2 text-ink focus:outline-none focus:border-accent font-mono"
-                    placeholder="380001"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-ink-soft font-semibold mb-1">City</label>
-                  <input
-                    type="text"
-                    value={newCustCity}
-                    onChange={(e) => setNewCustCity(e.target.value)}
-                    className="w-full bg-surface-muted border border-line rounded-card px-3 py-2 text-ink focus:outline-none focus:border-accent"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-ink-soft font-semibold mb-1">State</label>
-                  <input
-                    type="text"
-                    value={newCustState}
-                    onChange={(e) => setNewCustState(e.target.value)}
-                    className="w-full bg-surface-muted border border-line rounded-card px-3 py-2 text-ink focus:outline-none focus:border-accent"
-                  />
-                </div>
-              </div>
-
-              <div className="flex items-center justify-end gap-2.5 pt-3 border-t border-line">
-                <button
-                  type="button"
-                  onClick={() => setShowQuickAddCust(false)}
-                  className="px-3.5 py-1.5 bg-surface-sunken hover:bg-surface-sunken text-ink-soft rounded-card text-xs font-medium transition cursor-pointer"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={savingCust}
-                  className="px-4 py-1.5 bg-accent-strong hover:bg-accent-strong-hover text-on-accent rounded-card text-xs font-semibold transition flex items-center gap-1.5 disabled:opacity-50 cursor-pointer"
-                >
-                  <Check className="w-3.5 h-3.5" />
-                  <span>{savingCust ? 'Saving...' : 'Save & Select Customer'}</span>
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
+            <div className="grid grid-cols-3 gap-3">
+              <Field label="PIN" htmlFor={`${formId}-qpin`}
+                action={<FetchLink busy={fetchingPinQuick} disabled={newCustPin.length !== 6}
+                  onClick={() => fetchQuickPIN(newCustPin)} />}>
+                <Input id={`${formId}-qpin`} type="text" inputMode="numeric" maxLength={6} value={newCustPin}
+                  onChange={(e) => handleNewCustPinChange(e.target.value)} className="font-mono" placeholder="380001" />
+              </Field>
+              <Field label="City" htmlFor={`${formId}-qcity`}>
+                <Input id={`${formId}-qcity`} type="text" value={newCustCity} onChange={(e) => setNewCustCity(e.target.value)} />
+              </Field>
+              <Field label="State" htmlFor={`${formId}-qst`}>
+                <Input id={`${formId}-qst`} type="text" value={newCustState} onChange={(e) => setNewCustState(e.target.value)} />
+              </Field>
+            </div>
+          </form>
+        </Modal>
       )}
-    </div>
+    </>
   );
 };
+
+/* ------------------------------------------------------------ local pieces */
+
+/** A form section: semibold heading and a hairline above, never a tinted box. */
+const FormSection: React.FC<{
+  title: string;
+  hint?: string;
+  actions?: React.ReactNode;
+  first?: boolean;
+  /** Skip the top hairline (the parent already draws one). */
+  flush?: boolean;
+  children: React.ReactNode;
+}> = ({ title, hint, actions, first, flush, children }) => (
+  <section className={cx('py-4', first ? 'pt-0' : !flush && 'border-t border-line')}>
+    <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 mb-3 min-h-8">
+      <div className="min-w-0 flex items-baseline gap-2 flex-wrap">
+        <h3 className="text-sm font-semibold text-ink">{title}</h3>
+        {hint && <span className="text-xs text-ink-faint">{hint}</span>}
+      </div>
+      {actions && <div className="flex items-center gap-1.5 shrink-0">{actions}</div>}
+    </div>
+    {children}
+  </section>
+);
+
+/** Rupee-prefixed number input. */
+const AmountInput: React.FC<{
+  value: number | string;
+  onChange: (v: string) => void;
+  className?: string;
+  placeholder?: string;
+  label: string;
+}> = ({ value, onChange, className, placeholder, label }) => (
+  <div className={cx('relative shrink-0', className)}>
+    <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-sm text-ink-faint pointer-events-none" aria-hidden="true">₹</span>
+    <Input type="number" min="0" step="any" value={value} onChange={(e) => onChange(e.target.value)}
+      className="pl-6 text-right tabular-nums" placeholder={placeholder} aria-label={label} />
+  </div>
+);
+
+/** Small "Fetch" link that sits in a field's label row (GSTIN / PIN lookups). */
+const FetchLink: React.FC<{ busy: boolean; disabled: boolean; onClick: () => void }> = ({ busy, disabled, onClick }) => (
+  <button type="button" disabled={busy || disabled} onClick={onClick}
+    className="inline-flex items-center gap-1 text-xs font-medium text-accent-ink hover:underline cursor-pointer disabled:opacity-40 disabled:no-underline disabled:cursor-not-allowed">
+    {busy ? <><Loader2 className="w-3 h-3 animate-spin" aria-hidden="true" />Fetching</> : 'Fetch'}
+  </button>
+);
+
+/** Result of a GSTIN / PIN lookup: one quiet line, coloured only by outcome. */
+const LookupNote: React.FC<{ msg: string; className?: string }> = ({ msg, className }) => {
+  const bad = msg.startsWith('✕') || /valid 15/.test(msg);
+  const warn = msg.startsWith('⚠');
+  const text = msg.replace(/^(✓|✕|⚠️|⚠)\s*/, '');
+  return (
+    <p role="status" className={cx('flex items-start gap-1.5 text-xs',
+      bad ? 'text-danger-ink' : warn ? 'text-warning-ink' : 'text-positive-ink', className)}>
+      {!bad && !warn && <Check className="w-3.5 h-3.5 shrink-0" aria-hidden="true" />}
+      <span>{text}</span>
+    </p>
+  );
+};
+
+const SumRow: React.FC<{ label: string; value: string; strong?: boolean; faint?: boolean; tone?: string }> = ({
+  label, value, strong, faint, tone,
+}) => (
+  <div className="flex items-baseline justify-between gap-3">
+    <span className={faint ? 'text-ink-faint' : 'text-ink-soft'}>{label}</span>
+    <span className={cx('tabular-nums text-right', strong && 'font-medium', tone || (faint ? 'text-ink-faint' : 'text-ink'))}>{value}</span>
+  </div>
+);

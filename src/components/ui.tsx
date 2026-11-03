@@ -400,12 +400,9 @@ export const Modal: React.FC<{
     restoreFocusRef.current = document.activeElement as HTMLElement;
     const { overflow } = document.body.style;
     document.body.style.overflow = 'hidden';
-    const t = window.setTimeout(() => {
-      const first = panelRef.current?.querySelector<HTMLElement>(
-        'input:not([type="hidden"]):not([disabled]), select, textarea, button:not([disabled]), [href], [tabindex]:not([tabindex="-1"])'
-      );
-      (first || panelRef.current)?.focus();
-    }, 60);
+    // Focus the dialog itself: screen readers announce it, Tab moves into it, and
+    // phones don't pop the keyboard (or ring the Close button) on open.
+    const t = window.setTimeout(() => panelRef.current?.focus({ preventScroll: true }), 30);
     return () => {
       window.clearTimeout(t);
       document.body.style.overflow = overflow;

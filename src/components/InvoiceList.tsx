@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   Plus, Search, Download, FileText, Printer, CreditCard, Trash2,
-  Edit3, ChevronLeft, ChevronRight, Truck,
+  Edit3, ChevronLeft, ChevronRight,
 } from 'lucide-react';
 import { apiRequest } from '../services/api.js';
 import { Invoice, CompanySettings, BankAccount } from '../types.js';
@@ -9,8 +9,8 @@ import { formatINR } from '../utils/format.js';
 import { printInvoicePDF } from '../utils/pdf.js';
 import { DeleteInvoiceModal } from './DeleteInvoiceModal.js';
 import {
-  Button, IconButton, Card, StatCard, DataTable, Column, EmptyState, ErrorState,
-  Toast, StatusBadge, Input, Select, cx,
+  Button, IconButton, Card, MetricStrip, Metric, DataTable, Column, EmptyState, ErrorState,
+  Toast, StatusBadge, Badge, Segmented, Input, Select, cx,
 } from './ui.js';
 
 interface InvoiceListProps {
@@ -163,12 +163,10 @@ export const InvoiceList: React.FC<InvoiceListProps> = ({
       cell: (inv) => (
         <div className="min-w-0">
           <div className="flex items-center gap-1.5 min-w-0">
-            <span className="font-mono font-bold text-accent-ink truncate">{inv.invoice_no}</span>
-            {inv.doc_type === 'internal' && (
-              <span className="shrink-0 px-1.5 py-px rounded-[4px] border border-line text-[11px] font-semibold text-ink-soft">NON-GST</span>
-            )}
+            <span className="font-mono text-[13px] font-medium text-ink truncate">{inv.invoice_no}</span>
+            {inv.doc_type === 'internal' && <Badge>Non-GST</Badge>}
           </div>
-          <div className="text-xs text-ink-faint">{inv.invoice_date}</div>
+          <div className="text-xs text-ink-faint tabular-nums">{inv.invoice_date}</div>
         </div>
       ),
     },
@@ -177,18 +175,18 @@ export const InvoiceList: React.FC<InvoiceListProps> = ({
       header: 'Customer',
       cell: (inv) => (
         <div className="min-w-0">
-          <div className="font-semibold text-ink truncate max-w-[220px]">{inv.buyer?.name || '-'}</div>
+          <div className="font-medium text-ink truncate max-w-[220px]">{inv.buyer?.name || '-'}</div>
           <div className="text-xs text-ink-faint truncate">{inv.buyer?.city || inv.place_of_supply || '-'}</div>
         </div>
       ),
     },
     {
       key: 'lr',
-      header: 'LR / Route',
+      header: 'LR / route',
       hideBelow: 'lg',
       cell: (inv) => (
         <div className="min-w-0">
-          <div className="font-mono text-ink-soft truncate max-w-[160px]" title={inv.lr_no}>{lrLabel(inv)}</div>
+          <div className="font-mono text-[13px] text-ink-soft truncate max-w-[160px]" title={inv.lr_no}>{lrLabel(inv)}</div>
           <div className="text-xs text-ink-faint truncate">
             {inv.origin && inv.destination ? `${inv.origin} → ${inv.destination}` : 'Local'}
           </div>
@@ -200,7 +198,7 @@ export const InvoiceList: React.FC<InvoiceListProps> = ({
       header: 'Total',
       align: 'right',
       cell: (inv) => (
-        <span className="font-mono font-bold text-ink">₹{formatINR(inv.totals?.grand_total ?? inv.grand_total)}</span>
+        <span className="tabular-nums font-medium text-ink whitespace-nowrap">₹{formatINR(inv.totals?.grand_total ?? inv.grand_total)}</span>
       ),
     },
     {
@@ -211,7 +209,7 @@ export const InvoiceList: React.FC<InvoiceListProps> = ({
       cell: (inv) => {
         const bal = inv.balance ?? inv.grand_total ?? 0;
         return (
-          <span className={cx('font-mono font-semibold', bal > 0.5 ? 'text-warning-ink' : 'text-positive-ink')}>
+          <span className={cx('tabular-nums whitespace-nowrap', bal > 0.5 ? 'font-medium text-warning-ink' : 'text-ink-faint')}>
             ₹{formatINR(bal)}
           </span>
         );
@@ -227,43 +225,39 @@ export const InvoiceList: React.FC<InvoiceListProps> = ({
         if (gp === null || gp === undefined) return <span className="text-xs text-ink-faint">Not costed</span>;
         const m = (inv as any).totals?.margin_pct;
         return (
-          <div className="leading-tight">
-            <div className={cx('font-mono font-semibold', gp < 0 ? 'text-danger-ink' : 'text-positive-ink')}>₹{formatINR(gp)}</div>
-            {m !== null && m !== undefined && <div className="text-[11px] text-ink-faint">{m}%</div>}
+          <div className="leading-tight whitespace-nowrap">
+            <div className={cx('tabular-nums', gp < 0 ? 'text-danger-ink' : 'text-ink')}>₹{formatINR(gp)}</div>
+            {m !== null && m !== undefined && <div className="text-[11px] text-ink-faint tabular-nums">{m}%</div>}
           </div>
         );
       },
     },
-    { key: 'status', header: 'Status', align: 'center', cell: (inv) => <StatusBadge status={inv.display_status} /> },
+    { key: 'status', header: 'Status', cell: (inv) => <StatusBadge status={inv.display_status} /> },
     {
       key: 'actions',
-      header: 'Actions',
+      header: '',
       align: 'right',
       cell: (inv) => (
         <div className="flex items-center justify-end gap-0.5" onClick={(e) => e.stopPropagation()}>
           <IconButton label={`Print invoice ${inv.invoice_no}`} onClick={() => printInvoicePDF(inv, companySettings, defaultBank)}>
-            <Printer className="w-4 h-4" />
+            <Printer />
           </IconButton>
           {inv.display_status !== 'cancelled' && onEditInvoice && (
             <IconButton label={`Edit invoice ${inv.invoice_no}`} onClick={() => onEditInvoice(inv)}>
-              <Edit3 className="w-4 h-4" />
+              <Edit3 />
             </IconButton>
           )}
           {inv.display_status !== 'paid' && inv.display_status !== 'cancelled' && (
-            <IconButton
-              label={`Record payment for ${inv.invoice_no}`}
-              onClick={() => onRecordPayment(inv)}
-              className="text-positive hover:bg-positive-soft"
-            >
-              <CreditCard className="w-4 h-4" />
+            <IconButton label={`Record payment for ${inv.invoice_no}`} onClick={() => onRecordPayment(inv)}>
+              <CreditCard />
             </IconButton>
           )}
           <IconButton
             label={`Delete invoice ${inv.invoice_no}`}
             onClick={() => setInvoiceToDelete(inv)}
-            className="text-danger hover:bg-danger-soft"
+            className="hover:text-danger-ink"
           >
-            <Trash2 className="w-4 h-4" />
+            <Trash2 />
           </IconButton>
         </div>
       ),
@@ -273,151 +267,124 @@ export const InvoiceList: React.FC<InvoiceListProps> = ({
   const mobileCard = (inv: Invoice) => {
     const bal = inv.balance ?? inv.grand_total ?? 0;
     return (
-      <div className="space-y-2">
-        <div className="flex items-start justify-between gap-3">
-          <div className="min-w-0">
-            <div className="font-mono font-bold text-accent-ink text-sm truncate">{inv.invoice_no}</div>
-            <div className="text-xs text-ink-faint">{inv.invoice_date}</div>
+      <div className="min-w-0 space-y-0.5">
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex items-center gap-1.5 min-w-0">
+            <span className="font-mono text-[13px] font-medium text-ink truncate">{inv.invoice_no}</span>
+            {inv.doc_type === 'internal' && <Badge>Non-GST</Badge>}
           </div>
           <StatusBadge status={inv.display_status} />
         </div>
 
-        {/* LR number with the party it was billed to, side by side */}
-        <div className="flex items-center gap-2 text-sm min-w-0">
-          <span className="inline-flex items-center gap-1 font-mono text-ink-soft shrink-0 max-w-[45%] truncate">
-            <Truck className="w-3.5 h-3.5 shrink-0 text-ink-faint" aria-hidden="true" />
-            <span className="truncate">{(inv.lr_no || inv.lr_items?.length) ? lrLabel(inv) : 'No LR'}</span>
+        {/* LR number with the party it was billed to, on one line */}
+        <div className="flex items-baseline justify-between gap-3">
+          <div className="flex items-baseline gap-1.5 min-w-0 text-sm">
+            <span className="font-mono text-[13px] text-ink-soft shrink-0 max-w-[45%] truncate">
+              {(inv.lr_no || inv.lr_items?.length) ? lrLabel(inv) : 'No LR'}
+            </span>
+            <span className="text-ink-faint" aria-hidden="true">·</span>
+            <span className="text-ink truncate">{inv.buyer?.name || '-'}</span>
+          </div>
+          <span className="tabular-nums font-medium text-ink shrink-0">
+            ₹{formatINR(inv.totals?.grand_total ?? inv.grand_total)}
           </span>
-          <span className="text-ink-faint" aria-hidden="true">·</span>
-          <span className="font-semibold text-ink truncate">{inv.buyer?.name || '-'}</span>
         </div>
 
-        <div className="flex items-end justify-between gap-3 pt-2 border-t border-line">
-          <span className="text-xs text-ink-faint">
-            Total{' '}
-            <span className="font-mono font-semibold text-ink">
-              ₹{formatINR(inv.totals?.grand_total ?? inv.grand_total)}
-            </span>
-          </span>
-          <span className="text-right">
-            <span className="block text-[11px] text-ink-faint">Balance</span>
-            <span className={cx('font-mono font-bold', bal > 0.5 ? 'text-warning-ink' : 'text-positive-ink')}>
-              ₹{formatINR(bal)}
-            </span>
-          </span>
+        <div className="flex items-baseline justify-between gap-3 text-xs">
+          <span className="text-ink-faint tabular-nums">{inv.invoice_date}</span>
+          {bal > 0.5 ? (
+            <span className="text-warning-ink tabular-nums">Balance ₹{formatINR(bal)}</span>
+          ) : (
+            <span className="text-ink-faint">No balance</span>
+          )}
         </div>
       </div>
     );
   };
 
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  const filtered = Boolean(search || statusFilter !== 'all' || hasExtraFilters);
 
   return (
-    <div className="space-y-4 sm:space-y-5">
+    <div className="space-y-3 sm:space-y-4">
       {toast && <Toast message={toast} onDismiss={() => setToast(null)} />}
 
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
-        <StatCard label="Bills" value={summary.count} loading={loading}
-          sub={`${summary.gst_count} GST · ${summary.non_gst_count} non-GST`} />
-        <StatCard label="Revenue (ex-GST)" value={`₹${formatINR(summary.taxable)}`} loading={loading}
-          sub={`GST ₹${formatINR(summary.gst)}`} />
-        <StatCard label="Gross profit" value={`₹${formatINR(summary.gross_profit)}`} tone="positive" loading={loading}
-          sub={summary.uncosted ? `${summary.uncosted} bill(s) not costed` : `Cost ₹${formatINR(summary.total_cost)}`} />
-        <StatCard label="Outstanding" value={`₹${formatINR(summary.balance)}`} tone="warning" loading={loading} />
-      </div>
+      <MetricStrip>
+        <Metric label="Bills" value={summary.count} loading={loading}
+          compare={`${summary.gst_count} GST · ${summary.non_gst_count} non-GST`} />
+        <Metric label="Revenue (ex-GST)" value={`₹${formatINR(summary.taxable)}`} loading={loading}
+          compare={`GST ₹${formatINR(summary.gst)}`} />
+        <Metric label="Gross profit" value={`₹${formatINR(summary.gross_profit)}`} loading={loading}
+          compare={summary.uncosted ? `${summary.uncosted} bill(s) not costed` : `Cost ₹${formatINR(summary.total_cost)}`} />
+        <Metric label="Outstanding" value={`₹${formatINR(summary.balance)}`} tone={summary.balance > 0.5 ? 'warning' : 'default'} loading={loading} />
+      </MetricStrip>
 
-      <div className="flex flex-col lg:flex-row lg:items-center gap-3">
-        <div
-          role="tablist"
-          aria-label="Filter invoices by status"
-          className="flex items-center gap-1 bg-surface border border-line rounded-card p-1 overflow-x-auto"
-        >
-          {TABS.map((tab) => (
-            <button
-              key={tab.key}
-              role="tab"
-              aria-selected={statusFilter === tab.key}
-              onClick={() => { setStatusFilter(tab.key); setPage(1); }}
-              className={cx(
-                'px-3 min-h-[38px] rounded-control text-sm font-medium whitespace-nowrap cursor-pointer transition-colors duration-150',
-                statusFilter === tab.key
-                  ? 'bg-accent-strong text-on-accent font-semibold'
-                  : 'text-ink-soft hover:bg-surface-sunken hover:text-ink'
-              )}
-            >
-              {tab.label}
-            </button>
-          ))}
-        </div>
-
-        <div role="tablist" aria-label="Filter by bill type"
-          className="flex items-center gap-0.5 p-0.5 rounded-control bg-surface-sunken border border-line shrink-0">
-          {([['all', 'All'], ['tax_invoice', 'GST'], ['internal', 'Non-GST']] as const).map(([k, label]) => (
-            <button key={k} role="tab" aria-selected={docFilter === k}
-              onClick={() => { setDocFilter(k); setPage(1); }}
-              className={cx('px-3 h-8 rounded-[6px] text-[13px] whitespace-nowrap cursor-pointer transition-colors',
-                docFilter === k ? 'bg-surface-muted text-ink font-medium' : 'text-ink-faint hover:text-ink')}>
-              {label}
-            </button>
-          ))}
-        </div>
-
-        <div className="relative flex-1 lg:max-w-sm">
-          <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-ink-faint pointer-events-none z-10" aria-hidden="true" />
-          <Input
-            type="search"
-            value={searchInput}
-            onChange={(e) => setSearchInput(e.target.value)}
-            placeholder="Search invoice, LR or customer"
-            aria-label="Search invoices"
-            className="pl-9"
+      {/* Toolbar: status and bill type on top, search and party / date below */}
+      <div className="space-y-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <Segmented
+            label="Filter invoices by status"
+            options={TABS.map(t => ({ value: t.key, label: t.label }))}
+            value={statusFilter}
+            onChange={(v) => { setStatusFilter(v); setPage(1); }}
           />
-        </div>
-
-        <div className="flex items-center gap-2 lg:ml-auto">
-          <Button variant="secondary" size="sm" icon={<Download className="w-4 h-4" />} onClick={handleExportCSV}>
-            Export CSV
+          <Segmented
+            label="Filter by bill type"
+            options={[
+              { value: 'all', label: 'All types' },
+              { value: 'tax_invoice', label: 'GST' },
+              { value: 'internal', label: 'Non-GST' },
+            ] as const}
+            value={docFilter}
+            onChange={(v) => { setDocFilter(v); setPage(1); }}
+          />
+          <Button variant="secondary" size="sm" icon={<Download />} onClick={handleExportCSV} className="ml-auto">
+            Export
           </Button>
         </div>
-      </div>
 
-      {/* Party & date filters */}
-      <div className="flex flex-col sm:flex-row sm:flex-wrap sm:items-end gap-2">
-        <div className="sm:w-64">
-          <label htmlFor="inv-party" className="block text-[11px] font-semibold text-ink-faint mb-1">Party</label>
-          <Select id="inv-party" value={partyId} onChange={(e) => { setPartyId(e.target.value); setPage(1); }}>
+        <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:items-center">
+          <div className="relative col-span-2 sm:flex-1 sm:min-w-[220px] sm:max-w-sm">
+            <Search className="w-4 h-4 absolute left-2.5 top-1/2 -translate-y-1/2 text-ink-faint pointer-events-none" aria-hidden="true" />
+            <Input
+              type="search"
+              value={searchInput}
+              onChange={(e) => setSearchInput(e.target.value)}
+              placeholder="Search invoice, LR or customer"
+              aria-label="Search invoices"
+              className="pl-8"
+            />
+          </div>
+          <Select aria-label="Party" value={partyId} className="sm:w-52"
+            onChange={(e) => { setPartyId(e.target.value); setPage(1); }}>
             <option value="">All parties</option>
             {parties.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
           </Select>
-        </div>
-        <div className="sm:w-52">
-          <label htmlFor="inv-period" className="block text-[11px] font-semibold text-ink-faint mb-1">Invoice date</label>
-          <Select id="inv-period" value={period} onChange={(e) => { setPeriod(e.target.value as Period); setPage(1); }}>
+          <Select aria-label="Invoice date" value={period} className="sm:w-48"
+            onChange={(e) => { setPeriod(e.target.value as Period); setPage(1); }}>
             {PERIODS.map(p => <option key={p.key} value={p.key}>{p.label}</option>)}
           </Select>
-        </div>
-        {period === 'custom' && (
-          <div className="flex items-end gap-2">
-            <div>
-              <label htmlFor="inv-from" className="block text-[11px] font-semibold text-ink-faint mb-1">From</label>
-              <Input id="inv-from" type="date" value={customFrom} max={customTo || undefined}
+          {period === 'custom' && (
+            <>
+              <Input type="date" aria-label="From date" value={customFrom} max={customTo || undefined} className="sm:w-40"
                 onChange={(e) => { setCustomFrom(e.target.value); setPage(1); }} />
-            </div>
-            <div>
-              <label htmlFor="inv-to" className="block text-[11px] font-semibold text-ink-faint mb-1">To</label>
-              <Input id="inv-to" type="date" value={customTo} min={customFrom || undefined}
+              <Input type="date" aria-label="To date" value={customTo} min={customFrom || undefined} className="sm:w-40"
                 onChange={(e) => { setCustomTo(e.target.value); setPage(1); }} />
+            </>
+          )}
+          {(hasExtraFilters || (period !== 'all' && period !== 'custom' && range.from)) && (
+            <div className="col-span-2 flex items-center gap-2 min-w-0">
+              {period !== 'all' && period !== 'custom' && range.from && (
+                <span className="text-xs text-ink-faint tabular-nums whitespace-nowrap">{range.from} – {range.to}</span>
+              )}
+              {hasExtraFilters && (
+                <Button variant="ghost" size="sm" onClick={() => { setPartyId(''); setPeriod('all'); setCustomFrom(''); setCustomTo(''); setPage(1); }}>
+                  Clear party and date
+                </Button>
+              )}
             </div>
-          </div>
-        )}
-        {hasExtraFilters && (
-          <Button variant="ghost" size="sm" onClick={() => { setPartyId(''); setPeriod('all'); setCustomFrom(''); setCustomTo(''); setPage(1); }}>
-            Clear party / date
-          </Button>
-        )}
-        {period !== 'all' && period !== 'custom' && range.from && (
-          <span className="text-xs text-ink-faint sm:pb-2.5">{range.from} → {range.to}</span>
-        )}
+          )}
+        </div>
       </div>
 
       <Card padded={false} className="overflow-hidden">
@@ -434,22 +401,14 @@ export const InvoiceList: React.FC<InvoiceListProps> = ({
             rowClassName={(inv) => (highlightInvoiceId && inv.id === highlightInvoiceId ? 'bg-accent-soft' : undefined)}
             empty={
               <EmptyState
-                icon={<FileText className="w-6 h-6" />}
-                title={search || statusFilter !== 'all' || hasExtraFilters ? 'No matching invoices' : 'No invoices yet'}
-                message={
-                  search || statusFilter !== 'all' || hasExtraFilters
-                    ? 'Try a different search term or filter.'
-                    : 'Create your first GST tax invoice to get started.'
-                }
+                icon={<FileText />}
+                title={filtered ? 'No matching invoices' : 'No invoices yet'}
+                message={filtered ? 'Try a different search term or filter.' : 'Create your first GST tax invoice to get started.'}
                 action={
-                  search || statusFilter !== 'all' || hasExtraFilters ? (
-                    <Button variant="secondary" onClick={clearAllFilters}>
-                      Clear filters
-                    </Button>
+                  filtered ? (
+                    <Button variant="secondary" size="sm" onClick={clearAllFilters}>Clear filters</Button>
                   ) : (
-                    <Button variant="primary" icon={<Plus className="w-4 h-4" />} onClick={onNewInvoice}>
-                      New Invoice
-                    </Button>
+                    <Button variant="secondary" size="sm" icon={<Plus />} onClick={onNewInvoice}>New invoice</Button>
                   )
                 }
               />
@@ -458,16 +417,16 @@ export const InvoiceList: React.FC<InvoiceListProps> = ({
         )}
 
         {totalPages > 1 && !loadError && (
-          <div className="flex items-center justify-between gap-3 px-4 py-3 border-t border-line bg-surface-muted">
-            <span className="text-xs text-ink-faint">
-              Page <strong className="text-ink">{page}</strong> of {totalPages} · {total} invoices
+          <div className="flex items-center justify-between gap-3 px-3 sm:px-4 py-2 border-t border-line">
+            <span className="text-xs text-ink-faint tabular-nums">
+              Page {page} of {totalPages} · {total} invoices
             </span>
             <div className="flex items-center gap-1">
               <IconButton label="Previous page" disabled={page <= 1} onClick={() => setPage((p) => Math.max(1, p - 1))} variant="secondary">
-                <ChevronLeft className="w-4 h-4" />
+                <ChevronLeft />
               </IconButton>
               <IconButton label="Next page" disabled={page >= totalPages} onClick={() => setPage((p) => p + 1)} variant="secondary">
-                <ChevronRight className="w-4 h-4" />
+                <ChevronRight />
               </IconButton>
             </div>
           </div>
