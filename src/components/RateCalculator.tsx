@@ -13,6 +13,23 @@ import {
   Spinner, Toast, FormError, cx,
 } from './ui.js';
 
+interface SettingRow {
+  key: string;
+  unit?: string | null;
+  remark?: string | null;
+  value: number | string | null;
+  text_value?: string | null;
+  min_value?: number | string | null;
+  max_value?: number | string | null;
+}
+
+interface CustomerCardMeta {
+  exists: boolean;
+  use_custom: boolean;
+  copied_at?: string | null;
+  updated_at?: string | null;
+}
+
 interface RateCard {
   zones: { code: string; name: string; sort_order: number }[];
   states: { name: string; zone_code: string }[];
@@ -20,7 +37,67 @@ interface RateCard {
   matrix: MatrixRow[];
   specials: SpecialRate[];
   settings: RateSettings;
+  settings_rows?: SettingRow[];
   oda: OdaSlab[];
+  /** Which card these numbers come from. */
+  source?: 'global' | 'customer';
+  customer_id?: string | null;
+  customer_card?: CustomerCardMeta;
+}
+
+/**
+ * Where edits go. The global card has per-lane endpoints; a customer's personal
+ * chart is one record, so its edits are sent as a patch of that record.
+ */
+interface CardWriter {
+  saveCells: (cells: { origin_zone: string; dest_zone: string; rate_per_kg: number }[]) => Promise<number>;
+  saveSpecialRates: (rows: { id: string; rate_per_kg: number }[]) => Promise<number>;
+  addSpecial: (row: Omit<SpecialRate, 'id'>) => Promise<void>;
+  removeSpecial: (r: SpecialRate) => Promise<void>;
+  saveSettings: (changes: Record<string, { value?: number | null; min_value?: number | null }>) => Promise<number>;
+}
+
+function makeWriter(card: RateCard): CardWriter {
+  if (card.source === 'customer' && card.customer_id) {
+    const url = `/rates/customer/${card.customer_id}`;
+    const put = (body: any) => apiRequest(url, { method: 'PUT', body: JSON.stringify(body) });
+    return {
+      saveCells: async (cells) => { await put({ matrix: cells }); return cells.length; },
+      saveSpecialRates: async (rows) => {
+        const byId = new Map(rows.map(r => [r.id, r.rate_per_kg]));
+        await put({ specials: card.specials.map(s => (s.id && byId.has(s.id) ? { ...s, rate_per_kg: byId.get(s.id) } : s)) });
+        return rows.length;
+      },
+      addSpecial: async (row) => {
+        const lane = (s: any) => `${s.origin_kind}|${String(s.origin_value).toLowerCase()}|${s.dest_kind}|${String(s.dest_value).toLowerCase()}`;
+        if (card.specials.some(s => lane(s) === lane(row))) {
+          throw new Error('A special rate already exists for that lane. Edit it instead.');
+        }
+        await put({ specials: [...card.specials, { ...row, is_active: true }] });
+      },
+      removeSpecial: async (r) => { await put({ specials: card.specials.filter(s => s.id !== r.id) }); },
+      saveSettings: async (changes) => { await put({ settings: changes }); return Object.keys(changes).length; },
+    };
+  }
+  return {
+    saveCells: async (cells) => {
+      const res = await apiRequest<{ updated: number }>('/rates/matrix/bulk', { method: 'PUT', body: JSON.stringify({ cells }) });
+      return res.updated;
+    },
+    saveSpecialRates: async (rows) => {
+      const res = await apiRequest<{ updated: number }>('/rates/special/bulk', { method: 'PUT', body: JSON.stringify({ rows }) });
+      return res.updated;
+    },
+    addSpecial: async (row) => { await apiRequest('/rates/special', { method: 'POST', body: JSON.stringify(row) }); },
+    removeSpecial: async (r) => { await apiRequest(`/rates/special/${r.id}`, { method: 'DELETE' }); },
+    saveSettings: async (changes) => {
+      const keys = Object.keys(changes);
+      for (const k of keys) {
+        await apiRequest(`/rates/settings/${encodeURIComponent(k)}`, { method: 'PUT', body: JSON.stringify(changes[k]) });
+      }
+      return keys.length;
+    },
+  };
 }
 
 /** One selectable pickup/delivery location, flattened from cities + states + zones. */
@@ -179,10 +256,11 @@ const LocationPicker: React.FC<{
 /* ------------------------------------------------------------ rate chart */
 const RateChart: React.FC<{
   card: RateCard;
+  writer: CardWriter;
   canEdit: boolean;
   onSaved: (msg: string) => void;
   reload: () => Promise<void>;
-}> = ({ card, canEdit, onSaved, reload }) => {
+}> = ({ card, writer, canEdit, onSaved, reload }) => {
   const zones = [...card.zones].sort((a, b) => a.sort_order - b.sort_order);
 
   const baseGrid = useMemo(() => {
@@ -221,14 +299,11 @@ const RateChart: React.FC<{
     setSaving(true);
     setError(null);
     try {
-      const res = await apiRequest<{ updated: number; failed: any[] }>('/rates/matrix/bulk', {
-        method: 'PUT',
-        body: JSON.stringify({ cells: dirtyCells }),
-      });
+      const updated = await writer.saveCells(dirtyCells);
       await reload();
       setDraft({});
       setEditing(false);
-      onSaved(`Saved ${res.updated} zone rate${res.updated === 1 ? '' : 's'}.`);
+      onSaved(`Saved ${updated} zone rate${updated === 1 ? '' : 's'}.`);
     } catch (err: any) {
       setError(err.message || 'Could not save the rate chart.');
     } finally {
@@ -365,10 +440,11 @@ const KINDS: Array<'zone' | 'state' | 'city'> = ['zone', 'state', 'city'];
 
 const SpecialRates: React.FC<{
   card: RateCard;
+  writer: CardWriter;
   canEdit: boolean;
   onSaved: (msg: string) => void;
   reload: () => Promise<void>;
-}> = ({ card, canEdit, onSaved, reload }) => {
+}> = ({ card, writer, canEdit, onSaved, reload }) => {
   const [q, setQ] = useState('');
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState<Record<string, string>>({});
@@ -406,14 +482,11 @@ const SpecialRates: React.FC<{
     setSaving(true);
     setError(null);
     try {
-      const res = await apiRequest<{ updated: number }>('/rates/special/bulk', {
-        method: 'PUT',
-        body: JSON.stringify({ rows: dirtyRows }),
-      });
+      const updated = await writer.saveSpecialRates(dirtyRows);
       await reload();
       setDraft({});
       setEditing(false);
-      onSaved(`Saved ${res.updated} special rate${res.updated === 1 ? '' : 's'}.`);
+      onSaved(`Saved ${updated} special rate${updated === 1 ? '' : 's'}.`);
     } catch (err: any) {
       setError(err.message || 'Could not save the special rates.');
     } finally {
@@ -434,13 +507,10 @@ const SpecialRates: React.FC<{
     }
     setSaving(true);
     try {
-      await apiRequest('/rates/special', {
-        method: 'POST',
-        body: JSON.stringify({
-          origin_kind: newRow.origin_kind, origin_value: newRow.origin_value.trim(),
-          dest_kind: newRow.dest_kind, dest_value: newRow.dest_value.trim(),
-          rate_per_kg: Number(newRow.rate_per_kg), note: newRow.note.trim() || 'Manual SPR',
-        }),
+      await writer.addSpecial({
+        origin_kind: newRow.origin_kind, origin_value: newRow.origin_value.trim(),
+        dest_kind: newRow.dest_kind, dest_value: newRow.dest_value.trim(),
+        rate_per_kg: Number(newRow.rate_per_kg), note: newRow.note.trim() || 'Manual SPR',
       });
       await reload();
       setNewRow({ origin_kind: 'zone', origin_value: '', dest_kind: 'city', dest_value: '', rate_per_kg: '', note: '' });
@@ -458,7 +528,7 @@ const SpecialRates: React.FC<{
     setSaving(true);
     setError(null);
     try {
-      await apiRequest(`/rates/special/${r.id}`, { method: 'DELETE' });
+      await writer.removeSpecial(r);
       await reload();
       onSaved(`Removed ${r.origin_value} → ${r.dest_value}.`);
     } catch (err: any) {
@@ -632,8 +702,137 @@ const SpecialRates: React.FC<{
   );
 };
 
+/* --------------------------------------------------------------- charges */
+const ChargesEditor: React.FC<{
+  card: RateCard;
+  writer: CardWriter;
+  canEdit: boolean;
+  onSaved: (msg: string) => void;
+  reload: () => Promise<void>;
+}> = ({ card, writer, canEdit, onSaved, reload }) => {
+  // Only numeric charges are edited here; option rows (text values) are left alone.
+  const rows = (card.settings_rows || []).filter(r => r.text_value === null || r.text_value === undefined);
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState<Record<string, { value?: string; min_value?: string }>>({});
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const show = (v: any) => (v === null || v === undefined || v === '' ? '' : String(v));
+  const changes = useMemo(() => {
+    const out: Record<string, { value?: number | null; min_value?: number | null }> = {};
+    for (const r of rows) {
+      const d = draft[r.key];
+      if (!d) continue;
+      const c: { value?: number | null; min_value?: number | null } = {};
+      if (d.value !== undefined && d.value !== show(r.value)) c.value = d.value === '' ? null : Number(d.value);
+      if (d.min_value !== undefined && d.min_value !== show(r.min_value)) c.min_value = d.min_value === '' ? null : Number(d.min_value);
+      if (Object.keys(c).length) out[r.key] = c;
+    }
+    return out;
+  }, [draft, rows]);
+  const changed = Object.keys(changes).length;
+
+  const save = async () => {
+    const bad = Object.values(changes).some(c => (c.value !== undefined && c.value !== null && (isNaN(c.value) || c.value < 0))
+      || (c.min_value !== undefined && c.min_value !== null && (isNaN(c.min_value) || c.min_value < 0)));
+    if (bad) { setError('Charges must be 0 or more.'); return; }
+    setSaving(true);
+    setError(null);
+    try {
+      const n = await writer.saveSettings(changes);
+      await reload();
+      setDraft({});
+      setEditing(false);
+      onSaved(`Saved ${n} charge${n === 1 ? '' : 's'}.`);
+    } catch (err: any) {
+      setError(err.message || 'Could not save the charges.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const cellInput = (r: SettingRow, field: 'value' | 'min_value') => {
+    const cur = draft[r.key]?.[field] ?? show(r[field]);
+    const dirty = draft[r.key]?.[field] !== undefined && draft[r.key]?.[field] !== show(r[field]);
+    return (
+      <input
+        type="number" min="0" step="any" inputMode="decimal"
+        aria-label={`${r.remark || r.key} ${field === 'value' ? 'value' : 'minimum'}`}
+        value={cur}
+        onChange={e => setDraft(d => ({ ...d, [r.key]: { ...d[r.key], [field]: e.target.value } }))}
+        className={cx(
+          'w-[6rem] text-right font-mono font-semibold rounded-control py-1.5 px-2 min-h-[40px] text-sm',
+          'border bg-surface text-ink focus:outline-none focus:border-accent transition-colors',
+          dirty ? 'border-accent ring-2 ring-accent/30' : 'border-line hover:border-line-strong'
+        )}
+      />
+    );
+  };
+
+  return (
+    <Card padded={false} className="overflow-hidden">
+      <div className="p-4 sm:p-5 border-b border-line flex flex-col sm:flex-row sm:items-start gap-3">
+        <div className="min-w-0">
+          <h2 className="text-base font-bold text-ink">Charges</h2>
+          <p className="text-sm text-ink-faint mt-0.5">Surcharges, minimums and per-LR fees added on top of the freight.</p>
+        </div>
+        {canEdit && (
+          <div className="flex items-center gap-2 sm:ml-auto shrink-0">
+            {editing ? (
+              <>
+                <Button variant="ghost" size="sm" icon={<RotateCcw className="w-4 h-4" />}
+                  onClick={() => { setDraft({}); setEditing(false); setError(null); }}>Cancel</Button>
+                <Button variant="primary" size="sm" icon={<Save className="w-4 h-4" />}
+                  onClick={save} loading={saving} disabled={changed === 0}>
+                  Save{changed ? ` (${changed})` : ''}
+                </Button>
+              </>
+            ) : (
+              <Button variant="secondary" size="sm" icon={<Pencil className="w-4 h-4" />} onClick={() => setEditing(true)}>
+                Edit charges
+              </Button>
+            )}
+          </div>
+        )}
+      </div>
+      {error && <div className="px-4 sm:px-5 pt-4"><FormError message={error} /></div>}
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm min-w-[560px]">
+          <thead className="bg-surface-muted border-b border-line">
+            <tr>
+              <th scope="col" className="py-3 px-4 text-left text-xs font-semibold uppercase tracking-wide text-ink-faint">Charge</th>
+              <th scope="col" className="py-3 px-4 text-right text-xs font-semibold uppercase tracking-wide text-ink-faint">Value</th>
+              <th scope="col" className="py-3 px-4 text-left text-xs font-semibold uppercase tracking-wide text-ink-faint">Unit</th>
+              <th scope="col" className="py-3 px-4 text-right text-xs font-semibold uppercase tracking-wide text-ink-faint">Minimum</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-line">
+            {rows.map(r => (
+              <tr key={r.key}>
+                <td className="py-2.5 px-4">
+                  <span className="font-medium text-ink">{r.remark || r.key}</span>
+                  <span className="block text-[11px] text-ink-faint font-mono">{r.key}</span>
+                </td>
+                <td className="py-1.5 px-4 text-right">
+                  {editing ? cellInput(r, 'value') : <span className="font-mono font-semibold text-ink">{show(r.value) || '-'}</span>}
+                </td>
+                <td className="py-2.5 px-4 text-xs text-ink-faint">{r.unit}</td>
+                <td className="py-1.5 px-4 text-right">
+                  {editing ? cellInput(r, 'min_value') : <span className="font-mono text-ink-soft">{show(r.min_value) || '-'}</span>}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </Card>
+  );
+};
+
 /* ================================================================ main */
-type Tab = 'calculator' | 'chart' | 'special';
+type Tab = 'calculator' | 'chart' | 'special' | 'charges';
+
+interface CustomerLite { id: string; name: string; city?: string }
 
 export const RateCalculator: React.FC<{ onCreateInvoice?: (q: Quote) => void }> = ({ onCreateInvoice }) => {
   const { user } = useAuth();
@@ -664,20 +863,84 @@ export const RateCalculator: React.FC<{ onCreateInvoice?: (q: Quote) => void }> 
   const [insurance, setInsurance] = useState<'none' | 'owner' | 'carrier'>('none');
   const [showBreakup, setShowBreakup] = useState(true);
 
+  // Which customer's chart is on screen ('' = the global chart)
+  const [customers, setCustomers] = useState<CustomerLite[]>([]);
+  const [customerId, setCustomerId] = useState('');
+  const [cardBusy, setCardBusy] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const firstLoad = useRef(true);
+
   const loadCard = useCallback(async () => {
-    setLoading(true);
+    // Keep the screen up while switching customers; only the first load shows a spinner.
+    if (firstLoad.current) setLoading(true);
     setLoadError(null);
     try {
-      const res = await apiRequest<RateCard>('/rates/card');
+      const q = customerId ? `?customer_id=${encodeURIComponent(customerId)}` : '';
+      const res = await apiRequest<RateCard>(`/rates/card${q}`);
       setCard(res);
     } catch (err: any) {
       setLoadError(err.message || 'Could not load the rate card');
     } finally {
+      firstLoad.current = false;
       setLoading(false);
     }
-  }, []);
+  }, [customerId]);
 
   useEffect(() => { loadCard(); }, [loadCard]);
+
+  useEffect(() => {
+    apiRequest<{ items: CustomerLite[] }>('/customers?page=1&page_size=500')
+      .then(r => setCustomers((r.items || []).map(c => ({ id: c.id, name: c.name, city: c.city }))))
+      .catch(() => setCustomers([]));
+  }, []);
+
+  const writer = useMemo(() => (card ? makeWriter(card) : null), [card]);
+  const selectedCustomer = customers.find(c => c.id === customerId);
+  const cardMeta = card?.customer_card;
+
+  /** Create or reset the personal chart as a fresh copy of the global one. */
+  const copyFromGlobal = async () => {
+    if (!customerId) return;
+    setCardBusy(true);
+    try {
+      await apiRequest(`/rates/customer/${customerId}/copy`, { method: 'POST' });
+      await loadCard();
+      setToast(cardMeta?.exists ? 'Personal chart reset to a fresh copy of the global chart.' : 'Personal rate chart created from the global chart.');
+    } catch (err: any) {
+      setToast(err.message || 'Could not copy the global chart.');
+    } finally {
+      setCardBusy(false);
+    }
+  };
+
+  const setUseCustom = async (use: boolean) => {
+    if (!customerId) return;
+    setCardBusy(true);
+    try {
+      await apiRequest(`/rates/customer/${customerId}`, { method: 'PUT', body: JSON.stringify({ use_custom: use }) });
+      await loadCard();
+      setToast(use ? 'This customer is now billed on their personal chart.' : 'This customer is now billed on the global chart.');
+    } catch (err: any) {
+      setToast(err.message || 'Could not change the chart.');
+    } finally {
+      setCardBusy(false);
+    }
+  };
+
+  const deleteCustomCard = async () => {
+    if (!customerId) return;
+    setCardBusy(true);
+    try {
+      await apiRequest(`/rates/customer/${customerId}`, { method: 'DELETE' });
+      setConfirmDelete(false);
+      await loadCard();
+      setToast('Personal chart removed. This customer now uses the global chart.');
+    } catch (err: any) {
+      setToast(err.message || 'Could not remove the personal chart.');
+    } finally {
+      setCardBusy(false);
+    }
+  };
 
   const options = useMemo(() => (card ? buildOptions(card) : []), [card]);
 
@@ -728,6 +991,8 @@ export const RateCalculator: React.FC<{ onCreateInvoice?: (q: Quote) => void }> 
       await apiRequest('/rates/quotes', {
         method: 'POST',
         body: JSON.stringify({
+          customer_id: customerId || undefined,
+          rate_mode: card?.source === 'customer' ? 'custom' : 'global',
           origin, dest, dead_weight: weight, boxes: boxes.filter(b => b.count > 0),
           declared_value: declaredValue, appointment_delivery: appointment,
           oda, to_pay: toPay, cheque_payment: cheque, green_tax: greenTax, insurance,
@@ -742,13 +1007,17 @@ export const RateCalculator: React.FC<{ onCreateInvoice?: (q: Quote) => void }> 
   };
 
   if (loading) return <Spinner label="Loading rate card" />;
-  if (loadError || !card) return <Card padded={false}><ErrorState message={loadError || undefined} onRetry={loadCard} /></Card>;
+  if (loadError || !card || !writer) return <Card padded={false}><ErrorState message={loadError || undefined} onRetry={loadCard} /></Card>;
 
   const TABS: { key: Tab; label: string; icon: React.ReactNode }[] = [
     { key: 'calculator', label: 'Calculator', icon: <Calculator className="w-4 h-4" /> },
     { key: 'chart', label: 'Rate chart', icon: <Grid3x3 className="w-4 h-4" /> },
     { key: 'special', label: 'Special rates', icon: <Sparkles className="w-4 h-4" /> },
+    { key: 'charges', label: 'Charges', icon: <Package className="w-4 h-4" /> },
   ];
+  const onCustomer = card.source === 'customer';
+  // Remount the editors when the card changes so half-typed edits never leak across charts
+  const editorKey = `${card.source}:${card.customer_id || 'global'}`;
 
   return (
     <div className="space-y-4 sm:space-y-5">
@@ -773,11 +1042,88 @@ export const RateCalculator: React.FC<{ onCreateInvoice?: (q: Quote) => void }> 
         ))}
       </div>
 
+      {/* -------------------------------------------- whose chart is this */}
+      <Card>
+        <div className="flex flex-col lg:flex-row lg:items-end gap-3">
+          <Field label="Rate chart for" htmlFor="rc-customer" className="lg:w-80">
+            <Select id="rc-customer" value={customerId} onChange={e => { setCustomerId(e.target.value); setConfirmDelete(false); }}>
+              <option value="">Global chart (all customers)</option>
+              {customers.map(c => (
+                <option key={c.id} value={c.id}>{c.name}{c.city ? ` (${c.city})` : ''}</option>
+              ))}
+            </Select>
+          </Field>
+
+          <div className="flex-1 min-w-0 flex flex-wrap items-center gap-2 text-sm">
+            {!customerId ? (
+              <span className="text-ink-faint">Default prices for every customer without a personal chart.</span>
+            ) : !cardMeta?.exists ? (
+              <>
+                <Badge tone="neutral">Uses global chart</Badge>
+                {canEditRates ? (
+                  <Button variant="secondary" size="sm" icon={<Plus className="w-4 h-4" />} onClick={copyFromGlobal} loading={cardBusy}>
+                    Create personal chart (copy of global)
+                  </Button>
+                ) : (
+                  <span className="text-ink-faint text-xs">No personal chart for this customer.</span>
+                )}
+              </>
+            ) : (
+              <>
+                <div role="radiogroup" aria-label="Chart used for this customer"
+                  className="inline-flex p-0.5 rounded-control bg-surface-sunken border border-line">
+                  {([[true, 'Personal chart'], [false, 'Global chart']] as const).map(([v, label]) => (
+                    <button key={label} type="button" role="radio" aria-checked={cardMeta.use_custom === v}
+                      disabled={!canEditRates || cardBusy}
+                      onClick={() => cardMeta.use_custom !== v && setUseCustom(v)}
+                      className={cx('px-3 h-9 rounded-[6px] text-[13px] whitespace-nowrap transition-colors cursor-pointer disabled:cursor-not-allowed',
+                        cardMeta.use_custom === v ? 'bg-accent-strong text-on-accent font-semibold' : 'text-ink-soft hover:text-ink')}>
+                      {label}
+                    </button>
+                  ))}
+                </div>
+                {canEditRates && (
+                  confirmDelete ? (
+                    <span className="inline-flex items-center gap-2 text-xs">
+                      <span className="text-danger-ink font-semibold">Delete this personal chart?</span>
+                      <Button variant="ghost" size="sm" onClick={() => setConfirmDelete(false)}>Keep</Button>
+                      <Button variant="danger" size="sm" onClick={deleteCustomCard} loading={cardBusy}>Delete</Button>
+                    </span>
+                  ) : (
+                    <>
+                      <Button variant="ghost" size="sm" icon={<RotateCcw className="w-4 h-4" />} onClick={copyFromGlobal} loading={cardBusy}>
+                        Reset from global
+                      </Button>
+                      <Button variant="ghost" size="sm" icon={<Trash2 className="w-4 h-4" />} onClick={() => setConfirmDelete(true)}
+                        className="text-danger-ink">
+                        Delete
+                      </Button>
+                    </>
+                  )
+                )}
+              </>
+            )}
+          </div>
+        </div>
+        {customerId && cardMeta?.exists && (
+          <p className="mt-3 text-xs text-ink-faint flex items-center gap-1">
+            <Info className="w-3 h-3 shrink-0" aria-hidden="true" />
+            {onCustomer
+              ? `Showing and editing ${selectedCustomer?.name || 'this customer'}'s personal chart. Changes to the global chart do not affect it.`
+              : `${selectedCustomer?.name || 'This customer'} is billed on the global chart, shown below - edits here change it for every customer. Their personal chart is kept; switch to it to view or edit it.`}
+            {cardMeta.copied_at && ` Copied from global on ${String(cardMeta.copied_at).slice(0, 10)}.`}
+          </p>
+        )}
+      </Card>
+
       {tab === 'chart' && (
-        <RateChart card={card} canEdit={canEditRates} onSaved={setToast} reload={loadCard} />
+        <RateChart key={editorKey} card={card} writer={writer} canEdit={canEditRates} onSaved={setToast} reload={loadCard} />
       )}
       {tab === 'special' && (
-        <SpecialRates card={card} canEdit={canEditRates} onSaved={setToast} reload={loadCard} />
+        <SpecialRates key={editorKey} card={card} writer={writer} canEdit={canEditRates} onSaved={setToast} reload={loadCard} />
+      )}
+      {tab === 'charges' && (
+        <ChargesEditor key={editorKey} card={card} writer={writer} canEdit={canEditRates} onSaved={setToast} reload={loadCard} />
       )}
 
       {tab === 'calculator' && (
@@ -806,6 +1152,7 @@ export const RateCalculator: React.FC<{ onCreateInvoice?: (q: Quote) => void }> 
 
               {quote && (
                 <div className="mt-4 flex flex-wrap items-center gap-2 text-sm">
+                  {onCustomer && <Badge tone="positive">Personal chart</Badge>}
                   <Badge tone={quote.rate.source === 'special' ? 'accent' : 'info'}>
                     {quote.rate.source === 'special' ? 'Special rate' : 'Zone base rate'}
                   </Badge>

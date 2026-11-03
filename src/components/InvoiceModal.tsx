@@ -24,6 +24,16 @@ import { Customer, ChargeItem, CostItem, InvoiceTotals, Invoice } from '../types
 import { formatINR } from '../utils/format.js';
 import { lookupGSTIN, lookupPincode, isValidGSTINFormat } from '../utils/gstLookup.js';
 import { compute, r2, splitInclusive, VENDOR_GST_RATE } from '../utils/calc.js';
+import { resolveRate, placeFromName } from '../utils/rates.js';
+import type { SpecialRate, MatrixRow, PlaceLookup } from '../utils/rates.js';
+
+/** The slice of GET /rates/card the invoice form needs to suggest Rate / Kg. */
+interface InvoiceRateCard extends PlaceLookup {
+  matrix: MatrixRow[];
+  specials: SpecialRate[];
+  source: 'global' | 'customer';
+  customer_card?: { exists: boolean; use_custom: boolean };
+}
 
 interface InvoiceModalProps {
   invoiceToEdit?: Invoice | null;
@@ -50,6 +60,8 @@ interface LrLine {
   vendor: string;
   /** Can that GST be claimed back? false for unregistered truck owners. */
   itc: boolean;
+  /** true while Rate / Kg follows the rate chart; typing a rate turns it off. Never saved. */
+  rate_auto: boolean;
 }
 
 let lrKeySeq = 0;
@@ -66,6 +78,7 @@ const newLrLine = (partial: Partial<LrLine> = {}): LrLine => ({
   gst_included: true,
   vendor: '',
   itc: true,
+  rate_auto: true,
   ...partial,
 });
 
@@ -86,6 +99,8 @@ function buildInitialLrLines(inv?: Invoice | null): LrLine[] {
       gst_included: l.gst_included !== undefined ? l.gst_included !== false : (Number(l.cost_gst) || 0) > 0 || l.cost === null || l.cost === undefined,
       vendor: l.vendor || '',
       itc: l.itc !== false,
+      // A saved bill keeps the rates it was billed at
+      rate_auto: false,
     }));
   }
   if (inv && inv.id) {
@@ -98,6 +113,7 @@ function buildInitialLrLines(inv?: Invoice | null): LrLine[] {
       weight: Number(inv.weight) || 0,
       rate_kg: Number(inv.rate_kg) || 0,
       amount: Number(inv.freight) || 0,
+      rate_auto: false,
     })];
   }
   return [newLrLine()];
@@ -286,6 +302,8 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({ invoiceToEdit, initi
     setLrLines(prev => prev.map(l => {
       if (l.key !== key) return l;
       const next = { ...l, ...patch };
+      // Typing a rate or an amount by hand stops the chart from overwriting it
+      if (('rate_kg' in patch || 'amount' in patch) && !('rate_auto' in patch)) next.rate_auto = false;
       // Weight × Rate drives the line freight whenever both are known; a direct amount is also allowed
       if (('weight' in patch || 'rate_kg' in patch) && next.weight > 0 && next.rate_kg > 0) {
         next.amount = Math.round(next.weight * next.rate_kg * 100) / 100;
@@ -297,7 +315,10 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({ invoiceToEdit, initi
   const addLrLine = () => {
     setLrLines(prev => {
       const last = prev[prev.length - 1];
-      return [...prev, newLrLine({ origin: last?.origin || 'Ahmedabad', destination: last?.destination || '', rate_kg: last?.rate_kg || 0 })];
+      return [...prev, newLrLine({
+        origin: last?.origin || 'Ahmedabad', destination: last?.destination || '',
+        rate_kg: last?.rate_kg || 0, rate_auto: last ? last.rate_auto : true,
+      })];
     });
   };
 
@@ -310,6 +331,52 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({ invoiceToEdit, initi
     if (!city) return;
     setLrLines(prev => prev.map((l, i) => (i === 0 && !l.destination ? { ...l, destination: city } : l)));
   };
+
+  // ---- Rate / Kg from the rate chart (the customer's personal one when they have it) ----
+  // 'auto' = whatever the customer is set to; the user can flip to the other chart per bill.
+  const [rateMode, setRateMode] = useState<'auto' | 'custom' | 'global'>('auto');
+  const [rateCard, setRateCard] = useState<InvoiceRateCard | null>(null);
+  useEffect(() => { setRateMode('auto'); }, [selectedCustomerId]);
+  useEffect(() => {
+    let alive = true;
+    const q = new URLSearchParams({ mode: rateMode });
+    if (selectedCustomerId) q.set('customer_id', selectedCustomerId);
+    apiRequest<InvoiceRateCard>(`/rates/card?${q.toString()}`)
+      .then(c => { if (alive) setRateCard(c); })
+      .catch(() => { if (alive) setRateCard(null); });   // no rate access: rates stay manual
+    return () => { alive = false; };
+  }, [selectedCustomerId, rateMode]);
+
+  /** Suggested rate per LR line, keyed by line. */
+  const rateSuggestions = useMemo(() => {
+    const out: Record<string, { rate: number; label: string } | null> = {};
+    if (!rateCard) return out;
+    const buyer = customers.find(c => c.id === selectedCustomerId);
+    const consigneeCity = (sameAsBuyer ? buyer?.city : shipToCity) || '';
+    const consigneeState = (sameAsBuyer ? buyer?.state : shipToState) || '';
+    for (const l of lrLines) {
+      const origin = placeFromName(l.origin, rateCard, 'Gujarat');
+      // An unlisted delivery town takes the consignee's state when it is the consignee's town
+      const destFallback = l.destination.trim().toLowerCase() === consigneeCity.trim().toLowerCase() ? consigneeState : undefined;
+      const dest = placeFromName(l.destination, rateCard, destFallback);
+      if (!origin || !dest) { out[l.key] = null; continue; }
+      const r = resolveRate(origin, dest, rateCard.specials, rateCard.matrix);
+      out[l.key] = r.rate_per_kg > 0
+        ? { rate: r.rate_per_kg, label: `${rateCard.source === 'customer' ? 'Personal' : 'Global'} · ${r.source === 'special' ? 'special' : `${origin.zone}→${dest.zone}`}` }
+        : null;
+    }
+    return out;
+  }, [rateCard, lrLines, customers, selectedCustomerId, sameAsBuyer, shipToCity, shipToState]);
+
+  // Apply suggestions to lines still following the chart
+  useEffect(() => {
+    if (!lrLines.some(l => l.rate_auto && rateSuggestions[l.key] && rateSuggestions[l.key]!.rate !== l.rate_kg)) return;
+    setLrLines(prev => prev.map(l => {
+      const sug = rateSuggestions[l.key];
+      if (!l.rate_auto || !sug || sug.rate === l.rate_kg) return l;
+      return { ...l, rate_kg: sug.rate, amount: l.weight > 0 ? Math.round(l.weight * sug.rate * 100) / 100 : l.amount };
+    }));
+  }, [rateSuggestions]);
 
   // Live calculations - same pure engine the server uses to persist totals (no network round-trip,
   // so rapidly typed values can never be overwritten by a slower, stale response).
@@ -573,7 +640,7 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({ invoiceToEdit, initi
     setError(null);
 
     try {
-      const cleanLines = lrLines.map(({ key: _key, ...rest }) => ({
+      const cleanLines = lrLines.map(({ key: _key, rate_auto: _auto, ...rest }) => ({
         ...rest,
         lr_no: rest.lr_no.trim(),
         origin: rest.origin.trim(),
@@ -1018,8 +1085,37 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({ invoiceToEdit, initi
               Add every LR / bilty covered by this single bill. Freight per LR = Weight × Rate, or type the amount directly.
             </p>
 
+            {rateCard && (
+              <div className="flex flex-wrap items-center gap-2 text-[11px] text-ink-soft">
+                <span className="font-semibold">Rate / Kg from:</span>
+                {rateCard.customer_card?.exists ? (
+                  <div role="radiogroup" aria-label="Rate chart for this bill"
+                    className="inline-flex p-0.5 rounded-control bg-surface-sunken border border-line">
+                    {([['custom', 'Personal chart'], ['global', 'Global chart']] as const).map(([v, label]) => {
+                      const on = rateCard.source === (v === 'custom' ? 'customer' : 'global');
+                      return (
+                        <button key={v} type="button" role="radio" aria-checked={on}
+                          onClick={() => {
+                            setRateMode(v);
+                            // Switching charts re-prices every line, including ones typed by hand
+                            setLrLines(prev => prev.map(l => ({ ...l, rate_auto: true })));
+                          }}
+                          className={`px-2.5 h-7 rounded-[6px] whitespace-nowrap transition-colors cursor-pointer ${
+                            on ? 'bg-accent-strong text-on-accent font-semibold' : 'text-ink-faint hover:text-ink'}`}>
+                          {label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <span className="px-2 py-0.5 rounded-md bg-surface border border-line">Global chart</span>
+                )}
+                <span className="text-ink-faint">Filled automatically from From/To; type a rate to override it.</span>
+              </div>
+            )}
+
             <div className="overflow-x-auto -mx-1 px-1">
-              <table className="w-full min-w-[1080px] text-xs border-separate border-spacing-y-1.5">
+              <table className="w-full min-w-[1080px] text-xs border-separate border-spacing-y-1.5 [&_tbody_td]:align-top">
                 <thead>
                   <tr className="text-[10px] uppercase tracking-wider text-ink-faint">
                     <th className="text-left font-semibold pl-1 w-6">#</th>
@@ -1099,6 +1195,21 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({ invoiceToEdit, initi
                           className={`${lrInputCls} text-right font-mono`}
                           placeholder="0.00"
                         />
+                        {(() => {
+                          const sug = rateSuggestions[line.key];
+                          if (!sug) return null;
+                          if (line.rate_auto || line.rate_kg === sug.rate) {
+                            return <div className="text-[10px] text-ink-faint text-right mt-0.5 whitespace-nowrap">{sug.label}</div>;
+                          }
+                          return (
+                            <button type="button"
+                              onClick={() => updateLrLine(line.key, { rate_kg: sug.rate, rate_auto: true })}
+                              className="block w-full text-[10px] text-accent-ink text-right mt-0.5 whitespace-nowrap hover:underline cursor-pointer"
+                              title={sug.label}>
+                              Chart: ₹{sug.rate}
+                            </button>
+                          );
+                        })()}
                       </td>
                       <td className="pr-1.5">
                         <input

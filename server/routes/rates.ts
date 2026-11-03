@@ -1,4 +1,5 @@
 import { Router, Request, Response } from 'express';
+import crypto from 'crypto';
 import * as db from '../db.js';
 import * as engine from '../rateEngine.js';
 import { authMiddleware, requireModule } from '../auth.js';
@@ -39,19 +40,230 @@ async function loadRateCard() {
 
 export function invalidateRateCache() { cache = null; }
 
-/** Everything the calculator UI needs to render and quote locally. */
-rateRouter.get('/rates/card', requireRates, async (_req: Request, res: Response) => {
+// =====================================================================
+// Per-customer rate charts
+// ---------------------------------------------------------------------
+// A customer can carry a FULL, independent copy of the global card (matrix,
+// special lanes, charge settings). It is a snapshot: editing the global card
+// afterwards does not change it. `use_custom` switches between billing that
+// customer on their own chart or on the global one. Zones, states, cities and
+// ODA slabs are geography/shared tables and always come from the global card.
+// =====================================================================
+const CUSTOMER_CARDS = 'customer_rate_cards';
+
+const pickMatrix = (rows: any[]) => rows.map((r: any) => ({
+  origin_zone: String(r.origin_zone), dest_zone: String(r.dest_zone), rate_per_kg: engine.num(r.rate_per_kg),
+}));
+const pickSpecials = (rows: any[]) => rows.map((r: any) => ({
+  id: r.id ? String(r.id) : crypto.randomUUID(),
+  origin_kind: r.origin_kind, origin_value: String(r.origin_value || '').trim(),
+  dest_kind: r.dest_kind, dest_value: String(r.dest_value || '').trim(),
+  rate_per_kg: engine.num(r.rate_per_kg), note: r.note || '', is_active: r.is_active !== false,
+}));
+const pickSettings = (s: engine.RateSettings) => {
+  const out: engine.RateSettings = {};
+  for (const [k, v] of Object.entries(s || {})) {
+    out[k] = { value: v?.value ?? null, text_value: v?.text_value ?? null, min_value: v?.min_value ?? null, max_value: v?.max_value ?? null };
+  }
+  return out;
+};
+
+async function getCustomerCard(customerId: string) {
+  if (!customerId) return null;
   try {
-    const d = await loadRateCard();
+    return await db.selectOne(CUSTOMER_CARDS, { id: `eq.${customerId}` });
+  } catch (err: any) {
+    // Table not migrated yet: behave as if nobody has a personal chart.
+    if (/customer_rate_cards|does not exist|PGRST205|schema cache/i.test(err.message)) return null;
+    throw err;
+  }
+}
+
+function cardMeta(row: any) {
+  return row
+    ? { exists: true, use_custom: row.use_custom !== false, copied_at: row.copied_at || null, updated_at: row.updated_at || null }
+    : { exists: false, use_custom: false, copied_at: null, updated_at: null };
+}
+
+/**
+ * The card a quote should use. mode: 'auto' (personal chart when the customer has
+ * one switched on, else global), 'custom' (personal chart if it exists) or 'global'.
+ */
+async function effectiveCard(customerId?: string, mode: string = 'auto') {
+  const d = await loadRateCard();
+  const row = customerId ? await getCustomerCard(customerId) : null;
+  const wantCustom = row && mode !== 'global' && (mode === 'custom' || row.use_custom !== false);
+  const settings: engine.RateSettings = wantCustom
+    // Keys added to the global card after the snapshot fall back to the global value
+    ? { ...d.settings, ...(row.settings || {}) }
+    : d.settings;
+  return {
+    d,
+    row,
+    source: (wantCustom ? 'customer' : 'global') as 'customer' | 'global',
+    matrix: wantCustom ? (row.matrix || []) : d.matrix,
+    specials: wantCustom ? (row.specials || []) : d.specials,
+    settings,
+  };
+}
+
+/** Everything the calculator UI needs to render and quote locally. */
+rateRouter.get('/rates/card', requireRates, async (req: Request, res: Response) => {
+  try {
+    const customerId = String(req.query.customer_id || '');
+    const mode = String(req.query.mode || 'auto');
+    const e = await effectiveCard(customerId || undefined, mode);
     res.json({
-      zones: d.zones,
-      states: d.states,
-      cities: d.cities,
-      matrix: d.matrix,
-      specials: d.specials,
-      settings: d.settings,
-      oda: d.oda,
+      zones: e.d.zones,
+      states: e.d.states,
+      cities: e.d.cities,
+      matrix: e.matrix,
+      specials: e.specials,
+      settings: e.settings,
+      // Labels/units for the charges editor, with the effective values filled in
+      settings_rows: e.d.settingsRows.map((r: any) => ({
+        key: r.key, unit: r.unit, remark: r.remark,
+        value: e.settings[r.key]?.value ?? null,
+        text_value: e.settings[r.key]?.text_value ?? null,
+        min_value: e.settings[r.key]?.min_value ?? null,
+        max_value: e.settings[r.key]?.max_value ?? null,
+      })),
+      oda: e.d.oda,
+      source: e.source,
+      customer_id: customerId || null,
+      customer_card: cardMeta(e.row),
     });
+  } catch (err: any) {
+    res.status(500).json({ detail: err.message });
+  }
+});
+
+/** Which customers have a personal chart - for badges and pickers. */
+rateRouter.get('/rates/customer-cards', requireRates, async (_req: Request, res: Response) => {
+  try {
+    let rows: any[] = [];
+    try {
+      rows = await db.select(CUSTOMER_CARDS, { select: 'id,customer_id,use_custom,copied_at,updated_at' });
+    } catch (err: any) {
+      if (!/customer_rate_cards|does not exist|PGRST205|schema cache/i.test(err.message)) throw err;
+    }
+    res.json(rows.map((r: any) => ({ customer_id: r.customer_id || r.id, ...cardMeta(r) })));
+  } catch (err: any) {
+    res.status(500).json({ detail: err.message });
+  }
+});
+
+/** Create - or reset - a customer's personal chart as a fresh copy of the global card. */
+rateRouter.post('/rates/customer/:customer_id/copy', requireModule('settings'), async (req: Request, res: Response) => {
+  try {
+    const customerId = req.params.customer_id;
+    const cust = await db.selectOne('customers', { id: `eq.${customerId}` });
+    if (!cust) return res.status(404).json({ detail: 'This customer could not be found.' });
+
+    const d = await loadRateCard();
+    const now = new Date().toISOString();
+    const snapshot = {
+      matrix: pickMatrix(d.matrix),
+      specials: pickSpecials(d.specials.map((s: any) => ({ ...s, id: undefined }))),
+      settings: pickSettings(d.settings),
+      copied_at: now,
+      updated_at: now,
+    };
+
+    const existing = await getCustomerCard(customerId);
+    const row = existing
+      ? await db.update(CUSTOMER_CARDS, { id: `eq.${customerId}` }, snapshot)
+      : await db.insert(CUSTOMER_CARDS, { id: customerId, customer_id: customerId, use_custom: true, ...snapshot, created_at: now });
+
+    const user = (req as any).user;
+    if (user?.email) {
+      await db.insert('audit_logs', {
+        user_email: user.email,
+        action: existing ? 'Customer rate chart reset from global' : 'Customer rate chart created',
+        entity: CUSTOMER_CARDS, entity_id: customerId,
+        new_value: { customer: cust.name }, created_at: now,
+      });
+    }
+    res.status(existing ? 200 : 201).json(cardMeta(row));
+  } catch (err: any) {
+    if (/customer_rate_cards|PGRST205|schema cache/i.test(err.message)) {
+      return res.status(500).json({ detail: 'Personal rate charts need the database migration supabase/migrations/20261103_customer_rate_cards.sql to be run first.' });
+    }
+    res.status(500).json({ detail: err.message });
+  }
+});
+
+/**
+ * Edit a customer's chart. Any of: use_custom, matrix (cells to change),
+ * specials (full replacement list), settings (keys to change).
+ */
+rateRouter.put('/rates/customer/:customer_id', requireModule('settings'), async (req: Request, res: Response) => {
+  try {
+    const customerId = req.params.customer_id;
+    const row = await getCustomerCard(customerId);
+    if (!row) return res.status(404).json({ detail: 'This customer has no personal rate chart yet. Create one first.' });
+
+    const body = req.body || {};
+    const patch: Record<string, any> = { updated_at: new Date().toISOString() };
+
+    if (body.use_custom !== undefined) patch.use_custom = Boolean(body.use_custom);
+
+    if (Array.isArray(body.matrix)) {
+      const grid = new Map<string, any>((row.matrix || []).map((m: any) => [`${m.origin_zone}|${m.dest_zone}`, m]));
+      for (const c of body.matrix) {
+        const rate = engine.num(c?.rate_per_kg);
+        if (!c?.origin_zone || !c?.dest_zone) return res.status(400).json({ detail: 'Every zone rate needs a from and to zone.' });
+        if (!(rate > 0)) return res.status(400).json({ detail: `Rate ${c.origin_zone} → ${c.dest_zone} must be greater than 0.` });
+        grid.set(`${c.origin_zone}|${c.dest_zone}`, { origin_zone: String(c.origin_zone), dest_zone: String(c.dest_zone), rate_per_kg: rate });
+      }
+      patch.matrix = Array.from(grid.values());
+    }
+
+    if (Array.isArray(body.specials)) {
+      if (body.specials.length > 2000) return res.status(400).json({ detail: 'Too many special rates.' });
+      const list = pickSpecials(body.specials);
+      const seen = new Set<string>();
+      for (const s of list) {
+        if (!['zone', 'state', 'city'].includes(s.origin_kind) || !['zone', 'state', 'city'].includes(s.dest_kind)) {
+          return res.status(400).json({ detail: 'Kind must be zone, state or city.' });
+        }
+        if (!s.origin_value || !s.dest_value) return res.status(400).json({ detail: 'Every special rate needs a from and to value.' });
+        if (!(s.rate_per_kg > 0)) return res.status(400).json({ detail: `Rate ${s.origin_value} → ${s.dest_value} must be greater than 0.` });
+        const lane = `${s.origin_kind}|${s.origin_value.toLowerCase()}|${s.dest_kind}|${s.dest_value.toLowerCase()}`;
+        if (seen.has(lane)) return res.status(409).json({ detail: `There are two special rates for ${s.origin_value} → ${s.dest_value}. Keep one.` });
+        seen.add(lane);
+      }
+      patch.specials = list;
+    }
+
+    if (body.settings && typeof body.settings === 'object') {
+      const d = await loadRateCard();
+      const merged: engine.RateSettings = { ...(row.settings || {}) };
+      for (const [key, v] of Object.entries<any>(body.settings)) {
+        if (!d.settings[key]) return res.status(400).json({ detail: `Unknown charge setting '${key}'.` });
+        const cur = merged[key] || d.settings[key] || {};
+        merged[key] = {
+          value: v?.value !== undefined ? v.value : cur.value ?? null,
+          text_value: v?.text_value !== undefined ? v.text_value : cur.text_value ?? null,
+          min_value: v?.min_value !== undefined ? v.min_value : cur.min_value ?? null,
+          max_value: v?.max_value !== undefined ? v.max_value : cur.max_value ?? null,
+        };
+      }
+      patch.settings = merged;
+    }
+
+    const saved = await db.update(CUSTOMER_CARDS, { id: `eq.${customerId}` }, patch);
+    res.json(cardMeta(saved));
+  } catch (err: any) {
+    res.status(500).json({ detail: err.message });
+  }
+});
+
+/** Remove a customer's personal chart - they go back to the global card. */
+rateRouter.delete('/rates/customer/:customer_id', requireModule('settings'), async (req: Request, res: Response) => {
+  try {
+    await db.remove(CUSTOMER_CARDS, { id: `eq.${req.params.customer_id}` });
+    res.json({ message: 'Personal rate chart removed. This customer now uses the global chart.' });
   } catch (err: any) {
     res.status(500).json({ detail: err.message });
   }
@@ -60,13 +272,13 @@ rateRouter.get('/rates/card', requireRates, async (_req: Request, res: Response)
 /** Server-side quote - same engine the browser uses, for API callers and stored quotes. */
 rateRouter.post('/rates/quote', requireRates, async (req: Request, res: Response) => {
   try {
-    const d = await loadRateCard();
     const body = req.body || {};
+    const e = await effectiveCard(body.customer_id, body.rate_mode);
     if (!body.origin?.zone || !body.dest?.zone) {
       return res.status(400).json({ detail: 'Please choose both a pickup and a delivery location.' });
     }
-    const quote = engine.buildQuote(body, d.settings, d.specials, d.matrix, d.oda);
-    res.json(quote);
+    const quote = engine.buildQuote(body, e.settings, e.specials, e.matrix, e.d.oda);
+    res.json({ ...quote, card_source: e.source });
   } catch (err: any) {
     res.status(500).json({ detail: err.message });
   }
@@ -307,12 +519,12 @@ rateRouter.delete('/rates/special/:id', requireModule('settings'), async (req: R
 /** Save a quote so it can be reopened or turned into an invoice. */
 rateRouter.post('/rates/quotes', requireRates, async (req: Request, res: Response) => {
   try {
-    const d = await loadRateCard();
     const body = req.body || {};
+    const e = await effectiveCard(body.customer_id, body.rate_mode);
     if (!body.origin?.zone || !body.dest?.zone) {
       return res.status(400).json({ detail: 'Please choose both a pickup and a delivery location.' });
     }
-    const q = engine.buildQuote(body, d.settings, d.specials, d.matrix, d.oda);
+    const q = engine.buildQuote(body, e.settings, e.specials, e.matrix, e.d.oda);
     const user = (req as any).user;
 
     const row = await db.insert('rate_quotes', {
@@ -329,7 +541,7 @@ rateRouter.post('/rates/quotes', requireRates, async (req: Request, res: Respons
       boxes: q.weight.total_boxes,
       rate_per_kg: q.rate.rate_per_kg,
       rate_source: q.rate.source,
-      breakdown: { lines: q.lines, subtotal: q.subtotal, gst_amount: q.gst_amount, gst_rate: q.gst_rate, fuel_hike_pct: q.fuel_hike_pct },
+      breakdown: { card_source: e.source, lines: q.lines, subtotal: q.subtotal, gst_amount: q.gst_amount, gst_rate: q.gst_rate, fuel_hike_pct: q.fuel_hike_pct },
       grand_total: q.grand_total,
       created_at: new Date().toISOString(),
     });
