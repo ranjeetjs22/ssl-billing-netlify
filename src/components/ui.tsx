@@ -306,7 +306,7 @@ export const inputCls =
   'placeholder:text-ink-faint transition-[border-color,box-shadow] duration-[var(--duration-fast)] ' +
   'hover:border-line-strong focus:border-accent focus:outline-none focus:ring-focus ' +
   'disabled:opacity-60 disabled:cursor-not-allowed disabled:bg-surface-sunken ' +
-  'read-only:bg-surface-muted read-only:text-ink-soft';
+  '[&:read-only:not(select)]:bg-surface-muted [&:read-only:not(select)]:text-ink-soft';
 
 export const Input = React.forwardRef<HTMLInputElement, React.InputHTMLAttributes<HTMLInputElement>>(
   function Input({ className, ...rest }, ref) {

@@ -1,28 +1,31 @@
 import React, { useState, useEffect } from 'react';
-import { useBackLayer } from '../utils/backNav.js';
-import { 
-  UserCheck, 
-  Plus, 
-  ShieldCheck, 
-  Key, 
-  Trash2, 
-  Lock, 
-  Mail, 
-  UserPlus, 
-  CheckCircle2,
-  AlertCircle,
-  X
-} from 'lucide-react';
+import { Trash2, UserPlus } from 'lucide-react';
 import { apiRequest } from '../services/api.js';
 import { User } from '../types.js';
 import { useAuth } from '../context/AuthContext.js';
+import {
+  Button, IconButton, Card, Badge, DataTable, Modal, Field, Input, Select, FormError, AvatarChip, cx,
+} from './ui.js';
+import type { Column } from './ui.js';
+
+const ROLE_LABEL: Record<string, string> = { admin: 'Administrator', accountant: 'Accountant', staff: 'Staff' };
+const MODULE_LABEL: Record<string, string> = {
+  dashboard: 'Overview', invoices: 'Invoices', customers: 'Customers',
+  payments: 'Payments', settings: 'Settings', users: 'Users',
+};
+
+const fmtLogin = (v?: string | null) => {
+  if (!v) return 'Never';
+  const d = new Date(v);
+  return isNaN(d.getTime()) ? 'Never'
+    : d.toLocaleString('en-IN', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+};
 
 export const UserManagementView: React.FC = () => {
   const { user: currentUser } = useAuth();
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
   const [showAdd, setShowAdd] = useState(false);
-  useBackLayer(() => setShowAdd(false), showAdd);
 
   // New User Form
   const [email, setEmail] = useState('');
@@ -35,8 +38,9 @@ export const UserManagementView: React.FC = () => {
   const fetchUsers = async () => {
     setLoading(true);
     try {
-      const res = await apiRequest<{ users: User[] }>('/users');
-      setUsers(res.users || []);
+      const res = await apiRequest<any>('/users');
+      // The API answers with a bare array; older builds wrapped it as { users }
+      setUsers(Array.isArray(res) ? res : (res?.users || []));
     } catch (err) {
       console.error('Failed to load users', err);
     } finally {
@@ -91,172 +95,126 @@ export const UserManagementView: React.FC = () => {
   };
 
   const ALL_MODULES = [
-    { key: 'dashboard', label: 'Dashboard Overview' },
-    { key: 'invoices', label: 'Invoices & Billing' },
-    { key: 'customers', label: 'Customer Registry' },
-    { key: 'payments', label: 'Payments & Receipts' },
-    { key: 'settings', label: 'Company Settings' },
-    { key: 'users', label: 'User Administration' },
+    { key: 'dashboard', label: 'Overview', hint: 'Dashboard and summaries' },
+    { key: 'invoices', label: 'Invoices', hint: 'Create and edit bills' },
+    { key: 'customers', label: 'Customers', hint: 'Party records' },
+    { key: 'payments', label: 'Payments', hint: 'Receipts and dues' },
+    { key: 'settings', label: 'Settings', hint: 'Company, rates and charges' },
+    { key: 'users', label: 'Users', hint: 'Manage logins' },
+  ];
+
+  const isAdmin = currentUser?.role === 'admin';
+  const closeAdd = () => { setShowAdd(false); setError(null); };
+
+  const moduleList = (u: User) => {
+    const mods = u.modules || [];
+    if (mods.length === 0) return <span className="text-ink-faint">No access</span>;
+    if (mods.length >= ALL_MODULES.length) return <span>All modules</span>;
+    return <span>{mods.map(m => MODULE_LABEL[m] || m).join(', ')}</span>;
+  };
+
+  const deleteBtn = (u: User) => (isAdmin && u.id !== currentUser?.id ? (
+    <IconButton label={`Delete ${u.full_name || u.email}`} onClick={(e) => { e.stopPropagation(); handleDeleteUser(u.id); }}
+      className="hover:text-danger-ink hover:bg-danger-soft">
+      <Trash2 />
+    </IconButton>
+  ) : null);
+
+  const columns: Column<User>[] = [
+    {
+      key: 'user', header: 'User',
+      cell: (u) => (
+        <div className="flex items-center gap-2.5 min-w-0">
+          <AvatarChip name={u.full_name || u.email} className="w-7 h-7" />
+          <div className="min-w-0">
+            <div className="text-ink truncate">
+              {u.full_name || 'Staff member'}
+              {u.id === currentUser?.id && <span className="ml-1.5 text-xs text-ink-faint">(you)</span>}
+            </div>
+            <div className="text-xs text-ink-faint truncate">{u.email}</div>
+          </div>
+        </div>
+      ),
+    },
+    {
+      key: 'role', header: 'Role',
+      cell: (u) => <Badge tone={u.role === 'admin' ? 'accent' : 'neutral'}>{ROLE_LABEL[u.role] || u.role}</Badge>,
+    },
+    { key: 'modules', header: 'Access', hideBelow: 'md', className: 'text-xs max-w-[320px]', cell: moduleList },
+    { key: 'login', header: 'Last sign-in', hideBelow: 'lg', className: 'text-xs whitespace-nowrap tabular-nums', cell: (u) => fmtLogin(u.last_login) },
+    { key: 'actions', header: '', align: 'right', className: 'w-12', cell: (u) => deleteBtn(u) },
   ];
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-surface border border-line p-5 rounded-card">
-        <div>
-          <h1 className="text-xl font-bold text-ink flex items-center gap-2">
-            <span>Staff & User Administration</span>
-            <span className="text-xs bg-accent-soft text-accent-ink font-semibold px-2 py-0.5 rounded-full border border-accent-line">
-              Role-Based Access
-            </span>
-          </h1>
-          <p className="text-xs text-ink-faint mt-1">
-            Manage administrative credentials, operators, accountants, and functional module permissions
+    <div className="space-y-3 sm:space-y-4">
+      <div className="flex items-center justify-between gap-3">
+        <div className="min-w-0">
+          <h2 className="text-sm font-semibold text-ink">Team</h2>
+          <p className="text-xs text-ink-faint">
+            {loading ? 'Loading users' : `${users.length} ${users.length === 1 ? 'user' : 'users'}`} · roles decide which modules each person can open
           </p>
         </div>
-
-        {currentUser?.role === 'admin' && (
-          <button
-            onClick={() => setShowAdd(true)}
-            className="flex items-center gap-1.5 px-3.5 py-2 bg-accent-strong hover:bg-accent-strong-hover text-on-accent rounded-card text-xs font-semibold transition"
-          >
-            <UserPlus className="w-4 h-4" />
-            <span>Create New User</span>
-          </button>
+        {isAdmin && (
+          <Button variant="primary" icon={<UserPlus />} onClick={() => setShowAdd(true)} className="shrink-0">
+            Add user
+          </Button>
         )}
       </div>
 
-      {/* User Table */}
-      <div className="bg-surface border border-line rounded-card overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs text-ink-soft">
-            <thead className="bg-surface-muted text-ink-faint font-semibold border-b border-line text-[11px]">
-              <tr>
-                <th className="py-3 px-4">User</th>
-                <th className="py-3 px-4">Role</th>
-                <th className="py-3 px-4">Accessible Modules</th>
-                <th className="py-3 px-4">Last Login</th>
-                <th className="py-3 px-4 text-right">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-line">
-              {loading ? (
-                <tr>
-                  <td colSpan={5} className="py-12 text-center text-ink-faint">
-                    <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-accent mx-auto"></div>
-                  </td>
-                </tr>
-              ) : (
-                users.map((u) => (
-                  <tr key={u.id} className="hover:bg-surface-muted/80 transition">
-                    <td className="py-3 px-4">
-                      <div className="font-bold text-ink">{u.full_name || 'Staff Member'}</div>
-                      <div className="text-ink-faint font-mono text-[11px]">{u.email}</div>
-                    </td>
-                    <td className="py-3 px-4">
-                      <span className={`inline-block px-2.5 py-0.5 rounded-full text-[11px] font-semibold ${
-                        u.role === 'admin'
-                          ? 'bg-accent-soft text-accent-ink border border-accent-line'
-                          : u.role === 'accountant'
-                          ? 'bg-info-soft text-info-ink border border-info-line'
-                          : 'bg-info-soft text-info-ink border border-info-line'
-                      }`}>
-                        {u.role}
-                      </span>
-                    </td>
-                    <td className="py-3 px-4">
-                      <div className="flex flex-wrap gap-1">
-                        {(u.modules || []).map((m) => (
-                          <span key={m} className="px-2 py-0.5 bg-surface-sunken text-ink-soft text-[11px] rounded-md border border-line">
-                            {m}
-                          </span>
-                        ))}
-                      </div>
-                    </td>
-                    <td className="py-3 px-4 text-ink-faint text-[11px]">
-                      {u.last_login ? new Date(u.last_login).toLocaleString() : 'Never'}
-                    </td>
-                    <td className="py-3 px-4 text-right">
-                      {currentUser?.role === 'admin' && u.id !== currentUser?.id && (
-                        <button
-                          onClick={() => handleDeleteUser(u.id)}
-                          className="p-1.5 text-ink-faint hover:text-danger-ink hover:bg-danger-soft rounded-control transition"
-                          title="Delete User"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      )}
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      {/* Add User Modal */}
-      {showAdd && (
-        <div className="fixed inset-0 bg-scrim flex items-center justify-center p-4 z-50 overflow-y-auto">
-          <div className="sheet border border-line rounded-overlay max-w-lg w-full p-6 shadow-overlay text-ink">
-            <div className="flex items-center justify-between mb-2">
-              <h3 className="text-base font-bold text-ink">Create User Account</h3>
-              <button 
-                onClick={() => setShowAdd(false)}
-                className="p-1.5 text-ink-faint hover:text-ink rounded-control"
-              >
-                <X className="w-4 h-4" />
-              </button>
+      <Card padded={false} className="overflow-hidden">
+        <DataTable
+          caption="Users"
+          columns={columns}
+          rows={users}
+          loading={loading}
+          mobileCard={(u) => (
+            <div className="flex items-center gap-2.5">
+              <AvatarChip name={u.full_name || u.email} className="w-8 h-8" />
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-2 min-w-0">
+                  <span className="text-sm text-ink truncate">{u.full_name || 'Staff member'}</span>
+                  <Badge tone={u.role === 'admin' ? 'accent' : 'neutral'}>{ROLE_LABEL[u.role] || u.role}</Badge>
+                </div>
+                <div className="text-xs text-ink-faint truncate">{u.email}</div>
+                <div className="text-xs text-ink-faint truncate">{moduleList(u)} · {fmtLogin(u.last_login)}</div>
+              </div>
+              {deleteBtn(u)}
             </div>
-            <p className="text-xs text-ink-faint mb-4">Grant role-based credentials for staff members</p>
+          )}
+        />
+      </Card>
 
-            {error && (
-              <div className="p-3 mb-4 bg-danger-soft border border-danger-line rounded-card text-danger-ink text-xs">
-                {error}
-              </div>
-            )}
+      {showAdd && (
+        <Modal
+          onClose={closeAdd}
+          title="Add user"
+          subtitle="Create a login and choose what this person can open"
+          footer={
+            <div className="flex justify-end gap-2">
+              <Button type="button" variant="ghost" onClick={closeAdd}>Cancel</Button>
+              <Button type="submit" form="add-user-form" variant="primary">Create user</Button>
+            </div>
+          }
+        >
+          <form id="add-user-form" onSubmit={handleCreateUser} className="space-y-4">
+            <FormError message={error} />
 
-            <form onSubmit={handleCreateUser} className="space-y-4 text-xs">
-              <div>
-                <label className="block text-ink-soft font-semibold mb-1">Full Name</label>
-                <input
-                  type="text"
-                  required
-                  value={fullName}
-                  onChange={(e) => setFullName(e.target.value)}
-                  className="w-full bg-surface-muted border border-line rounded-card px-3 py-2 text-ink focus:outline-none focus:border-accent"
-                  placeholder="e.g. Mukesh Sharma"
-                />
-              </div>
-
-              <div>
-                <label className="block text-ink-soft font-semibold mb-1">Email Address (Username)</label>
-                <input
-                  type="email"
-                  required
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  className="w-full bg-surface-muted border border-line rounded-card px-3 py-2 text-ink focus:outline-none focus:border-accent"
-                  placeholder="mukesh@shreesanwariya.com"
-                />
-              </div>
-
-              <div>
-                <label className="block text-ink-soft font-semibold mb-1">Password</label>
-                <input
-                  type="password"
-                  required
-                  minLength={6}
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  className="w-full bg-surface-muted border border-line rounded-card px-3 py-2 text-ink focus:outline-none focus:border-accent"
-                  placeholder="••••••••"
-                />
-              </div>
-
-              <div>
-                <label className="block text-ink-soft font-semibold mb-1">User Role</label>
-                <select
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <Field label="Full name" htmlFor="nu-name" required>
+                <Input id="nu-name" type="text" required value={fullName}
+                  onChange={(e) => setFullName(e.target.value)} placeholder="e.g. Mukesh Sharma" />
+              </Field>
+              <Field label="Email (used to sign in)" htmlFor="nu-email" required>
+                <Input id="nu-email" type="email" required autoComplete="off" value={email}
+                  onChange={(e) => setEmail(e.target.value)} placeholder="name@company.com" />
+              </Field>
+              <Field label="Password" htmlFor="nu-pass" required hint="At least 6 characters.">
+                <Input id="nu-pass" type="password" required minLength={6} autoComplete="new-password" value={password}
+                  onChange={(e) => setPassword(e.target.value)} />
+              </Field>
+              <Field label="Role" htmlFor="nu-role">
+                <Select
+                  id="nu-role"
                   value={role}
                   onChange={(e) => {
                     const r = e.target.value as any;
@@ -269,49 +227,35 @@ export const UserManagementView: React.FC = () => {
                       setModules(['dashboard', 'invoices', 'customers', 'payments']);
                     }
                   }}
-                  className="w-full bg-surface-muted border border-line rounded-card px-3 py-2 text-ink focus:outline-none focus:border-accent"
                 >
-                  <option value="staff">Staff Operator (Invoices & Logistics)</option>
-                  <option value="accountant">Accountant (Billing & Payments)</option>
-                  <option value="admin">Administrator (Full Access)</option>
-                </select>
-              </div>
+                  <option value="staff">Staff (invoices and logistics)</option>
+                  <option value="accountant">Accountant (billing and payments)</option>
+                  <option value="admin">Administrator (full access)</option>
+                </Select>
+              </Field>
+            </div>
 
-              <div>
-                <label className="block text-ink-soft font-semibold mb-2">Module Access Permissions</label>
-                <div className="grid grid-cols-2 gap-2">
-                  {ALL_MODULES.map((m) => (
-                    <label key={m.key} className="flex items-center gap-2 p-2.5 bg-surface-muted rounded-card border border-line cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={modules.includes(m.key)}
-                        onChange={() => handleModuleToggle(m.key)}
-                        className="rounded border-line-strong text-accent-ink focus:ring-0"
-                      />
-                      <span className="text-ink text-[11px] font-medium">{m.label}</span>
-                    </label>
-                  ))}
-                </div>
+            <fieldset>
+              <legend className="text-xs font-medium text-ink-soft mb-1">Module access</legend>
+              <div className="grid grid-cols-1 sm:grid-cols-2 sm:gap-x-4 divide-y divide-line sm:divide-y-0 border-y border-line sm:border-0">
+                {ALL_MODULES.map((m) => (
+                  <label key={m.key} className={cx('flex items-start gap-2.5 py-2 min-h-[44px] cursor-pointer')}>
+                    <input
+                      type="checkbox"
+                      checked={modules.includes(m.key)}
+                      onChange={() => handleModuleToggle(m.key)}
+                      className="mt-0.5 w-4 h-4 shrink-0 cursor-pointer"
+                    />
+                    <span className="min-w-0">
+                      <span className="block text-sm text-ink">{m.label}</span>
+                      <span className="block text-xs text-ink-faint">{m.hint}</span>
+                    </span>
+                  </label>
+                ))}
               </div>
-
-              <div className="flex justify-end gap-2 pt-3 border-t border-line">
-                <button
-                  type="button"
-                  onClick={() => setShowAdd(false)}
-                  className="px-4 py-2 bg-surface-sunken hover:bg-surface-sunken text-ink-soft font-medium rounded-card"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="px-5 py-2 bg-accent-strong hover:bg-accent-strong-hover text-on-accent font-semibold rounded-card"
-                >
-                  Create User
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
+            </fieldset>
+          </form>
+        </Modal>
       )}
     </div>
   );

@@ -1,22 +1,24 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { 
-  Building, 
-  CreditCard, 
-  Save, 
-  Plus, 
-  Trash2, 
-  CheckCircle2, 
-  ShieldAlert,
-  FileCheck2,
-  FileText,
-  Download,
-  Upload,
-  RotateCcw,
-  Image as ImageIcon
-} from 'lucide-react';
+import { Save, Plus, Trash2, Download, Upload, RotateCcw } from 'lucide-react';
 import { apiRequest } from '../services/api.js';
 import { CompanySettings, BankAccount } from '../types.js';
 import { SslLogo } from './SslLogo.js';
+import { Button, IconButton, Card, Badge, Field, Input, Textarea, Toast, EmptyState, cx } from './ui.js';
+
+/** Card title row with a wrapping hint. */
+const SectionHead: React.FC<{ title: string; hint?: React.ReactNode; actions?: React.ReactNode }> = ({ title, hint, actions }) => (
+  <div className="flex items-start justify-between gap-3 px-3 sm:px-4 py-2.5 border-b border-line">
+    <div className="min-w-0">
+      <h2 className="text-sm font-semibold text-ink">{title}</h2>
+      {hint && <p className="text-xs text-ink-faint mt-0.5">{hint}</p>}
+    </div>
+    {actions && <div className="flex items-center gap-1.5 shrink-0">{actions}</div>}
+  </div>
+);
+
+/** Quiet secondary-button look for the file label and the download link. */
+const btnLike = 'inline-flex items-center justify-center gap-1.5 h-9 sm:h-8 px-2.5 rounded-control text-sm font-medium whitespace-nowrap cursor-pointer ' +
+  'transition-colors duration-[var(--duration-fast)] [&_svg]:w-4 [&_svg]:h-4';
 
 interface CompanySettingsProps {
   onRefreshSettings: () => void;
@@ -52,7 +54,7 @@ export const CompanySettingsView: React.FC<CompanySettingsProps> = ({ onRefreshS
         body: JSON.stringify(updated),
       });
       onRefreshSettings();
-      setMsg(logoUrl ? 'Logo updated and applied across entire system!' : 'Reset to official vector logo!');
+      setMsg(logoUrl ? 'Logo updated.' : 'Default logo restored.');
       setTimeout(() => setMsg(null), 4000);
     } catch (err: any) {
       console.error('Failed to auto-save logo', err);
@@ -151,7 +153,7 @@ export const CompanySettingsView: React.FC<CompanySettingsProps> = ({ onRefreshS
         method: 'POST',
         body: JSON.stringify(settings),
       });
-      setMsg('Company profile and GST configuration updated successfully!');
+      setMsg('Company settings saved.');
       onRefreshSettings();
       setTimeout(() => setMsg(null), 3000);
     } catch (err: any) {
@@ -199,387 +201,234 @@ export const CompanySettingsView: React.FC<CompanySettingsProps> = ({ onRefreshS
     }
   };
 
+  const set = (patch: Partial<CompanySettings>) => setSettings({ ...settings, ...patch });
+  const banks = Array.isArray(bankAccounts) ? bankAccounts : [];
+
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="bg-surface border border-line p-5 rounded-card">
-        <h1 className="text-xl font-bold text-ink flex items-center gap-2">
-          <span>Enterprise & GST Billing Settings</span>
-          <span className="text-xs bg-accent-soft text-accent-ink font-semibold px-2 py-0.5 rounded-full border border-accent-line">
-            SHREE SANWARIYA LOGISTICS
-          </span>
-        </h1>
-        <p className="text-xs text-ink-faint mt-1">
-          Configure company identity, GSTIN registration, invoice numbering prefixes, and bank settlement accounts.
-        </p>
-      </div>
+    <div className="space-y-3 sm:space-y-4 max-w-5xl">
+      {msg && <Toast message={msg} tone="success" onDismiss={() => setMsg(null)} />}
 
-      {msg && (
-        <div className="p-3 bg-positive-soft border border-positive-line rounded-card text-positive-ink text-xs flex items-center gap-2">
-          <CheckCircle2 className="w-4 h-4 text-positive-ink" />
-          <span>{msg}</span>
-        </div>
-      )}
-
-      {/* Main Settings Form */}
-      <form onSubmit={handleSaveSettings} className="bg-surface border border-line rounded-card p-6 space-y-6 text-xs">
-        {/* Brand & Logo Identity Box */}
-        <div className="bg-surface-muted border border-line rounded-card p-5 flex flex-col md:flex-row items-center justify-between gap-5">
-          <div className="flex items-center gap-4">
-            <div className="bg-surface p-3 rounded-card border border-line flex items-center justify-center shrink-0 min-w-[120px] max-h-[80px]">
-              <SslLogo className="h-16 w-auto max-h-16 max-w-[140px]" customLogoUrl={settings.logo_url} />
+      {/* ---------------------------------------------------------- logo */}
+      <Card padded={false}>
+        <SectionHead title="Logo" hint="Shown in the app and printed on tax invoices and statements." />
+        <div className="px-3 sm:px-4 py-3 flex flex-col sm:flex-row sm:items-center gap-3">
+          <div className="flex items-center gap-3 min-w-0 flex-1">
+            <div className="w-28 h-16 shrink-0 rounded-control border border-line bg-surface flex items-center justify-center p-2">
+              <SslLogo className="max-h-12 w-auto max-w-full" customLogoUrl={settings.logo_url} />
             </div>
-            <div>
-              <div className="flex items-center gap-2 flex-wrap">
-                <h3 className="font-extrabold text-sm text-ink">
-                  {settings.logo_url ? 'Custom Uploaded Logo' : 'Official Brand Logo (SSL Emblem)'}
-                </h3>
-                <span className="px-2 py-0.5 bg-positive-soft text-positive-ink border border-positive-line rounded-full text-[11px] font-bold">
-                  {settings.logo_url ? 'Active (Custom File)' : 'Active (Official Vector)'}
-                </span>
-              </div>
-              <p className="text-ink-faint text-xs mt-1">
-                Used across Dashboard, Top Header, Navigation Sidebar, A4 Tax Invoices, and Statements.
-              </p>
+            <div className="min-w-0">
+              <div className="text-sm text-ink">{settings.logo_url ? 'Custom logo' : 'Default SSL logo'}</div>
+              <div className="text-xs text-ink-faint">PNG, JPG, SVG or WebP, up to 10 MB.</div>
             </div>
           </div>
 
-          <div className="flex items-center gap-2 shrink-0 flex-wrap justify-end">
+          <div className="flex flex-wrap items-center gap-1.5">
             <input
               type="file"
               ref={fileInputRef}
               accept="image/png,image/jpeg,image/svg+xml,image/webp"
               onChange={handleLogoFileUpload}
-              className="hidden"
+              className="sr-only"
               id="company-logo-upload-input"
             />
             <label
               htmlFor="company-logo-upload-input"
-              className="cursor-pointer flex items-center gap-1.5 px-3 py-2 bg-accent-soft text-accent-ink border border-accent-line hover:border-accent rounded-card text-xs font-semibold transition"
+              tabIndex={0}
+              onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); fileInputRef.current?.click(); } }}
+              className={cx(btnLike, 'bg-surface text-ink border border-line hover:bg-surface-muted hover:border-line-strong')}
             >
-              <Upload className="w-3.5 h-3.5" />
-              <span>{settings.logo_url ? 'Change Logo Image' : 'Upload Logo File'}</span>
+              <Upload aria-hidden="true" />
+              {settings.logo_url ? 'Replace' : 'Upload logo'}
             </label>
 
             {settings.logo_url && (
-              <button
-                type="button"
-                onClick={handleResetLogo}
-                className="flex items-center gap-1.5 px-3 py-2 bg-surface border border-danger-line text-danger-ink hover:bg-danger-soft rounded-card text-xs font-semibold transition"
-                title="Reset to official built-in vector logo"
-              >
-                <RotateCcw className="w-3.5 h-3.5" />
-                <span>Reset to Default</span>
-              </button>
+              <Button type="button" variant="ghost" size="sm" icon={<RotateCcw />} onClick={handleResetLogo}
+                title="Go back to the built-in SSL logo">
+                Use default
+              </Button>
             )}
 
             <a
               href="/logo.svg"
               download="SHREE_SANWARIYA_LOGISTICS_LOGO.svg"
-              className="flex items-center gap-1.5 px-3 py-2 bg-surface border border-line-strong text-ink-soft hover:bg-surface-muted rounded-card text-xs font-semibold transition"
+              className={cx(btnLike, 'text-ink-soft border border-transparent hover:text-ink hover:bg-surface-sunken')}
             >
-              <Download className="w-3.5 h-3.5 text-ink-faint" />
-              <span>Download SVG</span>
+              <Download aria-hidden="true" />
+              Download SVG
             </a>
           </div>
         </div>
+      </Card>
 
-        <div className="border-b border-line pb-3 flex items-center gap-2">
-          <Building className="w-4 h-4 text-accent-ink" />
-          <h2 className="text-sm font-bold text-ink">Company & Legal Information</h2>
-        </div>
+      {/* ------------------------------------------------- company profile */}
+      <form onSubmit={handleSaveSettings}>
+        <Card padded={false}>
+          <SectionHead title="Company profile" hint="Printed on every invoice. GSTIN and PAN must match your registration." />
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          <div className="sm:col-span-2">
-            <label className="block text-ink-soft font-semibold mb-1">Company Trade Name *</label>
-            <input
-              type="text"
-              required
-              value={settings.name}
-              onChange={(e) => setSettings({ ...settings, name: e.target.value })}
-              className="w-full bg-surface-muted border border-line rounded-card px-3 py-2 text-ink font-semibold focus:outline-none focus:border-accent"
-            />
-          </div>
+          <div className="px-3 sm:px-4 py-3 sm:py-4 space-y-5">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+              <Field label="Trade name" htmlFor="cs-name" required className="sm:col-span-2">
+                <Input id="cs-name" type="text" required value={settings.name}
+                  onChange={(e) => set({ name: e.target.value })} />
+              </Field>
+              <Field label="GSTIN" htmlFor="cs-gstin" required>
+                <Input id="cs-gstin" type="text" required maxLength={15} value={settings.gstin}
+                  onChange={(e) => set({ gstin: e.target.value.toUpperCase() })}
+                  className="font-mono text-[13px] uppercase" />
+              </Field>
+              <Field label="PAN" htmlFor="cs-pan" required>
+                <Input id="cs-pan" type="text" required maxLength={10} value={settings.pan}
+                  onChange={(e) => set({ pan: e.target.value.toUpperCase() })}
+                  className="font-mono text-[13px] uppercase" />
+              </Field>
+              <Field label="Billing email" htmlFor="cs-email" className="sm:col-span-2">
+                <Input id="cs-email" type="email" value={settings.email || ''}
+                  onChange={(e) => set({ email: e.target.value })} />
+              </Field>
+              <Field label="Phone" htmlFor="cs-phone">
+                <Input id="cs-phone" type="tel" value={settings.phone || ''}
+                  onChange={(e) => set({ phone: e.target.value })} />
+              </Field>
+              <Field label="WhatsApp for invoices" htmlFor="cs-wa">
+                <Input id="cs-wa" type="tel" value={settings.whatsapp || ''}
+                  onChange={(e) => set({ whatsapp: e.target.value })} />
+              </Field>
+            </div>
 
-          <div>
-            <label className="block text-ink-soft font-semibold mb-1">Invoice Prefix</label>
-            <input
-              type="text"
-              required
-              value={settings.invoice_prefix || 'SSL'}
-              onChange={(e) => setSettings({ ...settings, invoice_prefix: e.target.value })}
-              className="w-full bg-surface-muted border border-line rounded-card px-3 py-2 font-mono text-accent-ink font-bold uppercase focus:outline-none focus:border-accent"
-              placeholder="SSL"
-            />
-          </div>
-
-          <div>
-            <label className="block text-ink-soft font-semibold mb-1">GSTIN Number (15 Characters) *</label>
-            <input
-              type="text"
-              required
-              maxLength={15}
-              value={settings.gstin}
-              onChange={(e) => setSettings({ ...settings, gstin: e.target.value.toUpperCase() })}
-              className="w-full bg-surface-muted border border-line rounded-card px-3 py-2 font-mono text-ink uppercase focus:outline-none focus:border-accent"
-            />
-          </div>
-
-          <div>
-            <label className="block text-ink-soft font-semibold mb-1">PAN Number *</label>
-            <input
-              type="text"
-              required
-              maxLength={10}
-              value={settings.pan}
-              onChange={(e) => setSettings({ ...settings, pan: e.target.value.toUpperCase() })}
-              className="w-full bg-surface-muted border border-line rounded-card px-3 py-2 font-mono text-ink uppercase focus:outline-none focus:border-accent"
-            />
-          </div>
-
-          <div>
-            <label className="block text-ink-soft font-semibold mb-1">Billing Email</label>
-            <input
-              type="email"
-              value={settings.email || ''}
-              onChange={(e) => setSettings({ ...settings, email: e.target.value })}
-              className="w-full bg-surface-muted border border-line rounded-card px-3 py-2 text-ink focus:outline-none focus:border-accent"
-            />
-          </div>
-
-          <div>
-            <label className="block text-ink-soft font-semibold mb-1">Official Phone</label>
-            <input
-              type="text"
-              value={settings.phone || ''}
-              onChange={(e) => setSettings({ ...settings, phone: e.target.value })}
-              className="w-full bg-surface-muted border border-line rounded-card px-3 py-2 text-ink focus:outline-none focus:border-accent"
-            />
-          </div>
-
-          <div>
-            <label className="block text-ink-soft font-semibold mb-1">WhatsApp for Invoices</label>
-            <input
-              type="text"
-              value={settings.whatsapp || ''}
-              onChange={(e) => setSettings({ ...settings, whatsapp: e.target.value })}
-              className="w-full bg-surface-muted border border-line rounded-card px-3 py-2 text-ink focus:outline-none focus:border-accent"
-            />
-          </div>
-
-          <div className="sm:col-span-2">
-            <label className="block text-ink-soft font-semibold mb-1">Registered Address</label>
-            <input
-              type="text"
-              value={settings.address || ''}
-              onChange={(e) => setSettings({ ...settings, address: e.target.value })}
-              className="w-full bg-surface-muted border border-line rounded-card px-3 py-2 text-ink focus:outline-none focus:border-accent"
-            />
-          </div>
-
-          <div>
-            <label className="block text-ink-soft font-semibold mb-1">City</label>
-            <input
-              type="text"
-              value={settings.city || ''}
-              onChange={(e) => setSettings({ ...settings, city: e.target.value })}
-              className="w-full bg-surface-muted border border-line rounded-card px-3 py-2 text-ink focus:outline-none focus:border-accent"
-            />
-          </div>
-
-          <div>
-            <label className="block text-ink-soft font-semibold mb-1">State</label>
-            <input
-              type="text"
-              value={settings.state || ''}
-              onChange={(e) => setSettings({ ...settings, state: e.target.value })}
-              className="w-full bg-surface-muted border border-line rounded-card px-3 py-2 text-ink focus:outline-none focus:border-accent"
-            />
-          </div>
-
-          <div>
-            <label className="block text-ink-soft font-semibold mb-1">Postal PIN Code</label>
-            <input
-              type="text"
-              value={settings.pin || ''}
-              onChange={(e) => setSettings({ ...settings, pin: e.target.value })}
-              className="w-full bg-surface-muted border border-line rounded-card px-3 py-2 text-ink focus:outline-none focus:border-accent"
-            />
-          </div>
-
-          <div className="sm:col-span-3">
-            <label className="block text-ink-soft font-semibold mb-1">Standard Invoice Terms & Conditions</label>
-            <textarea
-              rows={3}
-              value={settings.terms || ''}
-              onChange={(e) => setSettings({ ...settings, terms: e.target.value })}
-              className="w-full bg-surface-muted border border-line rounded-card px-3 py-2 text-ink focus:outline-none focus:border-accent"
-            />
-          </div>
-        </div>
-
-        {/* GSTIN Verification Information */}
-        <div className="border-t border-line pt-6 mt-6 space-y-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <div className="p-2 bg-accent-soft text-accent-ink rounded-card font-bold">GST</div>
-              <div>
-                <h3 className="font-bold text-ink text-sm">Authoritative GSTVerify Integration</h3>
-                <p className="text-ink-faint text-[11px]">
-                  Powered by official GSTVerify API (<code className="text-accent-ink font-mono">gstverify.co.in/api/v1/verify/:gstin</code>).
-                </p>
+            <div className="pt-4 border-t border-line">
+              <h3 className="text-sm font-semibold text-ink mb-3">Registered address</h3>
+              <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
+                <Field label="Address" htmlFor="cs-addr" className="col-span-2 lg:col-span-3">
+                  <Input id="cs-addr" type="text" value={settings.address || ''}
+                    onChange={(e) => set({ address: e.target.value })} />
+                </Field>
+                <Field label="City" htmlFor="cs-city">
+                  <Input id="cs-city" type="text" value={settings.city || ''}
+                    onChange={(e) => set({ city: e.target.value })} />
+                </Field>
+                <Field label="State" htmlFor="cs-state">
+                  <Input id="cs-state" type="text" value={settings.state || ''}
+                    onChange={(e) => set({ state: e.target.value })} />
+                </Field>
+                <Field label="PIN code" htmlFor="cs-pin">
+                  <Input id="cs-pin" type="text" inputMode="numeric" value={settings.pin || ''}
+                    onChange={(e) => set({ pin: e.target.value })} className="tabular-nums" />
+                </Field>
               </div>
             </div>
-            <span className="text-[11px] font-bold px-2.5 py-1 bg-positive-soft text-positive-ink border border-positive-line rounded-full flex items-center gap-1">
-              <span className="w-1.5 h-1.5 rounded-full bg-positive animate-pulse"></span>
-              <span>GSTVerify Active</span>
-            </span>
-          </div>
 
-          <div className="bg-surface-muted p-4 rounded-card border border-line text-ink-soft text-xs space-y-2">
-            <div className="font-medium text-ink">
-              Server-Side API Security:
+            <div className="pt-4 border-t border-line">
+              <h3 className="text-sm font-semibold text-ink mb-3">Invoices</h3>
+              <div className="grid grid-cols-1 sm:grid-cols-[10rem_minmax(0,1fr)] gap-3">
+                <Field label="Invoice number prefix" htmlFor="cs-prefix">
+                  <Input id="cs-prefix" type="text" required value={settings.invoice_prefix || 'SSL'}
+                    onChange={(e) => set({ invoice_prefix: e.target.value })}
+                    className="font-mono text-[13px] uppercase" placeholder="SSL" />
+                </Field>
+                <Field label="Terms and conditions" htmlFor="cs-terms" hint="One per line. Printed at the foot of each invoice.">
+                  <Textarea id="cs-terms" rows={4} value={settings.terms || ''}
+                    onChange={(e) => set({ terms: e.target.value })} className="sm:h-auto!" />
+                </Field>
+              </div>
             </div>
-            <p className="text-ink-faint leading-relaxed">
-              Live GSTIN verification credentials are stored strictly in backend environment variables (<code className="font-mono text-ink bg-surface-sunken/70 px-1 py-0.5 rounded">GSTVERIFY_API_KEY</code>). All lookups are sanitized and normalized on the server before reaching the client.
-            </p>
           </div>
-        </div>
 
-        <div className="flex justify-end pt-3 border-t border-line">
-          <button
-            type="submit"
-            disabled={saving}
-            className="px-5 py-2 bg-accent-strong hover:bg-accent-strong-hover text-on-accent rounded-card text-xs font-semibold transition flex items-center gap-2 disabled:opacity-50"
-          >
-            <Save className="w-4 h-4" />
-            <span>{saving ? 'Saving...' : 'Update Settings'}</span>
-          </button>
-        </div>
+          <div className="px-3 sm:px-4 py-2.5 border-t border-line flex items-center justify-end gap-2">
+            <Button type="submit" variant="primary" icon={<Save />} loading={saving}>
+              {saving ? 'Saving…' : 'Save changes'}
+            </Button>
+          </div>
+        </Card>
       </form>
 
-      {/* Bank Accounts Section */}
-      <div className="bg-surface border border-line rounded-card p-6 space-y-5 text-xs">
-        <div className="border-b border-line pb-3 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <CreditCard className="w-4 h-4 text-positive-ink" />
-            <h2 className="text-sm font-bold text-ink">Settlement Bank Accounts</h2>
-          </div>
-          <span className="text-[11px] text-ink-faint font-medium">Printed on A4 Tax Invoices</span>
-        </div>
+      {/* ---------------------------------------------- GSTIN verification */}
+      <Card padded={false}>
+        <SectionHead
+          title="GSTIN verification"
+          hint={<>Customer GSTINs are looked up through the GSTVerify API (<span className="font-mono">gstverify.co.in/api/v1/verify/:gstin</span>).</>}
+          actions={<Badge tone="positive" dot>Active</Badge>}
+        />
+        <p className="px-3 sm:px-4 py-3 text-sm text-ink-soft">
+          The API key lives only in the server environment as <code className="font-mono text-[13px] text-ink">GSTVERIFY_API_KEY</code>.
+          Lookups run and are cleaned up on the server; the key never reaches the browser.
+        </p>
+      </Card>
 
-        {/* Existing Accounts List */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {(Array.isArray(bankAccounts) ? bankAccounts : []).map((b) => (
-            <div key={b.id} className="bg-surface-muted p-4 rounded-card border border-line relative">
-              <div className="flex items-start justify-between">
-                <div>
-                  <div className="font-bold text-sm text-ink flex items-center gap-2">
-                    <span>{b.bank_name}</span>
-                    {b.is_default && (
-                      <span className="text-[11px] bg-positive-soft text-positive-ink font-semibold px-2 py-0.5 rounded-full border border-positive-line">
-                        Default
-                      </span>
-                    )}
+      {/* ---------------------------------------------------- bank accounts */}
+      <Card padded={false}>
+        <SectionHead title="Bank accounts" hint="Printed on tax invoices for payment. The default account is shown first." />
+
+        {banks.length === 0 ? (
+          <EmptyState title="No bank account yet" message="Add one below so customers know where to pay." />
+        ) : (
+          <ul className="divide-y divide-line">
+            {banks.map((b) => (
+              <li key={b.id} className="px-3 sm:px-4 py-2.5 flex items-start gap-3">
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <span className="text-sm text-ink truncate">{b.bank_name}</span>
+                    {b.is_default && <Badge tone="neutral">Default</Badge>}
                   </div>
-                  <div className="text-ink-faint mt-1">A/C: <span className="font-mono text-ink font-semibold">{b.account_number}</span></div>
-                  <div className="text-ink-faint">IFSC: <span className="font-mono text-ink font-semibold">{b.ifsc || '-'}</span> | Branch: {b.branch || '-'}</div>
-                  <div className="text-ink-faint">Holder: {b.account_holder}</div>
-                  {b.upi_id && <div className="text-ink-faint">UPI: <span className="font-mono text-positive-ink font-semibold">{b.upi_id}</span></div>}
+                  <div className="mt-0.5 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-x-4 gap-y-0.5 text-xs text-ink-faint">
+                    <span className="truncate">A/c <span className="font-mono text-[13px] text-ink-soft">{b.account_number}</span></span>
+                    <span className="truncate">IFSC <span className="font-mono text-[13px] text-ink-soft">{b.ifsc || '-'}</span></span>
+                    <span className="truncate">Branch <span className="text-ink-soft">{b.branch || '-'}</span></span>
+                    <span className="truncate">Holder <span className="text-ink-soft">{b.account_holder}</span></span>
+                    {b.upi_id && <span className="truncate">UPI <span className="font-mono text-[13px] text-ink-soft">{b.upi_id}</span></span>}
+                  </div>
                 </div>
+                <IconButton label={`Remove ${b.bank_name} account`} onClick={() => handleDeleteBank(b.id)}
+                  className="hover:text-danger-ink hover:bg-danger-soft">
+                  <Trash2 />
+                </IconButton>
+              </li>
+            ))}
+          </ul>
+        )}
 
-                <button
-                  onClick={() => handleDeleteBank(b.id)}
-                  className="p-1.5 text-ink-faint hover:text-danger-ink hover:bg-danger-soft rounded-control transition"
-                  title="Remove account"
-                >
-                  <Trash2 className="w-4 h-4" />
-                </button>
-              </div>
-            </div>
-          ))}
-        </div>
-
-        {/* Add New Bank Account Form */}
-        <form onSubmit={handleAddBankAccount} className="bg-surface-muted p-5 rounded-card border border-line space-y-3">
-          <div className="font-bold text-ink">Add New Bank Account</div>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-            <div>
-              <label className="block text-ink-soft font-medium mb-1">Bank Name *</label>
-              <input
-                type="text"
-                required
-                value={newBank.bank_name}
-                onChange={(e) => setNewBank({ ...newBank, bank_name: e.target.value })}
-                className="w-full bg-surface border border-line rounded-control px-3 py-2 text-ink focus:outline-none focus:border-accent"
-                placeholder="e.g. HDFC Bank"
-              />
-            </div>
-            <div>
-              <label className="block text-ink-soft font-medium mb-1">Account Number *</label>
-              <input
-                type="text"
-                required
-                value={newBank.account_number}
+        <form onSubmit={handleAddBankAccount} className="px-3 sm:px-4 py-3 sm:py-4 border-t border-line space-y-3">
+          <h3 className="text-sm font-semibold text-ink">Add bank account</h3>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+            <Field label="Bank name" htmlFor="nb-name" required>
+              <Input id="nb-name" type="text" required value={newBank.bank_name}
+                onChange={(e) => setNewBank({ ...newBank, bank_name: e.target.value })} placeholder="e.g. HDFC Bank" />
+            </Field>
+            <Field label="Account number" htmlFor="nb-acc" required>
+              <Input id="nb-acc" type="text" required inputMode="numeric" value={newBank.account_number}
                 onChange={(e) => setNewBank({ ...newBank, account_number: e.target.value })}
-                className="w-full bg-surface border border-line rounded-control px-3 py-2 font-mono text-ink focus:outline-none focus:border-accent"
-                placeholder="50200012345678"
-              />
-            </div>
-            <div>
-              <label className="block text-ink-soft font-medium mb-1">IFSC Code</label>
-              <input
-                type="text"
-                value={newBank.ifsc}
+                className="font-mono text-[13px]" placeholder="50200012345678" />
+            </Field>
+            <Field label="IFSC" htmlFor="nb-ifsc">
+              <Input id="nb-ifsc" type="text" value={newBank.ifsc}
                 onChange={(e) => setNewBank({ ...newBank, ifsc: e.target.value.toUpperCase() })}
-                className="w-full bg-surface border border-line rounded-control px-3 py-2 font-mono text-ink uppercase focus:outline-none focus:border-accent"
-                placeholder="HDFC0001234"
-              />
-            </div>
-            <div>
-              <label className="block text-ink-soft font-medium mb-1">Branch</label>
-              <input
-                type="text"
-                value={newBank.branch}
-                onChange={(e) => setNewBank({ ...newBank, branch: e.target.value })}
-                className="w-full bg-surface border border-line rounded-control px-3 py-2 text-ink focus:outline-none focus:border-accent"
-                placeholder="Transport Nagar"
-              />
-            </div>
-            <div>
-              <label className="block text-ink-soft font-medium mb-1">UPI ID</label>
-              <input
-                type="text"
-                value={newBank.upi_id}
+                className="font-mono text-[13px] uppercase" placeholder="HDFC0001234" />
+            </Field>
+            <Field label="Branch" htmlFor="nb-branch">
+              <Input id="nb-branch" type="text" value={newBank.branch}
+                onChange={(e) => setNewBank({ ...newBank, branch: e.target.value })} placeholder="Transport Nagar" />
+            </Field>
+            <Field label="UPI ID" htmlFor="nb-upi">
+              <Input id="nb-upi" type="text" value={newBank.upi_id}
                 onChange={(e) => setNewBank({ ...newBank, upi_id: e.target.value })}
-                className="w-full bg-surface border border-line rounded-control px-3 py-2 text-ink font-mono focus:outline-none focus:border-accent"
-                placeholder="shreesanwariya@hdfcbank"
-              />
-            </div>
-            <div className="flex items-center gap-2 pt-6">
-              <label className="flex items-center gap-2 text-ink-soft cursor-pointer font-medium">
+                className="font-mono text-[13px]" placeholder="name@hdfcbank" />
+            </Field>
+            <div className="flex items-end">
+              <label className="flex items-center gap-2 text-sm text-ink-soft cursor-pointer h-10 sm:h-9">
                 <input
                   type="checkbox"
                   checked={newBank.is_default}
                   onChange={(e) => setNewBank({ ...newBank, is_default: e.target.checked })}
-                  className="rounded border-line-strong text-accent-ink focus:ring-0"
+                  className="w-4 h-4 cursor-pointer"
                 />
-                <span>Set as Default Account</span>
+                Make this the default account
               </label>
             </div>
           </div>
-
-          <div className="flex justify-end pt-2">
-            <button
-              type="submit"
-              className="px-4 py-2 bg-surface text-ink border border-line hover:border-line-strong hover:bg-surface-muted rounded-control text-xs font-medium transition flex items-center gap-1.5"
-            >
-              <Plus className="w-4 h-4" />
-              <span>Save Bank Account</span>
-            </button>
+          <div className="flex justify-end">
+            <Button type="submit" variant="secondary" icon={<Plus />}>Add account</Button>
           </div>
         </form>
-      </div>
+      </Card>
     </div>
   );
 };
