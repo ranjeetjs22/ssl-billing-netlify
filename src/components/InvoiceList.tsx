@@ -132,7 +132,10 @@ export const InvoiceList: React.FC<InvoiceListProps> = ({
       hideBelow: 'lg',
       cell: (inv) => (
         <div className="min-w-0">
-          <div className="font-mono text-ink-soft truncate max-w-[160px]" title={inv.lr_no}>{lrLabel(inv)}</div>
+          <div className="truncate max-w-[220px]" title={inv.lr_no}>
+            <span className="font-mono text-ink-soft">{lrLabel(inv)}</span>
+            {inv.buyer?.name && <span className="text-ink-faint"> · {inv.buyer.name}</span>}
+          </div>
           <div className="text-xs text-ink-faint truncate">
             {inv.origin && inv.destination ? `${inv.origin} → ${inv.destination}` : 'Local'}
           </div>
@@ -221,22 +224,19 @@ export const InvoiceList: React.FC<InvoiceListProps> = ({
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
             <div className="font-mono font-bold text-accent-ink text-sm truncate">{inv.invoice_no}</div>
-            <div className="font-semibold text-ink truncate">{inv.buyer?.name || '-'}</div>
+            <div className="text-xs text-ink-faint">{inv.invoice_date}</div>
           </div>
           <StatusBadge status={inv.display_status} />
         </div>
 
-        <div className="flex items-center gap-2 text-xs text-ink-faint">
-          <span>{inv.invoice_date}</span>
-          {(inv.lr_no || inv.lr_items?.length) ? (
-            <>
-              <span aria-hidden="true">·</span>
-              <span className="inline-flex items-center gap-1 truncate">
-                <Truck className="w-3 h-3 shrink-0" aria-hidden="true" />
-                {lrLabel(inv)}
-              </span>
-            </>
-          ) : null}
+        {/* LR number with the party it was billed to, side by side */}
+        <div className="flex items-center gap-2 text-sm min-w-0">
+          <span className="inline-flex items-center gap-1 font-mono text-ink-soft shrink-0 max-w-[45%] truncate">
+            <Truck className="w-3.5 h-3.5 shrink-0 text-ink-faint" aria-hidden="true" />
+            <span className="truncate">{(inv.lr_no || inv.lr_items?.length) ? lrLabel(inv) : 'No LR'}</span>
+          </span>
+          <span className="text-ink-faint" aria-hidden="true">·</span>
+          <span className="font-semibold text-ink truncate">{inv.buyer?.name || '-'}</span>
         </div>
 
         <div className="flex items-end justify-between gap-3 pt-2 border-t border-line">
