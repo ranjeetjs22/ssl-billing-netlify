@@ -345,6 +345,97 @@ paymentRouter.post('/payments', requireModule('payments'), async (req: Request, 
   }
 });
 
+/**
+ * One receipt split across several invoices (e.g. a customer clears a month's bills
+ * with one transfer). Body: shared payment_date / method / reference / bank_account_id
+ * / notes, plus allocations: [{ invoice_id, amount }].
+ * Every allocation is checked before anything is written, so a bad line saves nothing.
+ */
+paymentRouter.post('/payments/bulk', requireModule('payments'), async (req: Request, res: Response) => {
+  try {
+    const body = req.body || {};
+    const allocations: { invoice_id: string; amount: number }[] = (Array.isArray(body.allocations) ? body.allocations : [])
+      .map((a: any) => ({ invoice_id: String(a?.invoice_id || ''), amount: calc.r2(calc.num(a?.amount)) }))
+      .filter((a: any) => a.invoice_id && a.amount > 0);
+
+    if (allocations.length === 0) {
+      return res.status(400).json({ detail: 'Enter an amount against at least one invoice.' });
+    }
+    if (allocations.length > 200) {
+      return res.status(400).json({ detail: 'Too many invoices in one receipt.' });
+    }
+    if (new Set(allocations.map(a => a.invoice_id)).size !== allocations.length) {
+      return res.status(400).json({ detail: 'The same invoice appears twice in this receipt.' });
+    }
+    const method = normaliseMethod(body.method);
+    if (!method) {
+      return res.status(400).json({ detail: `Please select a payment method (${METHODS.join(', ')}).` });
+    }
+
+    // ---- validate everything first ----
+    const [invoices, payments] = await Promise.all([db.select('invoices'), db.select('payments')]);
+    const invMap = new Map<string, any>(invoices.map((i: any) => [i.id, i]));
+    const paidMap: Record<string, number> = {};
+    for (const p of payments) paidMap[p.invoice_id] = (paidMap[p.invoice_id] || 0) + calc.num(p.amount);
+
+    for (const a of allocations) {
+      const inv = invMap.get(a.invoice_id);
+      if (!inv) return res.status(404).json({ detail: 'One of the invoices could not be found. Refresh and try again.' });
+      const status = String(inv.status || '').toLowerCase();
+      if (['cancelled', 'canceled'].includes(status)) {
+        return res.status(400).json({ detail: `Invoice ${inv.invoice_no} is cancelled.` });
+      }
+      if (status === 'draft') {
+        return res.status(400).json({ detail: `Invoice ${inv.invoice_no} is a draft. Issue it first.` });
+      }
+      const balance = calc.r2(calc.compute(inv).grand_total - (paidMap[inv.id] || 0));
+      if (balance <= 0) return res.status(400).json({ detail: `Invoice ${inv.invoice_no} is already fully paid.` });
+      if (a.amount > balance + 0.5) {
+        return res.status(400).json({ detail: `Rs. ${a.amount.toFixed(2)} is more than the Rs. ${balance.toFixed(2)} due on ${inv.invoice_no}.` });
+      }
+    }
+
+    // ---- write ----
+    const bankLabel = await resolveBankLabel(body);
+    const total = calc.r2(allocations.reduce((s, a) => s + a.amount, 0));
+    const tag = `Part of one receipt of Rs. ${total.toFixed(2)} over ${allocations.length} invoice${allocations.length === 1 ? '' : 's'}`;
+    const notes = buildNotes({ ...body, notes: [body.notes, allocations.length > 1 ? tag : ''].filter(Boolean).join(' · ') }, bankLabel, body.method, method);
+    const paymentDate = String(body.payment_date || new Date().toISOString()).slice(0, 10);
+    const user = (req as any).user;
+    const userId = user?.id || '5fecd6f5-7c32-488c-b1bc-b2a5f80b6927';
+
+    const created: any[] = [];
+    for (const a of allocations) {
+      const row = await db.insert('payments', {
+        user_id: userId,
+        invoice_id: a.invoice_id,
+        payment_date: paymentDate,
+        amount: a.amount,
+        method,
+        reference: body.reference || '',
+        notes,
+        created_at: new Date().toISOString(),
+      });
+      created.push(row);
+      await syncInvoiceStatus(a.invoice_id);
+    }
+
+    if (user?.email) {
+      await db.insert('audit_logs', {
+        user_email: user.email,
+        action: `Bulk payment recorded (${created.length} invoices)`,
+        entity: 'payments',
+        new_value: { total, method, invoices: allocations.map(a => ({ invoice_no: invMap.get(a.invoice_id)?.invoice_no, amount: a.amount })) },
+        created_at: new Date().toISOString(),
+      });
+    }
+
+    res.status(201).json({ count: created.length, total, payments: await enrichPayments(created) });
+  } catch (err: any) {
+    res.status(500).json({ detail: err.message });
+  }
+});
+
 paymentRouter.put('/payments/:payment_id', requireModule('payments'), async (req: Request, res: Response) => {
   try {
     const payId = req.params.payment_id;

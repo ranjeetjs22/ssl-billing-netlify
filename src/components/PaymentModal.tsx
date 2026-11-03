@@ -52,6 +52,63 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
   const [query, setQuery] = useState('');
   const [showDetails, setShowDetails] = useState(false);
 
+  // ---- one receipt over several invoices ----
+  const [mode, setMode] = useState<'single' | 'multi'>('single');
+  const [bulkCustomerId, setBulkCustomerId] = useState('');
+  const [bulkTotal, setBulkTotal] = useState<number>(0);
+  const [alloc, setAlloc] = useState<Record<string, number>>({});
+
+  /** Customers with something due, from the pending list. */
+  const dueCustomers = useMemo(() => {
+    const map = new Map<string, { id: string; name: string; due: number; count: number }>();
+    for (const i of invoices) {
+      const id = i.customer_id || '';
+      if (!id) continue;
+      const cur = map.get(id) || { id, name: i.buyer?.name || 'Customer', due: 0, count: 0 };
+      cur.due += Number(i.balance ?? i.grand_total ?? 0);
+      cur.count += 1;
+      map.set(id, cur);
+    }
+    return Array.from(map.values()).sort((a, b) => a.name.localeCompare(b.name));
+  }, [invoices]);
+
+  /** That customer's unpaid bills, oldest first - the order money is applied in. */
+  const bulkInvoices = useMemo(() => invoices
+    .filter(i => i.customer_id === bulkCustomerId)
+    .sort((a, b) => (a.invoice_date || '').localeCompare(b.invoice_date || '') || String(a.invoice_no).localeCompare(String(b.invoice_no))),
+  [invoices, bulkCustomerId]);
+
+  const dueOf = (i: Invoice) => Number(i.balance ?? i.grand_total ?? 0);
+  const allocatedTotal = Math.round(Object.values(alloc).reduce((s, v) => s + (Number(v) || 0), 0) * 100) / 100;
+
+  /** Spread an amount over the bills, settling the oldest first. */
+  const autoAllocate = (total: number, list = bulkInvoices) => {
+    let left = Math.round(total * 100) / 100;
+    const next: Record<string, number> = {};
+    for (const i of list) {
+      if (left <= 0) break;
+      const take = Math.min(left, dueOf(i));
+      next[i.id] = Math.round(take * 100) / 100;
+      left = Math.round((left - take) * 100) / 100;
+    }
+    setAlloc(next);
+  };
+
+  const pickBulkCustomer = (id: string) => {
+    setBulkCustomerId(id);
+    setAlloc({});
+    setBulkTotal(0);
+  };
+
+  const toggleBulkInvoice = (i: Invoice) => {
+    setAlloc(prev => {
+      const next = { ...prev };
+      if (next[i.id]) delete next[i.id]; else next[i.id] = dueOf(i);
+      return next;
+    });
+  };
+  const bulkOver = bulkInvoices.find(i => (alloc[i.id] || 0) > dueOf(i) + 0.5);
+
   useEffect(() => {
     const init = async () => {
       try {
@@ -128,6 +185,7 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (mode === 'multi') return saveBulk();
     if (!selectedInvoiceId) {
       setError('Please select an invoice to record payment against.');
       return;
@@ -170,6 +228,38 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
     }
   };
 
+  const saveBulk = async () => {
+    const allocations = Object.entries(alloc)
+      .filter(([, v]) => (Number(v) || 0) > 0)
+      .map(([invoice_id, amount]) => ({ invoice_id, amount: Number(amount) }));
+    if (allocations.length === 0) { setError('Enter an amount against at least one invoice.'); return; }
+    if (bulkOver) { setError(`The amount on ${bulkOver.invoice_no} is more than its balance of ₹${formatINR(dueOf(bulkOver))}.`); return; }
+    setSaving(true);
+    setError(null);
+    try {
+      const bank = bankAccounts.find(b => b.id === bankAccountId);
+      await apiRequest('/payments/bulk', {
+        method: 'POST',
+        body: JSON.stringify({
+          allocations,
+          payment_date: paymentDate,
+          method,
+          reference,
+          bank_account_id: bankAccountId || undefined,
+          bank: bank ? `${bank.bank_name} (A/C ••${String(bank.account_number || '').slice(-4)})` : undefined,
+          notes,
+        }),
+      });
+      onSuccess();
+      onClose();
+    } catch (err: any) {
+      setError(err.message || 'Failed to record payment');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const bulkCount = Object.values(alloc).filter(v => (Number(v) || 0) > 0).length;
   const paidPct = curTotal > 0 ? Math.min(100, (curPaid / curTotal) * 100) : 0;
   const thisPct = curTotal > 0 ? Math.min(100 - paidPct, ((Number(amount) || 0) / curTotal) * 100) : 0;
 
@@ -177,13 +267,17 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
     <Modal
       onClose={onClose}
       title="Record payment"
-      subtitle={curInvoice ? `Against ${curInvoice.invoice_no}` : 'Credit against a pending invoice'}
+      subtitle={mode === 'multi'
+        ? 'One receipt split across several invoices'
+        : curInvoice ? `Against ${curInvoice.invoice_no}` : 'Credit against a pending invoice'}
       icon={<Wallet className="w-[18px] h-[18px]" strokeWidth={1.8} />}
       size="lg"
       footer={
         <div className="flex items-center justify-between gap-3">
           <span className="text-xs text-ink-faint hidden sm:block">
-            {curInvoice
+            {mode === 'multi'
+              ? bulkCount ? `₹${formatINR(allocatedTotal)} over ${bulkCount} invoice${bulkCount === 1 ? '' : 's'}` : 'Pick a customer and the invoices paid'
+              : curInvoice
               ? isPartial
                 ? `₹${formatINR(remaining)} will remain outstanding`
                 : 'This settles the invoice in full'
@@ -196,10 +290,12 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
               type="submit"
               variant="primary"
               loading={saving}
-              disabled={!selectedInvoiceId || amount <= 0}
+              disabled={mode === 'multi' ? bulkCount === 0 : !selectedInvoiceId || amount <= 0}
               icon={<Check className="w-4 h-4" />}
             >
-              {isPartial ? 'Record part payment' : 'Record payment'}
+              {mode === 'multi'
+                ? `Record ${bulkCount || ''} payment${bulkCount === 1 ? '' : 's'}`.replace('  ', ' ')
+                : isPartial ? 'Record part payment' : 'Record payment'}
             </Button>
           </div>
         </div>
@@ -208,6 +304,112 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
       <form id="payment-form" onSubmit={handleSave} className="space-y-5">
         {error && <FormError message={error} />}
 
+        <div role="radiogroup" aria-label="Payment against"
+          className="inline-flex p-0.5 rounded-control bg-surface-sunken border border-line">
+          {([['single', 'One invoice'], ['multi', 'Multiple invoices']] as const).map(([v, label]) => (
+            <button key={v} type="button" role="radio" aria-checked={mode === v}
+              onClick={() => {
+                setMode(v);
+                setError(null);
+                // Start the multi view on the customer of the invoice already picked
+                if (v === 'multi' && !bulkCustomerId && curInvoice?.customer_id) pickBulkCustomer(curInvoice.customer_id);
+              }}
+              className={cx('px-3 min-h-[36px] rounded-[6px] text-[12.5px] whitespace-nowrap cursor-pointer transition-colors',
+                mode === v ? 'bg-surface-muted text-ink font-medium shadow-card' : 'text-ink-faint hover:text-ink')}>
+              {label}
+            </button>
+          ))}
+        </div>
+
+        {mode === 'multi' && (
+          <section className="space-y-3">
+            <Field label="Customer" htmlFor="bulk-cust" required>
+              <Select id="bulk-cust" value={bulkCustomerId} onChange={(e) => pickBulkCustomer(e.target.value)}>
+                <option value="">Select a customer with dues</option>
+                {dueCustomers.map(c => (
+                  <option key={c.id} value={c.id}>
+                    {c.name} · {c.count} bill{c.count === 1 ? '' : 's'} · ₹{formatINR(c.due)} due
+                  </option>
+                ))}
+              </Select>
+            </Field>
+
+            {bulkCustomerId && (
+              <>
+                <div className="panel p-4 space-y-2">
+                  <label htmlFor="bulk-total" className="label-micro block">Total amount received</label>
+                  <div className="flex flex-col sm:flex-row gap-2">
+                    <div className="relative flex-1">
+                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-faint text-lg leading-none pointer-events-none">₹</span>
+                      <input
+                        id="bulk-total"
+                        type="number" step="any" min="0" inputMode="decimal"
+                        value={bulkTotal || ''}
+                        onChange={(e) => { const v = parseFloat(e.target.value) || 0; setBulkTotal(v); autoAllocate(v); }}
+                        placeholder="0.00"
+                        className="w-full bg-surface-sunken border border-line rounded-control pl-8 pr-3 py-2.5 numeral text-[1.2rem] text-ink min-h-[48px]
+                                   hover:border-line-strong focus:border-accent focus:outline-none focus:ring-focus"
+                      />
+                    </div>
+                    <Button type="button" variant="secondary" onClick={() => {
+                      const all = Math.round(bulkInvoices.reduce((s, i) => s + dueOf(i), 0) * 100) / 100;
+                      setBulkTotal(all); autoAllocate(all);
+                    }}>
+                      Pay all due
+                    </Button>
+                  </div>
+                  <p className="text-[11px] text-ink-faint">
+                    Applied to the oldest bills first. Tick bills or edit the amounts below to change it.
+                    {bulkTotal > 0 && Math.abs(bulkTotal - allocatedTotal) > 0.01 && (
+                      <span className="text-warning-ink">
+                        {' '}Allocated ₹{formatINR(allocatedTotal)} of ₹{formatINR(bulkTotal)}
+                        {bulkTotal > allocatedTotal ? ` - ₹${formatINR(bulkTotal - allocatedTotal)} is more than these bills owe.` : '.'}
+                      </span>
+                    )}
+                  </p>
+                </div>
+
+                <div className="rounded-card border border-line divide-y divide-line max-h-[260px] overflow-y-auto overscroll-contain">
+                  {bulkInvoices.map(inv => {
+                    const on = (alloc[inv.id] || 0) > 0;
+                    const over = (alloc[inv.id] || 0) > dueOf(inv) + 0.5;
+                    return (
+                      <div key={inv.id} className={cx('flex items-center gap-3 px-3 py-2', on && 'bg-accent-soft/50')}>
+                        <input type="checkbox" checked={on} onChange={() => toggleBulkInvoice(inv)}
+                          aria-label={`Include ${inv.invoice_no}`}
+                          className="w-4 h-4 accent-[var(--color-accent-strong)] shrink-0 cursor-pointer" />
+                        <span className="min-w-0 flex-1">
+                          <span className="block font-mono text-[12px] text-accent-ink truncate">{inv.invoice_no}</span>
+                          <span className="block text-[11px] text-ink-faint truncate">
+                            {inv.invoice_date}{inv.lr_no ? ` · LR ${inv.lr_no}` : ''} · ₹{formatINR(dueOf(inv))} due
+                          </span>
+                        </span>
+                        <input
+                          type="number" step="any" min="0" inputMode="decimal"
+                          aria-label={`Amount for ${inv.invoice_no}`}
+                          value={alloc[inv.id] || ''}
+                          onChange={(e) => {
+                            const v = parseFloat(e.target.value) || 0;
+                            setAlloc(prev => { const n = { ...prev }; if (v > 0) n[inv.id] = v; else delete n[inv.id]; return n; });
+                          }}
+                          placeholder="0"
+                          className={cx('w-28 text-right numeral bg-surface border rounded-control px-2 py-1.5 min-h-[38px] text-[13px] text-ink focus:outline-none focus:border-accent',
+                            over ? 'border-danger' : 'border-line')}
+                        />
+                      </div>
+                    );
+                  })}
+                </div>
+                <div className="flex items-center justify-between text-[12.5px]">
+                  <span className="text-ink-faint">{bulkCount} of {bulkInvoices.length} bills selected</span>
+                  <span className="text-ink">Total <span className="numeral font-semibold">₹{formatINR(allocatedTotal)}</span></span>
+                </div>
+              </>
+            )}
+          </section>
+        )}
+
+        {mode === 'single' && (<>
         {/* ---------------------------------------------- 1. which invoice */}
         <section>
           <div className="flex items-center justify-between gap-3 mb-2">
@@ -349,6 +551,8 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
             </div>
           </section>
         )}
+
+        </>)}
 
         {/* ---------------------------------------------- 3. how it was paid */}
         <section>
