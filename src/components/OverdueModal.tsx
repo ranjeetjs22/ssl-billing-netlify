@@ -1,16 +1,15 @@
 import React, { useState, useEffect } from 'react';
-import { X, AlertTriangle, MessageSquare, Copy, Check, ExternalLink } from 'lucide-react';
+import { MessageSquare, Copy, Check, CircleCheck } from 'lucide-react';
 import { apiRequest } from '../services/api.js';
 import { formatINR } from '../utils/format.js';
-import { useBackLayer } from '../utils/backNav.js';
+import { Modal, Button, Badge, Spinner, EmptyState } from './ui.js';
 
 interface OverdueModalProps {
   onClose: () => void;
 }
 
 export const OverdueModal: React.FC<OverdueModalProps> = ({ onClose }) => {
-  // Phone Back button closes this instead of leaving the app
-  useBackLayer(onClose);
+  // <Modal> registers the phone Back button, so it closes this instead of leaving the app
   const [items, setItems] = useState<any[]>([]);
   const [totalOverdue, setTotalOverdue] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -44,95 +43,60 @@ export const OverdueModal: React.FC<OverdueModalProps> = ({ onClose }) => {
   };
 
   return (
-    <div className="fixed inset-0 bg-scrim flex items-center justify-center p-4 z-50 overflow-y-auto">
-      <div className="sheet border border-line rounded-overlay max-w-3xl w-full max-h-[90vh] flex flex-col shadow-overlay text-ink my-auto">
-        {/* Header */}
-        <div className="p-4 border-b border-line flex items-center justify-between">
-          <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-card bg-danger-soft border border-danger-line flex items-center justify-center text-danger-ink">
-              <AlertTriangle className="w-4 h-4" />
-            </div>
-            <div>
-              <h2 className="text-base font-bold text-ink">Overdue Invoices & Reminders</h2>
-              <p className="text-[11px] text-ink-faint">Total Overdue: <strong className="text-danger-ink font-mono">₹{formatINR(totalOverdue)}</strong> ({items.length} accounts)</p>
-            </div>
-          </div>
-
-          <button onClick={onClose} className="p-1 text-ink-faint hover:text-ink rounded-control transition">
-            <X className="w-5 h-5" />
-          </button>
+    <Modal
+      onClose={onClose}
+      size="lg"
+      title="Overdue bills and reminders"
+      subtitle={loading ? 'Loading…' : `₹${formatINR(totalOverdue)} overdue across ${items.length} bill${items.length === 1 ? '' : 's'}`}
+      footer={
+        <div className="flex justify-end">
+          <Button variant="secondary" onClick={onClose}>Close</Button>
         </div>
-
-        {/* Content */}
-        <div className="flex-1 overflow-y-auto p-5 space-y-3.5 text-xs">
-          {loading ? (
-            <div className="py-12 text-center text-ink-faint">
-              <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-danger mx-auto"></div>
-            </div>
-          ) : items.length > 0 ? (
-            items.map((item) => (
-              <div key={item.id} className="bg-surface-muted p-4 rounded-card border border-line hover:border-line-strong transition space-y-3">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-line pb-2.5">
-                  <div>
-                    <div className="font-bold text-sm text-ink">{item.customer_name}</div>
-                    <div className="text-[11px] text-ink-faint flex items-center gap-2 mt-0.5">
-                      <span>Invoice: <strong className="text-ink font-mono">{item.invoice_no}</strong></span>
-                      <span>·</span>
-                      <span>Due Date: <strong className="text-danger-ink font-medium">{item.due_date}</strong></span>
-                    </div>
-                  </div>
-
-                  <div className="text-right">
-                    <span className="text-[11px] bg-danger-soft text-danger-ink font-semibold px-2 py-0.5 rounded-full border border-danger-line">
-                      {item.days_overdue} Days Overdue
-                    </span>
-                    <div className="font-mono font-bold text-accent-ink text-sm mt-1">
-                      ₹{formatINR(item.balance)} Due
-                    </div>
+      }
+    >
+      {loading ? (
+        <Spinner label="Loading overdue bills" />
+      ) : items.length === 0 ? (
+        <EmptyState icon={<CircleCheck />} title="Nothing overdue" message="All collections are up to date." />
+      ) : (
+        <ul className="-mx-4 sm:-mx-5 -my-4 divide-y divide-line">
+          {items.map((item) => (
+            <li key={item.id} className="px-4 sm:px-5 py-3">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <div className="text-sm font-medium text-ink truncate">{item.customer_name}</div>
+                  <div className="text-xs text-ink-faint mt-0.5 flex flex-wrap items-center gap-x-1.5">
+                    <span className="font-mono text-[13px] text-ink-soft">{item.invoice_no}</span>
+                    <span aria-hidden="true">·</span>
+                    <span>Due <span className="tabular-nums">{item.due_date}</span></span>
                   </div>
                 </div>
-
-                {/* Pre-crafted WhatsApp / SMS reminder */}
-                <div className="p-3 bg-surface rounded-card border border-line text-[11px] text-ink-soft italic">
-                  "{item.message}"
-                </div>
-
-                <div className="flex items-center justify-end gap-2">
-                  <button
-                    onClick={() => copyMessage(item)}
-                    className="flex items-center gap-1 px-3 py-1.5 bg-surface hover:bg-surface-sunken text-ink-soft border border-line rounded-card text-xs font-medium transition"
-                  >
-                    {copiedId === item.id ? <Check className="w-3.5 h-3.5 text-positive-ink" /> : <Copy className="w-3.5 h-3.5" />}
-                    <span>{copiedId === item.id ? 'Copied' : 'Copy Text'}</span>
-                  </button>
-
-                  <button
-                    onClick={() => openWhatsApp(item)}
-                    className="flex items-center gap-1 px-3.5 py-1.5 bg-surface text-positive-ink border border-positive-line hover:bg-positive-soft hover:border-positive rounded-card text-xs font-semibold transition"
-                  >
-                    <MessageSquare className="w-3.5 h-3.5" />
-                    <span>Send WhatsApp</span>
-                  </button>
+                <div className="text-right shrink-0">
+                  <div className="text-sm tabular-nums font-medium text-ink">₹{formatINR(item.balance)}</div>
+                  <div className="mt-1">
+                    <Badge tone="danger" dot>{item.days_overdue} days overdue</Badge>
+                  </div>
                 </div>
               </div>
-            ))
-          ) : (
-            <div className="text-center py-12 text-ink-faint text-xs">
-              No accounts are currently overdue. All collections are up to date.
-            </div>
-          )}
-        </div>
 
-        {/* Footer */}
-        <div className="p-4 border-t border-line flex justify-end">
-          <button
-            onClick={onClose}
-            className="px-4 py-2 bg-surface-sunken hover:bg-surface-sunken text-ink-soft rounded-card text-xs font-medium transition"
-          >
-            Close
-          </button>
-        </div>
-      </div>
-    </div>
+              {/* Ready-made WhatsApp / SMS reminder */}
+              <p className="mt-2.5 px-2.5 py-2 rounded-control bg-surface-muted border border-line text-xs text-ink-soft leading-relaxed">
+                {item.message}
+              </p>
+
+              <div className="mt-2 flex items-center justify-end gap-1.5">
+                <Button variant="ghost" size="sm" onClick={() => copyMessage(item)}
+                  icon={copiedId === item.id ? <Check className="text-positive" /> : <Copy />}>
+                  {copiedId === item.id ? 'Copied' : 'Copy text'}
+                </Button>
+                <Button variant="secondary" size="sm" onClick={() => openWhatsApp(item)} icon={<MessageSquare />}>
+                  Send on WhatsApp
+                </Button>
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
+    </Modal>
   );
 };
