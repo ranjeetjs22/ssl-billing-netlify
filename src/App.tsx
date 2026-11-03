@@ -284,6 +284,24 @@ function MainApp() {
       </div>
 
       {/* Modals */}
+      {/* The customer statement sits lowest so anything opened from it stacks on top */}
+      {selectedCustomer && (
+        <CustomerDetailModal
+          customer={selectedCustomer}
+          key={`${selectedCustomer.id}:${customerVersion}`}
+          onEditCustomer={(cust) => setEditingCustomer(cust)}
+          onSelectInvoice={(inv) => setSelectedInvoice(inv)}
+          onClose={() => setSelectedCustomer(null)}
+          onNewInvoice={(cust) => {
+            setSelectedCustomer(null);
+            setTargetCustomerForInvoice(cust.id);
+            setShowInvoiceModal(true);
+          }}
+          onRefresh={() => setRefreshKey(k => k + 1)}
+          companySettings={companySettings}
+        />
+      )}
+
       {showInvoiceModal && (
         <InvoiceModal
           invoiceToEdit={editingInvoice}
@@ -298,7 +316,9 @@ function MainApp() {
             setEditingInvoice(null);
             setTargetCustomerForInvoice(undefined);
             setRefreshKey(k => k + 1);
-            setActiveTab('invoices');
+            setCustomerVersion(v => v + 1);
+            // Stay on the customer statement when the bill was opened from it
+            if (!selectedCustomer) setActiveTab('invoices');
             if (savedInvoice) {
               setHighlightInvoiceId(savedInvoice.id);
               setInvoiceToastMessage(
@@ -329,6 +349,7 @@ function MainApp() {
           }}
           onRefresh={() => {
             setRefreshKey(k => k + 1);
+            setCustomerVersion(v => v + 1);
           }}
           companySettings={companySettings}
           defaultBank={defaultBank}
@@ -344,21 +365,6 @@ function MainApp() {
         />
       )}
 
-      {selectedCustomer && (
-        <CustomerDetailModal
-          customer={selectedCustomer}
-          key={`${selectedCustomer.id}:${customerVersion}`}
-          onEditCustomer={(cust) => setEditingCustomer(cust)}
-          onClose={() => setSelectedCustomer(null)}
-          onNewInvoice={(cust) => {
-            setSelectedCustomer(null);
-            setTargetCustomerForInvoice(cust.id);
-            setShowInvoiceModal(true);
-          }}
-          onRefresh={() => setRefreshKey(k => k + 1)}
-          companySettings={companySettings}
-        />
-      )}
 
       {/* Rendered after the statement so it stacks on top of it */}
       {editingCustomer && (
@@ -382,6 +388,7 @@ function MainApp() {
           }}
           onSuccess={() => {
             setRefreshKey(k => k + 1);
+            setCustomerVersion(v => v + 1);
           }}
         />
       )}

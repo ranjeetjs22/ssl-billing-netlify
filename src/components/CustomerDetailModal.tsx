@@ -38,6 +38,8 @@ interface CustomerDetailModalProps {
   onNewInvoice: (customer: Customer) => void;
   /** Open the edit form for this customer. */
   onEditCustomer?: (customer: Customer) => void;
+  /** Open one of this customer's invoices. */
+  onSelectInvoice?: (invoice: Invoice) => void;
   companySettings: CompanySettings;
   /** Called after a change that affects balances, so the screens behind refresh too. */
   onRefresh?: () => void;
@@ -48,6 +50,7 @@ export const CustomerDetailModal: React.FC<CustomerDetailModalProps> = ({
   onClose,
   onNewInvoice,
   onEditCustomer,
+  onSelectInvoice,
   companySettings,
   onRefresh,
 }) => {
@@ -67,7 +70,9 @@ export const CustomerDetailModal: React.FC<CustomerDetailModalProps> = ({
     invoice_count: 0,
   });
   const [periodLabel, setPeriodLabel] = useState<string>('All Time');
-  const [activeTab, setActiveTab] = useState<'invoices' | 'ledger' | 'payments'>('invoices');
+  const [activeTab, setActiveTab] = useState<'invoices' | 'ledger' | 'payments' | 'profile'>('invoices');
+  const [invFilter, setInvFilter] = useState<'all' | 'unpaid' | 'overdue' | 'paid'>('all');
+  const [rateChart, setRateChart] = useState<{ exists: boolean; use_custom: boolean } | null>(null);
   // Deleting a receipt entered by mistake. Held until confirmed - a payment deletion
   // moves money on the customer's account, so it is never one click.
   const [paymentToDelete, setPaymentToDelete] = useState<
@@ -89,7 +94,8 @@ export const CustomerDetailModal: React.FC<CustomerDetailModalProps> = ({
   const prevMonthDate = new Date(today.getFullYear(), today.getMonth() - 1, 1);
   const prevMonthStr = `${prevMonthDate.getFullYear()}-${String(prevMonthDate.getMonth() + 1).padStart(2, '0')}`;
 
-  const [periodFilterType, setPeriodFilterType] = useState<string>('current_month'); // 'current_month' | 'prev_month' | 'last_3_months' | 'fy' | 'all' | 'custom'
+  // Open on the full history so every bill of this customer is listed
+  const [periodFilterType, setPeriodFilterType] = useState<string>('all'); // 'current_month' | 'prev_month' | 'last_3_months' | 'fy' | 'all' | 'custom'
   const [customStartDate, setCustomStartDate] = useState<string>('');
   const [customEndDate, setCustomEndDate] = useState<string>('');
 
@@ -159,6 +165,31 @@ export const CustomerDetailModal: React.FC<CustomerDetailModalProps> = ({
   useEffect(() => {
     fetchCustomerStatement();
   }, [initialCustomer.id, periodFilterType]);
+
+  // Which rate chart this customer is billed on, for the profile tab
+  useEffect(() => {
+    apiRequest<{ customer_id: string; exists: boolean; use_custom: boolean }[]>('/rates/customer-cards')
+      .then(list => {
+        const row = (list || []).find(r => r.customer_id === initialCustomer.id);
+        setRateChart(row ? { exists: true, use_custom: row.use_custom } : { exists: false, use_custom: false });
+      })
+      .catch(() => setRateChart(null));
+  }, [initialCustomer.id]);
+
+  const shownInvoices = invoices.filter(inv => {
+    const st = inv.display_status || 'issued';
+    if (invFilter === 'paid') return st === 'paid';
+    if (invFilter === 'overdue') return st === 'overdue';
+    if (invFilter === 'unpaid') return ['issued', 'partially_paid', 'overdue'].includes(st);
+    return true;
+  });
+  const countBy = (f: typeof invFilter) => invoices.filter(inv => {
+    const st = inv.display_status || 'issued';
+    if (f === 'paid') return st === 'paid';
+    if (f === 'overdue') return st === 'overdue';
+    if (f === 'unpaid') return ['issued', 'partially_paid', 'overdue'].includes(st);
+    return true;
+  }).length;
 
   useEffect(() => {
     if (!actionMessage) return;
@@ -467,11 +498,12 @@ export const CustomerDetailModal: React.FC<CustomerDetailModalProps> = ({
         </div>
 
         {/* Tab Selector */}
-        <div className="px-5 pt-3 bg-surface-muted border-b border-line flex gap-6 text-xs font-semibold">
+        <div className="px-5 pt-3 bg-surface-muted border-b border-line flex gap-6 text-xs font-semibold overflow-x-auto whitespace-nowrap">
           {[
-            { key: 'invoices', label: `Period Invoices Breakdown (${invoices.length})`, icon: FileText },
+            { key: 'invoices', label: `Invoices (${invoices.length})`, icon: FileText },
             { key: 'ledger', label: `Statement Ledger (${ledger.length})`, icon: Receipt },
             { key: 'payments', label: `Payment Receipts (${payments.length})`, icon: DollarSign },
+            { key: 'profile', label: 'Customer Info', icon: Building2 },
           ].map((tab) => {
             const Icon = tab.icon;
             return (
@@ -503,8 +535,20 @@ export const CustomerDetailModal: React.FC<CustomerDetailModalProps> = ({
               {/* TAB 1: Itemized Invoices Breakdown */}
               {activeTab === 'invoices' && (
                 <div className="space-y-3">
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    {([
+                      ['all', 'All'], ['unpaid', 'Unpaid'], ['overdue', 'Overdue'], ['paid', 'Paid'],
+                    ] as const).map(([k, label]) => (
+                      <button key={k} type="button" onClick={() => setInvFilter(k)} aria-pressed={invFilter === k}
+                        className={`px-2.5 py-1 rounded-full text-[11px] font-medium border transition cursor-pointer ${
+                          invFilter === k ? 'bg-accent-soft text-accent-ink border-accent-line font-semibold' : 'border-line text-ink-soft hover:bg-surface-muted'}`}>
+                        {label} ({countBy(k)})
+                      </button>
+                    ))}
+                    {onSelectInvoice && <span className="text-[11px] text-ink-faint ml-1">Tap a bill to open it.</span>}
+                  </div>
                   <div className="flex items-center justify-between text-ink-faint text-[11px]">
-                    <span>Detailed transport bills issued during {periodLabel}</span>
+                    <span>Transport bills for {periodLabel}</span>
                     <span className="font-semibold text-ink-soft">
                       Total Invoiced: <strong className="text-ink font-mono">₹{formatINR(summary.period_invoiced)}</strong>
                     </span>
@@ -529,9 +573,11 @@ export const CustomerDetailModal: React.FC<CustomerDetailModalProps> = ({
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-line">
-                          {invoices.length > 0 ? (
-                            invoices.map((inv) => (
-                              <tr key={inv.id} className="hover:bg-surface-muted/80 transition">
+                          {shownInvoices.length > 0 ? (
+                            shownInvoices.map((inv) => (
+                              <tr key={inv.id}
+                                onClick={onSelectInvoice ? () => onSelectInvoice(inv) : undefined}
+                                className={`hover:bg-surface-muted/80 transition ${onSelectInvoice ? 'cursor-pointer' : ''}`}>
                                 <td className="py-2.5 px-3 text-ink-faint font-mono">{inv.invoice_date}</td>
                                 <td className="py-2.5 px-3 font-mono font-bold text-accent-ink">
                                   {inv.invoice_no}
@@ -574,7 +620,7 @@ export const CustomerDetailModal: React.FC<CustomerDetailModalProps> = ({
                                     {inv.display_status || 'issued'}
                                   </span>
                                 </td>
-                                <td className="py-2.5 px-3 text-center">
+                                <td className="py-2.5 px-3 text-center" onClick={(e) => e.stopPropagation()}>
                                   <div className="flex items-center justify-center gap-1">
                                     <button
                                       onClick={() => printInvoicePDF(inv, companySettings, defaultBank)}
@@ -597,7 +643,9 @@ export const CustomerDetailModal: React.FC<CustomerDetailModalProps> = ({
                           ) : (
                             <tr>
                               <td colSpan={11} className="py-10 text-center text-ink-faint">
-                                No tax invoices issued for this customer in {periodLabel}.
+                                {invoices.length === 0
+                                  ? `No invoices for this customer in ${periodLabel}.`
+                                  : 'No invoices match this filter.'}
                               </td>
                             </tr>
                           )}
@@ -630,6 +678,48 @@ export const CustomerDetailModal: React.FC<CustomerDetailModalProps> = ({
                       </table>
                     </div>
                   </div>
+                </div>
+              )}
+
+              {activeTab === 'profile' && (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  {([
+                    ['Contact person', customer.contact_person],
+                    ['Phone', customer.phone],
+                    ['WhatsApp', customer.whatsapp],
+                    ['Email', customer.email],
+                    ['GSTIN', customer.gstin || 'Unregistered'],
+                    ['PAN', customer.pan],
+                    ['Billing address', [customer.address, customer.city, customer.state, customer.pin].filter(Boolean).join(', ')],
+                    ['Shipping address', customer.shipping_address && customer.shipping_address !== customer.address ? customer.shipping_address : 'Same as billing'],
+                    ['Payment terms', customer.payment_terms],
+                    ['Credit days', customer.credit_days != null ? `${customer.credit_days} days` : ''],
+                    ['Credit limit', customer.credit_limit ? `₹${formatINR(customer.credit_limit)}` : 'Not set'],
+                    ['Rate chart', rateChart === null ? '' : !rateChart.exists ? 'Global chart'
+                      : rateChart.use_custom ? 'Personal chart' : 'Global chart (personal chart kept, not in use)'],
+                    ['Bills (all time)', `${summary.invoice_count ?? invoices.length}`],
+                    ['Total outstanding', `₹${formatINR(summary.total_overall_outstanding)}`],
+                    ['Customer since', customer.created_at ? String(customer.created_at).slice(0, 10) : ''],
+                  ] as const).map(([label, value]) => (
+                    <div key={label} className="bg-surface border border-line rounded-card px-3 py-2.5">
+                      <div className="text-[10px] uppercase tracking-wide text-ink-faint font-semibold">{label}</div>
+                      <div className="text-ink text-[13px] mt-0.5 break-words">{value || '-'}</div>
+                    </div>
+                  ))}
+                  {customer.notes && (
+                    <div className="md:col-span-2 bg-surface border border-line rounded-card px-3 py-2.5">
+                      <div className="text-[10px] uppercase tracking-wide text-ink-faint font-semibold">Notes</div>
+                      <div className="text-ink text-[13px] mt-0.5 whitespace-pre-line">{customer.notes}</div>
+                    </div>
+                  )}
+                  {onEditCustomer && (
+                    <div className="md:col-span-2">
+                      <button onClick={() => onEditCustomer(customer)}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-surface text-ink border border-line hover:bg-surface-muted rounded-control text-xs font-medium cursor-pointer">
+                        <Pencil className="w-3.5 h-3.5" /> Edit Details
+                      </button>
+                    </div>
+                  )}
                 </div>
               )}
 
