@@ -218,7 +218,7 @@ export const CustomerModal: React.FC<CustomerModalProps> = ({ customerToEdit, on
   };
 
   return (
-    <div className="fixed inset-0 bg-scrim backdrop-blur-[6px] flex items-center justify-center p-4 z-50 overflow-y-auto">
+    <div className="fixed inset-0 bg-scrim flex items-center justify-center p-4 z-50 overflow-y-auto">
       <div className="sheet border border-line rounded-overlay max-w-2xl w-full max-h-[92vh] flex flex-col shadow-overlay text-ink my-auto">
         {/* Header */}
         <div className="p-4 border-b border-line flex items-center justify-between">
@@ -518,7 +518,7 @@ export const CustomerModal: React.FC<CustomerModalProps> = ({ customerToEdit, on
             <button
               type="submit"
               disabled={saving}
-              className="px-5 py-2 bg-accent-strong hover:bg-accent-strong-hover text-on-accent rounded-card text-xs font-semibold shadow-card transition flex items-center gap-2 disabled:opacity-50 cursor-pointer"
+              className="px-5 py-2 bg-accent-strong hover:bg-accent-strong-hover text-on-accent rounded-card text-xs font-semibold transition flex items-center gap-2 disabled:opacity-50 cursor-pointer"
             >
               <Save className="w-4 h-4" />
               <span>{saving ? 'Saving...' : isEdit ? 'Save Changes' : 'Register Customer'}</span>

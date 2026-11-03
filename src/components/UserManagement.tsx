@@ -102,7 +102,7 @@ export const UserManagementView: React.FC = () => {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-surface border border-line p-5 rounded-card shadow-card">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-surface border border-line p-5 rounded-card">
         <div>
           <h1 className="text-xl font-bold text-ink flex items-center gap-2">
             <span>Staff & User Administration</span>
@@ -118,7 +118,7 @@ export const UserManagementView: React.FC = () => {
         {currentUser?.role === 'admin' && (
           <button
             onClick={() => setShowAdd(true)}
-            className="flex items-center gap-1.5 px-3.5 py-2 bg-accent-strong hover:bg-accent-strong-hover text-on-accent rounded-card text-xs font-semibold shadow-card transition"
+            className="flex items-center gap-1.5 px-3.5 py-2 bg-accent-strong hover:bg-accent-strong-hover text-on-accent rounded-card text-xs font-semibold transition"
           >
             <UserPlus className="w-4 h-4" />
             <span>Create New User</span>
@@ -127,10 +127,10 @@ export const UserManagementView: React.FC = () => {
       </div>
 
       {/* User Table */}
-      <div className="bg-surface border border-line rounded-card overflow-hidden shadow-card">
+      <div className="bg-surface border border-line rounded-card overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-left text-xs text-ink-soft">
-            <thead className="bg-surface-muted text-ink-faint font-semibold border-b border-line uppercase tracking-wider text-[10px]">
+            <thead className="bg-surface-muted text-ink-faint font-semibold border-b border-line text-[11px]">
               <tr>
                 <th className="py-3 px-4">User</th>
                 <th className="py-3 px-4">Role</th>
@@ -154,7 +154,7 @@ export const UserManagementView: React.FC = () => {
                       <div className="text-ink-faint font-mono text-[11px]">{u.email}</div>
                     </td>
                     <td className="py-3 px-4">
-                      <span className={`inline-block px-2.5 py-0.5 rounded-full text-[10px] font-semibold uppercase ${
+                      <span className={`inline-block px-2.5 py-0.5 rounded-full text-[11px] font-semibold ${
                         u.role === 'admin'
                           ? 'bg-accent-soft text-accent-ink border border-accent-line'
                           : u.role === 'accountant'
@@ -167,7 +167,7 @@ export const UserManagementView: React.FC = () => {
                     <td className="py-3 px-4">
                       <div className="flex flex-wrap gap-1">
                         {(u.modules || []).map((m) => (
-                          <span key={m} className="px-2 py-0.5 bg-surface-sunken text-ink-soft text-[10px] rounded-md border border-line">
+                          <span key={m} className="px-2 py-0.5 bg-surface-sunken text-ink-soft text-[11px] rounded-md border border-line">
                             {m}
                           </span>
                         ))}
@@ -197,7 +197,7 @@ export const UserManagementView: React.FC = () => {
 
       {/* Add User Modal */}
       {showAdd && (
-        <div className="fixed inset-0 bg-scrim backdrop-blur-[6px] flex items-center justify-center p-4 z-50 overflow-y-auto">
+        <div className="fixed inset-0 bg-scrim flex items-center justify-center p-4 z-50 overflow-y-auto">
           <div className="sheet border border-line rounded-overlay max-w-lg w-full p-6 shadow-overlay text-ink">
             <div className="flex items-center justify-between mb-2">
               <h3 className="text-base font-bold text-ink">Create User Account</h3>
@@ -304,7 +304,7 @@ export const UserManagementView: React.FC = () => {
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2 bg-accent-strong hover:bg-accent-strong-hover text-on-accent font-semibold rounded-card shadow-card"
+                  className="px-5 py-2 bg-accent-strong hover:bg-accent-strong-hover text-on-accent font-semibold rounded-card"
                 >
                   Create User
                 </button>

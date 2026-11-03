@@ -28,7 +28,7 @@ export const AuditLogsModal: React.FC<AuditLogsModalProps> = ({ onClose }) => {
   }, []);
 
   return (
-    <div className="fixed inset-0 bg-scrim backdrop-blur-[6px] flex items-center justify-center p-4 z-50 overflow-y-auto">
+    <div className="fixed inset-0 bg-scrim flex items-center justify-center p-4 z-50 overflow-y-auto">
       <div className="sheet border border-line rounded-overlay max-w-2xl w-full max-h-[85vh] flex flex-col shadow-overlay text-ink my-auto">
         {/* Header */}
         <div className="p-4 border-b border-line flex items-center justify-between">
@@ -57,13 +57,13 @@ export const AuditLogsModal: React.FC<AuditLogsModalProps> = ({ onClose }) => {
             logs.map((log) => (
               <div key={log.id} className="p-3.5 bg-surface-muted rounded-card border border-line flex items-start justify-between gap-3">
                 <div className="space-y-1">
-                  <div className="font-bold text-ink uppercase text-[11px] tracking-wide">
+                  <div className="font-bold text-ink text-[11px]">
                     {log.action}
                   </div>
                   <div className="text-ink-soft font-mono text-[11px]">
                     {log.details ? JSON.stringify(log.details) : '-'}
                   </div>
-                  <div className="text-ink-faint text-[10px] flex items-center gap-2 pt-1">
+                  <div className="text-ink-faint text-[11px] flex items-center gap-2 pt-1">
                     <span className="flex items-center gap-1">
                       <User className="w-3 h-3 text-ink-faint" />
                       {log.user_email || 'System'}
@@ -71,7 +71,7 @@ export const AuditLogsModal: React.FC<AuditLogsModalProps> = ({ onClose }) => {
                   </div>
                 </div>
 
-                <div className="text-ink-faint text-[10px] whitespace-nowrap flex items-center gap-1">
+                <div className="text-ink-faint text-[11px] whitespace-nowrap flex items-center gap-1">
                   <Clock className="w-3 h-3" />
                   {new Date(log.created_at).toLocaleString()}
                 </div>

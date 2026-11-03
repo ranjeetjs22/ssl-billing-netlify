@@ -63,7 +63,7 @@ export const DeleteInvoiceModal: React.FC<DeleteInvoiceModalProps> = ({
 
   return (
     <div 
-      className="fixed inset-0 bg-scrim backdrop-blur-[6px] flex items-center justify-center p-4 z-50 overflow-y-auto animate-fade-in"
+      className="fixed inset-0 bg-scrim flex items-center justify-center p-4 z-50 overflow-y-auto animate-fade-in"
       onClick={onClose}
     >
       <div 
@@ -122,7 +122,7 @@ export const DeleteInvoiceModal: React.FC<DeleteInvoiceModalProps> = ({
               <label 
                 className={`p-3.5 rounded-card border flex items-start gap-3 cursor-pointer transition ${
                   actionType === 'cancel'
-                    ? 'border-accent bg-accent-soft shadow-card ring-1 ring-accent'
+                    ? 'border-accent bg-accent-soft ring-1 ring-accent'
                     : 'border-line hover:bg-surface-muted'
                 }`}
               >
@@ -136,7 +136,7 @@ export const DeleteInvoiceModal: React.FC<DeleteInvoiceModalProps> = ({
                 <div className="flex-1">
                   <div className="font-bold text-ink flex items-center justify-between">
                     <span>Cancel Invoice (Recommended)</span>
-                    <span className="text-[10px] bg-surface-sunken text-ink-soft px-2 py-0.5 rounded font-medium">GST Compliant</span>
+                    <span className="text-[11px] bg-surface-sunken text-ink-soft px-2 py-0.5 rounded font-medium">GST Compliant</span>
                   </div>
                   <p className="text-ink-faint text-[11px] mt-1 leading-relaxed">
                     Voids the invoice, zeroes out the balance, but preserves the invoice number in your sequence for tax auditing.
@@ -148,7 +148,7 @@ export const DeleteInvoiceModal: React.FC<DeleteInvoiceModalProps> = ({
               <label 
                 className={`p-3.5 rounded-card border flex items-start gap-3 cursor-pointer transition ${
                   actionType === 'delete'
-                    ? 'border-danger bg-danger-soft shadow-card ring-1 ring-danger'
+                    ? 'border-danger bg-danger-soft ring-1 ring-danger'
                     : 'border-line hover:bg-surface-muted'
                 }`}
               >
@@ -162,7 +162,7 @@ export const DeleteInvoiceModal: React.FC<DeleteInvoiceModalProps> = ({
                 <div className="flex-1">
                   <div className="font-bold text-danger-ink flex items-center justify-between">
                     <span>Permanently Delete Invoice</span>
-                    <span className="text-[10px] bg-danger-soft text-danger-ink px-2 py-0.5 rounded font-medium">Irreversible</span>
+                    <span className="text-[11px] bg-danger-soft text-danger-ink px-2 py-0.5 rounded font-medium">Irreversible</span>
                   </div>
                   <p className="text-ink-faint text-[11px] mt-1 leading-relaxed">
                     Completely removes the invoice record and any associated payment transactions from the database.

@@ -216,7 +216,7 @@ export const CustomerList: React.FC<CustomerListProps> = ({ onNewCustomer, onSel
         <div
           role="tablist"
           aria-label="Filter customers"
-          className="flex items-center gap-1 bg-surface border border-line rounded-card p-1 overflow-x-auto shadow-card"
+          className="flex items-center gap-1 bg-surface border border-line rounded-card p-1 overflow-x-auto"
         >
           {TABS.map((tab) => (
             <button

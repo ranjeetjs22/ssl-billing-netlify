@@ -202,7 +202,7 @@ export const CompanySettingsView: React.FC<CompanySettingsProps> = ({ onRefreshS
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="bg-surface border border-line p-5 rounded-card shadow-card">
+      <div className="bg-surface border border-line p-5 rounded-card">
         <h1 className="text-xl font-bold text-ink flex items-center gap-2">
           <span>Enterprise & GST Billing Settings</span>
           <span className="text-xs bg-accent-soft text-accent-ink font-semibold px-2 py-0.5 rounded-full border border-accent-line">
@@ -222,11 +222,11 @@ export const CompanySettingsView: React.FC<CompanySettingsProps> = ({ onRefreshS
       )}
 
       {/* Main Settings Form */}
-      <form onSubmit={handleSaveSettings} className="bg-surface border border-line rounded-card p-6 space-y-6 text-xs shadow-card">
+      <form onSubmit={handleSaveSettings} className="bg-surface border border-line rounded-card p-6 space-y-6 text-xs">
         {/* Brand & Logo Identity Box */}
         <div className="bg-surface-muted border border-line rounded-card p-5 flex flex-col md:flex-row items-center justify-between gap-5">
           <div className="flex items-center gap-4">
-            <div className="bg-surface p-3 rounded-card border border-line shadow-card flex items-center justify-center shrink-0 min-w-[120px] max-h-[80px]">
+            <div className="bg-surface p-3 rounded-card border border-line flex items-center justify-center shrink-0 min-w-[120px] max-h-[80px]">
               <SslLogo className="h-16 w-auto max-h-16 max-w-[140px]" customLogoUrl={settings.logo_url} />
             </div>
             <div>
@@ -234,7 +234,7 @@ export const CompanySettingsView: React.FC<CompanySettingsProps> = ({ onRefreshS
                 <h3 className="font-extrabold text-sm text-ink">
                   {settings.logo_url ? 'Custom Uploaded Logo' : 'Official Brand Logo (SSL Emblem)'}
                 </h3>
-                <span className="px-2 py-0.5 bg-positive-soft text-positive-ink border border-positive-line rounded-full text-[10px] font-bold">
+                <span className="px-2 py-0.5 bg-positive-soft text-positive-ink border border-positive-line rounded-full text-[11px] font-bold">
                   {settings.logo_url ? 'Active (Custom File)' : 'Active (Official Vector)'}
                 </span>
               </div>
@@ -255,7 +255,7 @@ export const CompanySettingsView: React.FC<CompanySettingsProps> = ({ onRefreshS
             />
             <label
               htmlFor="company-logo-upload-input"
-              className="cursor-pointer flex items-center gap-1.5 px-3 py-2 bg-accent-soft text-accent-ink border border-accent-line hover:border-accent rounded-card text-xs font-semibold shadow-card transition"
+              className="cursor-pointer flex items-center gap-1.5 px-3 py-2 bg-accent-soft text-accent-ink border border-accent-line hover:border-accent rounded-card text-xs font-semibold transition"
             >
               <Upload className="w-3.5 h-3.5" />
               <span>{settings.logo_url ? 'Change Logo Image' : 'Upload Logo File'}</span>
@@ -265,7 +265,7 @@ export const CompanySettingsView: React.FC<CompanySettingsProps> = ({ onRefreshS
               <button
                 type="button"
                 onClick={handleResetLogo}
-                className="flex items-center gap-1.5 px-3 py-2 bg-surface border border-danger-line text-danger-ink hover:bg-danger-soft rounded-card text-xs font-semibold shadow-card transition"
+                className="flex items-center gap-1.5 px-3 py-2 bg-surface border border-danger-line text-danger-ink hover:bg-danger-soft rounded-card text-xs font-semibold transition"
                 title="Reset to official built-in vector logo"
               >
                 <RotateCcw className="w-3.5 h-3.5" />
@@ -276,7 +276,7 @@ export const CompanySettingsView: React.FC<CompanySettingsProps> = ({ onRefreshS
             <a
               href="/logo.svg"
               download="SHREE_SANWARIYA_LOGISTICS_LOGO.svg"
-              className="flex items-center gap-1.5 px-3 py-2 bg-surface border border-line-strong text-ink-soft hover:bg-surface-muted rounded-card text-xs font-semibold shadow-card transition"
+              className="flex items-center gap-1.5 px-3 py-2 bg-surface border border-line-strong text-ink-soft hover:bg-surface-muted rounded-card text-xs font-semibold transition"
             >
               <Download className="w-3.5 h-3.5 text-ink-faint" />
               <span>Download SVG</span>
@@ -286,7 +286,7 @@ export const CompanySettingsView: React.FC<CompanySettingsProps> = ({ onRefreshS
 
         <div className="border-b border-line pb-3 flex items-center gap-2">
           <Building className="w-4 h-4 text-accent-ink" />
-          <h2 className="text-sm font-bold text-ink uppercase tracking-wider">Company & Legal Information</h2>
+          <h2 className="text-sm font-bold text-ink">Company & Legal Information</h2>
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -430,7 +430,7 @@ export const CompanySettingsView: React.FC<CompanySettingsProps> = ({ onRefreshS
                 </p>
               </div>
             </div>
-            <span className="text-[10px] font-bold px-2.5 py-1 bg-positive-soft text-positive-ink border border-positive-line rounded-full flex items-center gap-1">
+            <span className="text-[11px] font-bold px-2.5 py-1 bg-positive-soft text-positive-ink border border-positive-line rounded-full flex items-center gap-1">
               <span className="w-1.5 h-1.5 rounded-full bg-positive animate-pulse"></span>
               <span>GSTVerify Active</span>
             </span>
@@ -450,7 +450,7 @@ export const CompanySettingsView: React.FC<CompanySettingsProps> = ({ onRefreshS
           <button
             type="submit"
             disabled={saving}
-            className="px-5 py-2 bg-accent-strong hover:bg-accent-strong-hover text-on-accent rounded-card text-xs font-semibold shadow-card transition flex items-center gap-2 disabled:opacity-50"
+            className="px-5 py-2 bg-accent-strong hover:bg-accent-strong-hover text-on-accent rounded-card text-xs font-semibold transition flex items-center gap-2 disabled:opacity-50"
           >
             <Save className="w-4 h-4" />
             <span>{saving ? 'Saving...' : 'Update Settings'}</span>
@@ -459,11 +459,11 @@ export const CompanySettingsView: React.FC<CompanySettingsProps> = ({ onRefreshS
       </form>
 
       {/* Bank Accounts Section */}
-      <div className="bg-surface border border-line rounded-card p-6 space-y-5 text-xs shadow-card">
+      <div className="bg-surface border border-line rounded-card p-6 space-y-5 text-xs">
         <div className="border-b border-line pb-3 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <CreditCard className="w-4 h-4 text-positive-ink" />
-            <h2 className="text-sm font-bold text-ink uppercase tracking-wider">Settlement Bank Accounts</h2>
+            <h2 className="text-sm font-bold text-ink">Settlement Bank Accounts</h2>
           </div>
           <span className="text-[11px] text-ink-faint font-medium">Printed on A4 Tax Invoices</span>
         </div>
@@ -477,7 +477,7 @@ export const CompanySettingsView: React.FC<CompanySettingsProps> = ({ onRefreshS
                   <div className="font-bold text-sm text-ink flex items-center gap-2">
                     <span>{b.bank_name}</span>
                     {b.is_default && (
-                      <span className="text-[10px] bg-positive-soft text-positive-ink font-semibold px-2 py-0.5 rounded-full border border-positive-line">
+                      <span className="text-[11px] bg-positive-soft text-positive-ink font-semibold px-2 py-0.5 rounded-full border border-positive-line">
                         Default
                       </span>
                     )}

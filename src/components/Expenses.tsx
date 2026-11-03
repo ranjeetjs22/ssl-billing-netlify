@@ -116,7 +116,7 @@ export const Expenses: React.FC = () => {
           {PERIODS.map(p => (
             <button key={p.key} role="tab" aria-selected={period === p.key} onClick={() => setPeriod(p.key)}
               className={cx('px-2.5 h-7 rounded-[6px] text-[12px] whitespace-nowrap cursor-pointer transition-colors',
-                period === p.key ? 'bg-surface-muted text-ink font-medium shadow-card' : 'text-ink-faint hover:text-ink')}>
+                period === p.key ? 'bg-surface-muted text-ink font-medium' : 'text-ink-faint hover:text-ink')}>
               {p.label}
             </button>
           ))}
@@ -130,7 +130,7 @@ export const Expenses: React.FC = () => {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 items-start">
         <Card padded={false} className="lg:col-span-1">
           <div className="px-3.5 pt-3 pb-3 border-b border-line">
-            <div className="text-[10.5px] uppercase tracking-[0.06em] text-ink-faint font-medium">Total expenses</div>
+            <div className="text-[11px] tracking-[0.06em] text-ink-faint font-medium">Total expenses</div>
             {loading ? <div className="skeleton h-6 w-28 mt-1.5" /> :
               <div className="numeral text-[1.3rem] text-ink mt-1">₹{formatINR(total)}</div>}
             <div className="text-[11px] text-ink-faint">{items.length} entr{items.length === 1 ? 'y' : 'ies'}</div>

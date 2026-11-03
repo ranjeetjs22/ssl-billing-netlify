@@ -285,22 +285,22 @@ export const CustomerDetailModal: React.FC<CustomerDetailModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 bg-scrim backdrop-blur-[6px] flex items-center justify-center p-3 sm:p-4 z-50 overflow-y-auto">
+    <div className="fixed inset-0 bg-scrim flex items-center justify-center p-3 sm:p-4 z-50 overflow-y-auto">
       <div className="sheet border border-line rounded-overlay max-w-5xl w-full max-h-[94vh] flex flex-col shadow-overlay text-ink my-auto overflow-hidden">
         {/* Header */}
         <div className="p-4 sm:p-5 border-b border-line flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-surface-muted">
           <div className="flex items-center gap-3">
-            <div className="w-11 h-11 rounded-card bg-accent-soft border border-accent-line flex items-center justify-center text-accent-ink font-bold shrink-0 shadow-card">
+            <div className="w-11 h-11 rounded-card bg-accent-soft border border-accent-line flex items-center justify-center text-accent-ink font-bold shrink-0">
               <Building2 className="w-5 h-5" />
             </div>
             <div>
               <div className="flex items-center gap-2 flex-wrap">
                 <h2 className="text-base sm:text-lg font-bold text-ink">{customer.name}</h2>
-                <span className="text-[10px] bg-surface-sunken/80 text-ink-soft font-semibold px-2 py-0.5 rounded-md">
+                <span className="text-[11px] bg-surface-sunken/80 text-ink-soft font-semibold px-2 py-0.5 rounded-md">
                   {customer.payment_terms || 'Net 15 Days'}
                 </span>
                 {customer.credit_limit ? (
-                  <span className="text-[10px] bg-info-soft text-info-ink border border-info-line font-semibold px-2 py-0.5 rounded-md">
+                  <span className="text-[11px] bg-info-soft text-info-ink border border-info-line font-semibold px-2 py-0.5 rounded-md">
                     Limit: ₹{formatINR(customer.credit_limit)}
                   </span>
                 ) : null}
@@ -326,7 +326,7 @@ export const CustomerDetailModal: React.FC<CustomerDetailModalProps> = ({
           <div className="flex items-center gap-2 flex-wrap">
             <button
               onClick={() => printStatementPDF(customer, ledger, summary, companySettings, periodLabel, invoices, defaultBank)}
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-accent-strong hover:bg-accent-strong-hover text-on-accent rounded-card text-xs font-semibold shadow-card transition cursor-pointer"
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-accent-strong hover:bg-accent-strong-hover text-on-accent rounded-card text-xs font-semibold transition cursor-pointer"
               title="Download official PDF statement"
             >
               <Printer className="w-3.5 h-3.5" />
@@ -335,7 +335,7 @@ export const CustomerDetailModal: React.FC<CustomerDetailModalProps> = ({
 
             <button
               onClick={handleShareWhatsApp}
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-surface text-positive-ink border border-positive-line hover:bg-positive-soft hover:border-positive rounded-card text-xs font-semibold shadow-card transition cursor-pointer"
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-surface text-positive-ink border border-positive-line hover:bg-positive-soft hover:border-positive rounded-card text-xs font-semibold transition cursor-pointer"
               title="Share statement breakdown directly via WhatsApp"
             >
               <Share2 className="w-3.5 h-3.5" />
@@ -387,7 +387,7 @@ export const CustomerDetailModal: React.FC<CustomerDetailModalProps> = ({
               <span>Statement Period:</span>
             </span>
 
-            <div className="inline-flex rounded-control bg-surface p-0.5 border border-line shadow-card">
+            <div className="inline-flex rounded-control bg-surface p-0.5 border border-line">
               {[
                 { key: 'current_month', label: 'This Month' },
                 { key: 'prev_month', label: 'Last Month' },
@@ -401,7 +401,7 @@ export const CustomerDetailModal: React.FC<CustomerDetailModalProps> = ({
                   onClick={() => setPeriodFilterType(opt.key)}
                   className={`px-2.5 py-1 rounded-md text-[11px] font-medium transition cursor-pointer ${
                     periodFilterType === opt.key
-                      ? 'bg-accent-soft text-accent-ink border border-accent-line font-semibold shadow-card'
+                      ? 'bg-accent-soft text-accent-ink border border-accent-line font-semibold'
                       : 'text-ink-soft hover:text-ink hover:bg-surface-muted'
                   }`}
                 >
@@ -449,20 +449,20 @@ export const CustomerDetailModal: React.FC<CustomerDetailModalProps> = ({
             <div className="text-base font-bold text-ink font-mono mt-0.5">
               ₹{formatINR(summary.opening_balance)}
             </div>
-            <span className="text-[10px] text-ink-faint block mt-0.5">Prior to period start</span>
+            <span className="text-[11px] text-ink-faint block mt-0.5">Prior to period start</span>
           </div>
 
           <div className="bg-info-soft/50 border border-info-line rounded-card p-3">
             <div className="flex items-center justify-between">
               <span className="text-info-ink font-medium text-[11px]">Period Invoiced Sales</span>
-              <span className="text-[10px] font-semibold bg-info-soft text-info-ink px-1.5 py-0.2 rounded">
+              <span className="text-[11px] font-semibold bg-info-soft text-info-ink px-1.5 py-0.2 rounded">
                 {invoices.length} Bills
               </span>
             </div>
             <div className="text-base font-bold text-info-ink font-mono mt-0.5">
               ₹{formatINR(summary.period_invoiced)}
             </div>
-            <span className="text-[10px] text-info-ink/70 block mt-0.5">
+            <span className="text-[11px] text-info-ink/70 block mt-0.5">
               Tax: ₹{formatINR(summary.period_gst)}
             </span>
           </div>
@@ -470,14 +470,14 @@ export const CustomerDetailModal: React.FC<CustomerDetailModalProps> = ({
           <div className="bg-positive-soft border border-positive-line rounded-card p-3">
             <div className="flex items-center justify-between">
               <span className="text-positive-ink font-medium text-[11px]">Payments Realised</span>
-              <span className="text-[10px] font-semibold bg-positive-soft text-positive-ink px-1.5 py-0.2 rounded">
+              <span className="text-[11px] font-semibold bg-positive-soft text-positive-ink px-1.5 py-0.2 rounded">
                 {payments.length} Receipts
               </span>
             </div>
             <div className="text-base font-bold text-positive-ink font-mono mt-0.5">
               ₹{formatINR(summary.period_received)}
             </div>
-            <span className="text-[10px] text-positive-ink/70 block mt-0.5">Settled in period</span>
+            <span className="text-[11px] text-positive-ink/70 block mt-0.5">Settled in period</span>
           </div>
 
           <div className={`rounded-card p-3 border ${
@@ -491,7 +491,7 @@ export const CustomerDetailModal: React.FC<CustomerDetailModalProps> = ({
             }`}>
               ₹{formatINR(summary.closing_balance)}
             </div>
-            <div className="flex items-center justify-between text-[10px] text-ink-faint mt-0.5">
+            <div className="flex items-center justify-between text-[11px] text-ink-faint mt-0.5">
               <span>Overall: ₹{formatINR(summary.total_overall_outstanding)}</span>
               {summary.overdue_amount > 0 && (
                 <span className="text-danger-ink font-semibold">Overdue: ₹{formatINR(summary.overdue_amount)}</span>
@@ -557,10 +557,10 @@ export const CustomerDetailModal: React.FC<CustomerDetailModalProps> = ({
                     </span>
                   </div>
 
-                  <div className="bg-surface rounded-card border border-line overflow-hidden shadow-card">
+                  <div className="bg-surface rounded-card border border-line overflow-hidden">
                     <div className="overflow-x-auto">
                       <table className="w-full text-left text-xs">
-                        <thead className="bg-surface-muted text-ink-soft font-semibold uppercase text-[10px] border-b border-line">
+                        <thead className="bg-surface-muted text-ink-soft font-semibold text-[11px] border-b border-line">
                           <tr>
                             <th className="py-2.5 px-3">Date</th>
                             <th className="py-2.5 px-3">Invoice No</th>
@@ -613,7 +613,7 @@ export const CustomerDetailModal: React.FC<CustomerDetailModalProps> = ({
                                   ₹{formatINR(inv.balance ?? inv.grand_total)}
                                 </td>
                                 <td className="py-2.5 px-3 text-center">
-                                  <span className={`inline-block px-2 py-0.5 rounded-full text-[10px] font-semibold uppercase ${
+                                  <span className={`inline-block px-2 py-0.5 rounded-full text-[11px] font-semibold ${
                                     inv.display_status === 'paid' 
                                       ? 'text-positive-ink bg-positive-soft border border-positive-line' 
                                       : inv.display_status === 'overdue'
@@ -656,7 +656,7 @@ export const CustomerDetailModal: React.FC<CustomerDetailModalProps> = ({
                         {invoices.length > 0 && (
                           <tfoot className="bg-surface-muted font-semibold text-ink border-t border-line">
                             <tr>
-                              <td colSpan={4} className="py-2.5 px-3 text-right uppercase text-[10px] text-ink-faint">
+                              <td colSpan={4} className="py-2.5 px-3 text-right text-[11px] text-ink-faint">
                                 Period Invoices Total:
                               </td>
                               <td className="py-2.5 px-3 text-right font-mono">
@@ -705,13 +705,13 @@ export const CustomerDetailModal: React.FC<CustomerDetailModalProps> = ({
                     ['Customer since', customer.created_at ? String(customer.created_at).slice(0, 10) : ''],
                   ] as const).map(([label, value]) => (
                     <div key={label} className="bg-surface border border-line rounded-card px-3 py-2.5">
-                      <div className="text-[10px] uppercase tracking-wide text-ink-faint font-semibold">{label}</div>
+                      <div className="text-[11px] text-ink-faint font-semibold">{label}</div>
                       <div className="text-ink text-[13px] mt-0.5 break-words">{value || '-'}</div>
                     </div>
                   ))}
                   {customer.notes && (
                     <div className="md:col-span-2 bg-surface border border-line rounded-card px-3 py-2.5">
-                      <div className="text-[10px] uppercase tracking-wide text-ink-faint font-semibold">Notes</div>
+                      <div className="text-[11px] text-ink-faint font-semibold">Notes</div>
                       <div className="text-ink text-[13px] mt-0.5 whitespace-pre-line">{customer.notes}</div>
                     </div>
                   )}
@@ -745,9 +745,9 @@ export const CustomerDetailModal: React.FC<CustomerDetailModalProps> = ({
                     </span>
                   </div>
 
-                  <div className="bg-surface rounded-card border border-line overflow-hidden shadow-card">
+                  <div className="bg-surface rounded-card border border-line overflow-hidden">
                     <table className="w-full text-left text-xs">
-                      <thead className="bg-surface-muted text-ink-soft font-semibold uppercase text-[10px] border-b border-line">
+                      <thead className="bg-surface-muted text-ink-soft font-semibold text-[11px] border-b border-line">
                         <tr>
                           <th className="py-2.5 px-3">Date</th>
                           <th className="py-2.5 px-3">Particulars & Transaction Details</th>
@@ -826,9 +826,9 @@ export const CustomerDetailModal: React.FC<CustomerDetailModalProps> = ({
                     </span>
                   </div>
 
-                  <div className="bg-surface rounded-card border border-line overflow-hidden shadow-card">
+                  <div className="bg-surface rounded-card border border-line overflow-hidden">
                     <table className="w-full text-left text-xs">
-                      <thead className="bg-surface-muted text-ink-soft font-semibold uppercase text-[10px] border-b border-line">
+                      <thead className="bg-surface-muted text-ink-soft font-semibold text-[11px] border-b border-line">
                         <tr>
                           <th className="py-2.5 px-3">Date</th>
                           <th className="py-2.5 px-3">Mode & UTR / Cheque Ref</th>
@@ -897,7 +897,7 @@ export const CustomerDetailModal: React.FC<CustomerDetailModalProps> = ({
           spells out exactly what will change before anything is removed. */}
       {paymentToDelete && (
         <div
-          className="fixed inset-0 z-[60] flex items-end sm:items-center justify-center sm:p-4 bg-scrim backdrop-blur-[6px]"
+          className="fixed inset-0 z-[60] flex items-end sm:items-center justify-center sm:p-4 bg-scrim"
           onMouseDown={(e) => { if (e.target === e.currentTarget && !deletingPayment) setPaymentToDelete(null); }}
           onKeyDown={(e) => { if (e.key === 'Escape' && !deletingPayment) setPaymentToDelete(null); }}
         >

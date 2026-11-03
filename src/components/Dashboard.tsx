@@ -86,7 +86,7 @@ const Tile: React.FC<{
       onClick && 'cursor-pointer hover:bg-surface-muted transition-colors duration-[140ms]',
     )}>
       <div className="min-w-0">
-        <div className="text-[10.5px] uppercase tracking-[0.06em] text-ink-faint font-medium truncate">{label}</div>
+        <div className="text-[11px] tracking-[0.06em] text-ink-faint font-medium truncate">{label}</div>
         {loading
           ? <div className="skeleton h-5 w-20 mt-1.5" />
           : <div title={title} className={cx('numeral text-[1.05rem] sm:text-[1.15rem] leading-tight mt-1 truncate', {
@@ -206,7 +206,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
           {PERIODS.map(({ key, label }) => (
             <button key={key} role="tab" aria-selected={period === key} onClick={() => choosePeriod(key)}
               className={cx('px-2.5 h-7 rounded-[6px] text-[12px] whitespace-nowrap cursor-pointer transition-colors',
-                period === key ? 'bg-surface-muted text-ink font-medium shadow-card' : 'text-ink-faint hover:text-ink')}>
+                period === key ? 'bg-surface-muted text-ink font-medium' : 'text-ink-faint hover:text-ink')}>
               {label}
             </button>
           ))}
@@ -389,7 +389,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
                           <span className="block text-[12.5px] text-ink truncate">{name}</span>
                           <span className="flex items-center gap-1.5 text-[11px] text-ink-faint">
                             <span className="font-mono text-accent-ink">{inv.invoice_no}</span>
-                            {inv.doc_type === 'internal' && <span className="text-[9.5px] font-semibold border border-line rounded-[3px] px-1">NON-GST</span>}
+                            {inv.doc_type === 'internal' && <span className="text-[11px] font-semibold border border-line rounded-[3px] px-1">NON-GST</span>}
                           </span>
                         </span>
                         <span className="hidden sm:block text-[11px] text-ink-faint truncate">
@@ -426,7 +426,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
                   <div key={g.name} className="flex items-baseline justify-between gap-2">
                     <dt className="flex items-center gap-1.5 text-[12px] text-ink-soft">
                       <span className="status-dot" style={{ background: g.fill }} aria-hidden="true" />
-                      {g.name} <span className="text-ink-faint text-[10.5px]">{g.pct.toFixed(0)}%</span>
+                      {g.name} <span className="text-ink-faint text-[11px]">{g.pct.toFixed(0)}%</span>
                     </dt>
                     <dd className="font-mono text-[12px] text-ink">{full(g.value)}</dd>
                   </div>

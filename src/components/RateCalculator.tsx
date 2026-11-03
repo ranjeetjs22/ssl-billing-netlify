@@ -367,11 +367,11 @@ const RateChart: React.FC<{
           <caption className="sr-only">Zone to zone freight rate per kilogram</caption>
           <thead>
             <tr className="bg-surface-muted border-b border-line">
-              <th scope="col" className="py-3 px-4 text-left text-xs font-semibold uppercase tracking-wide text-ink-faint sticky left-0 bg-surface-muted">
+              <th scope="col" className="py-3 px-4 text-left text-xs font-semibold text-ink-faint sticky left-0 bg-surface-muted">
                 From ↓ / To →
               </th>
               {zones.map(z => (
-                <th key={z.code} scope="col" className="py-3 px-3 text-center text-xs font-semibold uppercase tracking-wide text-ink-faint whitespace-nowrap">
+                <th key={z.code} scope="col" className="py-3 px-3 text-center text-xs font-semibold text-ink-faint whitespace-nowrap">
                   {z.code}
                 </th>
               ))}
@@ -645,11 +645,11 @@ const SpecialRates: React.FC<{
           <table className="w-full text-sm min-w-[620px]">
             <thead className="bg-surface-muted border-b border-line">
               <tr>
-                <th scope="col" className="py-3 px-4 text-left text-xs font-semibold uppercase tracking-wide text-ink-faint">From</th>
-                <th scope="col" className="py-3 px-4 text-left text-xs font-semibold uppercase tracking-wide text-ink-faint">To</th>
-                <th scope="col" className="py-3 px-4 text-right text-xs font-semibold uppercase tracking-wide text-ink-faint">Rate /kg</th>
-                <th scope="col" className="py-3 px-4 text-left text-xs font-semibold uppercase tracking-wide text-ink-faint">Note</th>
-                {canEdit && editing && <th scope="col" className="py-3 px-4 text-right text-xs font-semibold uppercase tracking-wide text-ink-faint">Remove</th>}
+                <th scope="col" className="py-3 px-4 text-left text-xs font-semibold text-ink-faint">From</th>
+                <th scope="col" className="py-3 px-4 text-left text-xs font-semibold text-ink-faint">To</th>
+                <th scope="col" className="py-3 px-4 text-right text-xs font-semibold text-ink-faint">Rate /kg</th>
+                <th scope="col" className="py-3 px-4 text-left text-xs font-semibold text-ink-faint">Note</th>
+                {canEdit && editing && <th scope="col" className="py-3 px-4 text-right text-xs font-semibold text-ink-faint">Remove</th>}
               </tr>
             </thead>
             <tbody className="divide-y divide-line">
@@ -800,10 +800,10 @@ const ChargesEditor: React.FC<{
         <table className="w-full text-sm min-w-[560px]">
           <thead className="bg-surface-muted border-b border-line">
             <tr>
-              <th scope="col" className="py-3 px-4 text-left text-xs font-semibold uppercase tracking-wide text-ink-faint">Charge</th>
-              <th scope="col" className="py-3 px-4 text-right text-xs font-semibold uppercase tracking-wide text-ink-faint">Value</th>
-              <th scope="col" className="py-3 px-4 text-left text-xs font-semibold uppercase tracking-wide text-ink-faint">Unit</th>
-              <th scope="col" className="py-3 px-4 text-right text-xs font-semibold uppercase tracking-wide text-ink-faint">Minimum</th>
+              <th scope="col" className="py-3 px-4 text-left text-xs font-semibold text-ink-faint">Charge</th>
+              <th scope="col" className="py-3 px-4 text-right text-xs font-semibold text-ink-faint">Value</th>
+              <th scope="col" className="py-3 px-4 text-left text-xs font-semibold text-ink-faint">Unit</th>
+              <th scope="col" className="py-3 px-4 text-right text-xs font-semibold text-ink-faint">Minimum</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-line">
@@ -1024,7 +1024,7 @@ export const RateCalculator: React.FC<{ onCreateInvoice?: (q: Quote) => void }> 
       {toast && <Toast message={toast} onDismiss={() => setToast(null)} />}
 
       <div role="tablist" aria-label="Rate calculator views"
-        className="flex items-center gap-1 bg-surface border border-line rounded-card p-1 overflow-x-auto shadow-card w-full sm:w-fit">
+        className="flex items-center gap-1 bg-surface border border-line rounded-card p-1 overflow-x-auto w-full sm:w-fit">
         {TABS.map(t => (
           <button
             key={t.key}
@@ -1337,7 +1337,7 @@ export const RateCalculator: React.FC<{ onCreateInvoice?: (q: Quote) => void }> 
                   <div className="p-4 sm:p-5 bg-accent-soft border-b border-accent-line">
                     <div className="flex items-center gap-2 text-accent-ink">
                       <Truck className="w-4 h-4" aria-hidden="true" />
-                      <span className="text-sm font-bold uppercase tracking-wide">Surface · Part truck load</span>
+                      <span className="text-sm font-bold">Surface · Part truck load</span>
                     </div>
                     <div className="mt-3 flex items-end justify-between gap-3">
                       <div className="min-w-0">

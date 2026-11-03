@@ -315,7 +315,7 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
                 if (v === 'multi' && !bulkCustomerId && curInvoice?.customer_id) pickBulkCustomer(curInvoice.customer_id);
               }}
               className={cx('px-3 min-h-[36px] rounded-[6px] text-[12.5px] whitespace-nowrap cursor-pointer transition-colors',
-                mode === v ? 'bg-surface-muted text-ink font-medium shadow-card' : 'text-ink-faint hover:text-ink')}>
+                mode === v ? 'bg-surface-muted text-ink font-medium' : 'text-ink-faint hover:text-ink')}>
               {label}
             </button>
           ))}
@@ -471,7 +471,7 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
                   </span>
                   <span className="text-right shrink-0">
                     <span className="block numeral text-[13px] text-ink">₹{formatINR(bal)}</span>
-                    <span className="block text-[10px] text-ink-faint">due</span>
+                    <span className="block text-[11px] text-ink-faint">due</span>
                   </span>
                 </button>
               );
@@ -575,7 +575,7 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
                   'flex-1 min-w-[68px] min-h-[36px] px-3 rounded-[6px] text-[12.5px] whitespace-nowrap cursor-pointer',
                   'transition-[background-color,color] duration-[140ms]',
                   method === m.value
-                    ? 'bg-surface-muted text-ink font-medium shadow-card'
+                    ? 'bg-surface-muted text-ink font-medium'
                     : 'text-ink-faint hover:text-ink'
                 )}
               >

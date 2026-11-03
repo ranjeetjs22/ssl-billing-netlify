@@ -78,8 +78,8 @@ function Cell({ v, kind }: { v: any; kind?: Kind }) {
   if (kind === 'pct' && isNum(v)) return <span className="font-mono">{v}%</span>;
   if (kind === 'num' && isNum(v)) return <span className="font-mono">{v}</span>;
   if (kind === 'mono') return <span className="font-mono">{String(v)}</span>;
-  if (v === 'Non-GST') return <span className="text-[10px] font-semibold border border-line rounded-[3px] px-1 py-px text-ink-soft">NON-GST</span>;
-  if (v === 'GST') return <span className="text-[10px] font-semibold text-ink-faint">GST</span>;
+  if (v === 'Non-GST') return <span className="text-[11px] font-semibold border border-line rounded-[3px] px-1 py-px text-ink-soft">NON-GST</span>;
+  if (v === 'GST') return <span className="text-[11px] font-semibold text-ink-faint">GST</span>;
   if (v === 'Not costed') return <span className="text-ink-faint">Not costed</span>;
   return <>{String(v)}</>;
 }
@@ -106,7 +106,7 @@ const SectionTable: React.FC<{ sec: Section; compact: boolean; multi: boolean }>
               <tr className="sheet">
                 {cols.map(c => (
                   <th key={c.key} scope="col"
-                    className={cx('px-2.5 py-2 font-medium text-[10.5px] uppercase tracking-[0.04em] text-ink-faint whitespace-nowrap border-b border-line',
+                    className={cx('px-2.5 py-2 font-medium text-[11px] tracking-[0.04em] text-ink-faint whitespace-nowrap border-b border-line',
                       right(c.kind) ? 'text-right' : 'text-left')}>
                     {c.label}
                   </th>
@@ -146,10 +146,10 @@ const SectionTable: React.FC<{ sec: Section; compact: boolean; multi: boolean }>
 /* ------------------------------------------------------------------ tiles */
 const Tile: React.FC<{ label: string; value: string; sub?: string; tone?: string; loading?: boolean }> = ({ label, value, sub, tone, loading }) => (
   <div className="px-3 py-2.5 min-w-0">
-    <div className="text-[10.5px] uppercase tracking-[0.06em] text-ink-faint font-medium truncate">{label}</div>
+    <div className="text-[11px] tracking-[0.06em] text-ink-faint font-medium truncate">{label}</div>
     {loading ? <div className="skeleton h-5 w-20 mt-1" /> :
       <div className={cx('numeral text-[1.02rem] leading-tight mt-0.5 truncate', tone || 'text-ink')}>{value}</div>}
-    {sub && !loading && <div className="text-[10.5px] text-ink-faint truncate">{sub}</div>}
+    {sub && !loading && <div className="text-[11px] text-ink-faint truncate">{sub}</div>}
   </div>
 );
 
@@ -262,7 +262,7 @@ export const Reports: React.FC = () => {
           {PRESETS.map(p => (
             <button key={p.key} role="tab" aria-selected={preset === p.key} onClick={() => setPreset(p.key)}
               className={cx('px-2.5 h-7 rounded-[6px] text-[12px] whitespace-nowrap cursor-pointer transition-colors',
-                preset === p.key ? 'bg-surface-muted text-ink font-medium shadow-card' : 'text-ink-faint hover:text-ink')}>
+                preset === p.key ? 'bg-surface-muted text-ink font-medium' : 'text-ink-faint hover:text-ink')}>
               {p.label}
             </button>
           ))}
@@ -312,7 +312,7 @@ export const Reports: React.FC = () => {
                 {available.map(r => (
                   <button key={r.key} role="tab" aria-selected={active === r.key} onClick={() => setActive(r.key)}
                     className={cx('px-2.5 h-7 rounded-[6px] text-[12px] whitespace-nowrap cursor-pointer transition-colors',
-                      active === r.key ? 'bg-surface-muted text-ink font-medium shadow-card' : 'text-ink-faint hover:text-ink')}>
+                      active === r.key ? 'bg-surface-muted text-ink font-medium' : 'text-ink-faint hover:text-ink')}>
                     {r.label}
                   </button>
                 ))}

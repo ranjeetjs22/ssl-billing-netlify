@@ -32,7 +32,13 @@ const ScreenLoader = () => (
 
 function MainApp() {
   const { user, loading } = useAuth();
-  const [activeTab, setActiveTab] = useState('dashboard');
+  // ?tab=invoices opens a screen directly (PWA shortcuts, shared links)
+  const [activeTab, setActiveTab] = useState(() => {
+    try {
+      const t = new URLSearchParams(window.location.search).get('tab');
+      return t && ['dashboard', 'invoices', 'customers', 'payments', 'rates', 'expenses', 'reports', 'settings', 'users'].includes(t) ? t : 'dashboard';
+    } catch { return 'dashboard'; }
+  });
   const [sidebarOpenMobile, setSidebarOpenMobile] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState<boolean>(() => {
     try { return localStorage.getItem('ssl_sidebar_collapsed') === '1'; } catch { return false; }
@@ -121,7 +127,7 @@ function MainApp() {
   }
 
   return (
-    <div className="min-h-dvh text-ink flex selection:bg-accent-line selection:text-ink">
+    <div className="min-h-dvh text-ink flex">
       <a
         href="#main-content"
         className="sr-only focus:not-sr-only focus:absolute focus:top-3 focus:left-3 focus:z-[100]
@@ -151,11 +157,10 @@ function MainApp() {
         companySettings={companySettings}
       />
 
-      {/* Main content. Padding tracks the floating rail: 12px inset + its width
-          + a 12px gutter, so the island never sits under the content column. */}
+      {/* Main column; its left padding tracks the rail width */}
       <div
-        className={`flex-1 flex flex-col min-w-0 transition-[padding] duration-[240ms] ease-out ${
-          sidebarCollapsed ? 'lg:pl-[88px]' : 'lg:pl-[252px]'
+        className={`flex-1 flex flex-col min-w-0 transition-[padding] duration-[180ms] ease-out ${
+          sidebarCollapsed ? 'lg:pl-14' : 'lg:pl-[220px]'
         }`}
       >
         {/* Top Header */}
@@ -177,7 +182,7 @@ function MainApp() {
         {/* Main Body View */}
         <main
           id="main-content"
-          className="flex-1 px-3 py-4 sm:px-6 sm:py-6 max-w-[1560px] w-full mx-auto pb-28 lg:pb-8"
+          className="flex-1 px-3 pt-3 sm:px-6 sm:pt-5 max-w-[1440px] w-full mx-auto pb-[calc(76px+env(safe-area-inset-bottom))] lg:pb-8"
         >
           {activeTab === 'dashboard' && (
             <React.Suspense fallback={<ScreenLoader />}>
@@ -268,17 +273,6 @@ function MainApp() {
           {activeTab === 'users' && <UserManagementView />}
         </main>
 
-        {/* Footer */}
-        <footer className="hidden lg:block border-t border-line bg-surface py-4 text-center text-xs text-ink-faint mt-auto">
-          <div className="max-w-[1600px] mx-auto px-6 flex flex-col sm:flex-row items-center justify-between gap-2">
-            <span className="font-medium">
-              &copy; {new Date().getFullYear()} {companySettings.name} · GST Transport &amp; Freight Billing
-            </span>
-            <span className="font-mono text-[11px] text-ink-soft bg-surface-sunken px-2.5 py-0.5 rounded border border-line">
-              GSTIN: {companySettings.gstin} · SAC 996511
-            </span>
-          </div>
-        </footer>
 
         <MobileNav
           activeTab={activeTab}

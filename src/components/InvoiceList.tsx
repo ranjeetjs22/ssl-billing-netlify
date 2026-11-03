@@ -165,7 +165,7 @@ export const InvoiceList: React.FC<InvoiceListProps> = ({
           <div className="flex items-center gap-1.5 min-w-0">
             <span className="font-mono font-bold text-accent-ink truncate">{inv.invoice_no}</span>
             {inv.doc_type === 'internal' && (
-              <span className="shrink-0 px-1.5 py-px rounded-[4px] border border-line text-[10px] font-semibold text-ink-soft">NON-GST</span>
+              <span className="shrink-0 px-1.5 py-px rounded-[4px] border border-line text-[11px] font-semibold text-ink-soft">NON-GST</span>
             )}
           </div>
           <div className="text-xs text-ink-faint">{inv.invoice_date}</div>
@@ -330,7 +330,7 @@ export const InvoiceList: React.FC<InvoiceListProps> = ({
         <div
           role="tablist"
           aria-label="Filter invoices by status"
-          className="flex items-center gap-1 bg-surface border border-line rounded-card p-1 overflow-x-auto shadow-card"
+          className="flex items-center gap-1 bg-surface border border-line rounded-card p-1 overflow-x-auto"
         >
           {TABS.map((tab) => (
             <button
@@ -356,7 +356,7 @@ export const InvoiceList: React.FC<InvoiceListProps> = ({
             <button key={k} role="tab" aria-selected={docFilter === k}
               onClick={() => { setDocFilter(k); setPage(1); }}
               className={cx('px-3 h-8 rounded-[6px] text-[13px] whitespace-nowrap cursor-pointer transition-colors',
-                docFilter === k ? 'bg-surface-muted text-ink font-medium shadow-card' : 'text-ink-faint hover:text-ink')}>
+                docFilter === k ? 'bg-surface-muted text-ink font-medium' : 'text-ink-faint hover:text-ink')}>
               {label}
             </button>
           ))}

@@ -755,7 +755,7 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({ invoiceToEdit, initi
   const curBuyer = customers.find(c => c.id === selectedCustomerId);
 
   return (
-    <div className="fixed inset-0 bg-scrim backdrop-blur-[6px] flex items-center justify-center p-4 z-50 overflow-y-auto">
+    <div className="fixed inset-0 bg-scrim flex items-center justify-center p-4 z-50 overflow-y-auto">
       <div className="sheet border border-line rounded-overlay max-w-6xl w-full max-h-[94vh] flex flex-col shadow-overlay text-ink my-auto">
         {/* Header */}
         <div className="p-4 border-b border-line flex items-center justify-between">
@@ -771,7 +771,7 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({ invoiceToEdit, initi
                     : isInternal ? 'New non-GST bill' : 'New GST tax invoice'}
                 </h2>
                 {isEditMode && (
-                  <span className="px-2 py-0.5 bg-accent-soft text-accent-ink text-[10px] font-bold rounded-md">
+                  <span className="px-2 py-0.5 bg-accent-soft text-accent-ink text-[11px] font-bold rounded-md">
                     EDIT MODE
                   </span>
                 )}
@@ -831,7 +831,7 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({ invoiceToEdit, initi
                   disabled={isEditMode && docType !== o.v}
                   onClick={() => setDocType(o.v)}
                   className={`px-3 h-8 rounded-[6px] text-xs whitespace-nowrap transition-colors cursor-pointer disabled:cursor-not-allowed disabled:opacity-40 ${
-                    docType === o.v ? 'bg-surface-muted text-ink font-semibold shadow-card' : 'text-ink-faint hover:text-ink'}`}>
+                    docType === o.v ? 'bg-surface-muted text-ink font-semibold' : 'text-ink-faint hover:text-ink'}`}>
                   {o.label}
                 </button>
               ))}
@@ -874,20 +874,20 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({ invoiceToEdit, initi
           {/* ========================================================================= */}
           {/* BILL TO & SHIP TO SECTION */}
           {/* ========================================================================= */}
-          <div className="border border-line rounded-card overflow-hidden shadow-card">
+          <div className="border border-line rounded-card overflow-hidden">
             <div className="bg-surface-sunken px-4 py-2.5 border-b border-line flex items-center justify-between">
-              <div className="flex items-center gap-2 font-bold text-ink text-xs uppercase tracking-wide">
+              <div className="flex items-center gap-2 font-bold text-ink text-xs">
                 <Building2 className="w-4 h-4 text-accent-ink" />
                 <span>Bill To & Ship To (Parties & Consignment Routing)</span>
               </div>
-              <span className="text-[10px] text-ink-faint font-medium">GST Compliant Two-Party Dispatch Model</span>
+              <span className="text-[11px] text-ink-faint font-medium">GST Compliant Two-Party Dispatch Model</span>
             </div>
 
             <div className="p-4 grid grid-cols-1 md:grid-cols-2 gap-5 bg-surface">
               {/* BILL TO (BUYER) CARD */}
               <div className="space-y-3 p-3.5 bg-surface-muted rounded-card border border-line">
                 <div className="flex items-center justify-between">
-                  <div className="text-[11px] font-bold text-accent-ink uppercase tracking-wider flex items-center gap-1.5">
+                  <div className="text-[11px] font-bold text-accent-ink flex items-center gap-1.5">
                     <span>1. Bill To (Billed Party / Buyer) *</span>
                   </div>
 
@@ -895,7 +895,7 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({ invoiceToEdit, initi
                   <button
                     type="button"
                     onClick={() => setShowQuickAddCust(true)}
-                    className="inline-flex items-center gap-1 px-2.5 py-1 bg-accent-strong hover:bg-accent-strong-hover text-on-accent rounded-control text-[11px] font-semibold transition shadow-card cursor-pointer"
+                    className="inline-flex items-center gap-1 px-2.5 py-1 bg-accent-strong hover:bg-accent-strong-hover text-on-accent rounded-control text-[11px] font-semibold transition cursor-pointer"
                   >
                     <UserPlus className="w-3 h-3" />
                     <span>+ Quick Add Customer</span>
@@ -923,7 +923,7 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({ invoiceToEdit, initi
                     <div className="font-bold text-ink">{curBuyer.name}</div>
                     <div>{curBuyer.address || 'Address not specified'}</div>
                     <div>{[curBuyer.city, curBuyer.state, curBuyer.pin].filter(Boolean).join(', ')}</div>
-                    <div className="flex items-center gap-3 pt-1 text-[10px] text-ink-faint font-mono">
+                    <div className="flex items-center gap-3 pt-1 text-[11px] text-ink-faint font-mono">
                       <span>GSTIN: <strong className="text-ink">{curBuyer.gstin || 'Unregistered'}</strong></span>
                       <span>·</span>
                       <span>Terms: <strong className="text-ink font-sans">{curBuyer.payment_terms || 'Net 15 Days'}</strong></span>
@@ -935,7 +935,7 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({ invoiceToEdit, initi
               {/* SHIP TO (CONSIGNEE / DELIVERY SITE) CARD */}
               <div className="space-y-3 p-3.5 bg-surface-muted rounded-card border border-line">
                 <div className="flex items-center justify-between">
-                  <div className="text-[11px] font-bold text-accent-ink uppercase tracking-wider flex items-center gap-1.5">
+                  <div className="text-[11px] font-bold text-accent-ink flex items-center gap-1.5">
                     <span>2. Ship To (Consignee / Delivery Site)</span>
                   </div>
 
@@ -989,7 +989,7 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({ invoiceToEdit, initi
                           type="button"
                           disabled={fetchingGstShipTo || shipToGstin.length !== 15}
                           onClick={() => fetchShipToGST(shipToGstin, true)}
-                          className="text-[10px] text-accent-ink hover:text-accent-ink font-semibold flex items-center gap-1 cursor-pointer disabled:opacity-40"
+                          className="text-[11px] text-accent-ink hover:text-accent-ink font-semibold flex items-center gap-1 cursor-pointer disabled:opacity-40"
                         >
                           {fetchingGstShipTo ? (
                             <>
@@ -1045,7 +1045,7 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({ invoiceToEdit, initi
                             type="button"
                             disabled={fetchingPinShipTo || shipToPin.length !== 6}
                             onClick={() => fetchShipToPIN(shipToPin)}
-                            className="text-[9px] text-accent-ink font-semibold cursor-pointer disabled:opacity-40"
+                            className="text-[11px] text-accent-ink font-semibold cursor-pointer disabled:opacity-40"
                           >
                             {fetchingPinShipTo ? '...' : 'Fetch'}
                           </button>
@@ -1104,10 +1104,10 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({ invoiceToEdit, initi
           {/* Consignments / LR Lines - a single bill can cover many LRs */}
           <div className="bg-surface-muted p-4 rounded-card border border-line space-y-3">
             <div className="flex items-center justify-between border-b border-line pb-2">
-              <span className="font-bold text-ink uppercase tracking-wider text-[11px] flex items-center gap-1.5">
+              <span className="font-bold text-ink text-[11px] flex items-center gap-1.5">
                 <Truck className="w-3.5 h-3.5 text-accent-ink" />
                 <span>Consignments / LR Details</span>
-                <span className="ml-1 px-1.5 py-0.5 rounded-md bg-accent-soft text-accent-ink text-[10px] font-bold normal-case tracking-normal">
+                <span className="ml-1 px-1.5 py-0.5 rounded-md bg-accent-soft text-accent-ink text-[11px] font-bold normal-case tracking-normal">
                   {lrLines.length} LR{lrLines.length === 1 ? '' : 's'}
                 </span>
               </span>
@@ -1156,7 +1156,7 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({ invoiceToEdit, initi
             <div className="overflow-x-auto -mx-1 px-1">
               <table className="w-full min-w-[1080px] text-xs border-separate border-spacing-y-1.5 [&_tbody_td]:align-top">
                 <thead>
-                  <tr className="text-[10px] uppercase tracking-wider text-ink-faint">
+                  <tr className="text-[11px] text-ink-faint">
                     <th className="text-left font-semibold pl-1 w-6">#</th>
                     <th className="text-left font-semibold">LR / Bilty No</th>
                     <th className="text-left font-semibold">LR Date</th>
@@ -1238,12 +1238,12 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({ invoiceToEdit, initi
                           const sug = rateSuggestions[line.key];
                           if (!sug) return null;
                           if (line.rate_auto || line.rate_kg === sug.rate) {
-                            return <div className="text-[10px] text-ink-faint text-right mt-0.5 whitespace-nowrap">{sug.label}</div>;
+                            return <div className="text-[11px] text-ink-faint text-right mt-0.5 whitespace-nowrap">{sug.label}</div>;
                           }
                           return (
                             <button type="button"
                               onClick={() => updateLrLine(line.key, { rate_kg: sug.rate, rate_auto: true })}
-                              className="block w-full text-[10px] text-accent-ink text-right mt-0.5 whitespace-nowrap hover:underline cursor-pointer"
+                              className="block w-full text-[11px] text-accent-ink text-right mt-0.5 whitespace-nowrap hover:underline cursor-pointer"
                               title={sug.label}>
                               Chart: ₹{sug.rate}
                             </button>
@@ -1299,7 +1299,7 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({ invoiceToEdit, initi
                       </td>
                       <td className="pr-1.5 text-center">
                         {isInternal ? (
-                          <span className="text-[10px] text-ink-faint" title="On non-GST bills vendor GST is part of the cost">cost</span>
+                          <span className="text-[11px] text-ink-faint" title="On non-GST bills vendor GST is part of the cost">cost</span>
                         ) : (
                           <input
                             type="checkbox"
@@ -1506,7 +1506,7 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({ invoiceToEdit, initi
           {calcResult && (
             <div className="bg-accent-soft p-4 rounded-card border border-accent-line">
               <div className="flex items-center justify-between text-xs mb-3 border-b border-accent-line pb-2">
-                <span className="font-bold text-accent-ink uppercase tracking-wider">{isInternal ? 'Bill summary (no GST)' : 'GST invoice summary'}</span>
+                <span className="font-bold text-accent-ink">{isInternal ? 'Bill summary (no GST)' : 'GST invoice summary'}</span>
                 {!isInternal && <span className="text-ink-faint">SAC Code: {sac}</span>}
               </div>
 
@@ -1613,7 +1613,7 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({ invoiceToEdit, initi
             <button
               type="submit"
               disabled={saving}
-              className="px-5 py-2 bg-accent-strong hover:bg-accent-strong-hover text-on-accent rounded-card text-xs font-semibold shadow-card transition flex items-center gap-2 disabled:opacity-50 cursor-pointer"
+              className="px-5 py-2 bg-accent-strong hover:bg-accent-strong-hover text-on-accent rounded-card text-xs font-semibold transition flex items-center gap-2 disabled:opacity-50 cursor-pointer"
             >
               <Save className="w-4 h-4" />
               <span>
@@ -1634,7 +1634,7 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({ invoiceToEdit, initi
       {/* QUICK ADD CUSTOMER SUB-MODAL */}
       {/* ========================================================================= */}
       {showQuickAddCust && (
-        <div className="fixed inset-0 bg-scrim backdrop-blur-[6px] flex items-center justify-center p-4 z-60 overflow-y-auto">
+        <div className="fixed inset-0 bg-scrim flex items-center justify-center p-4 z-60 overflow-y-auto">
           <div className="sheet border border-line rounded-overlay max-w-xl w-full p-5 shadow-overlay text-ink my-auto">
             <div className="flex items-center justify-between pb-3 border-b border-line">
               <div className="flex items-center gap-2">
@@ -1678,7 +1678,7 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({ invoiceToEdit, initi
                       type="button"
                       disabled={fetchingGstQuick || newCustGstin.length !== 15}
                       onClick={() => fetchQuickGST(newCustGstin, true)}
-                      className="text-[10px] text-accent-ink hover:text-accent-ink font-semibold flex items-center gap-1 cursor-pointer disabled:opacity-40"
+                      className="text-[11px] text-accent-ink hover:text-accent-ink font-semibold flex items-center gap-1 cursor-pointer disabled:opacity-40"
                     >
                       {fetchingGstQuick ? (
                         <>
@@ -1771,7 +1771,7 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({ invoiceToEdit, initi
                       type="button"
                       disabled={fetchingPinQuick || newCustPin.length !== 6}
                       onClick={() => fetchQuickPIN(newCustPin)}
-                      className="text-[10px] text-accent-ink font-semibold cursor-pointer disabled:opacity-40"
+                      className="text-[11px] text-accent-ink font-semibold cursor-pointer disabled:opacity-40"
                     >
                       {fetchingPinQuick ? '...' : 'Fetch'}
                     </button>
@@ -1818,7 +1818,7 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({ invoiceToEdit, initi
                 <button
                   type="submit"
                   disabled={savingCust}
-                  className="px-4 py-1.5 bg-accent-strong hover:bg-accent-strong-hover text-on-accent rounded-card text-xs font-semibold shadow-card transition flex items-center gap-1.5 disabled:opacity-50 cursor-pointer"
+                  className="px-4 py-1.5 bg-accent-strong hover:bg-accent-strong-hover text-on-accent rounded-card text-xs font-semibold transition flex items-center gap-1.5 disabled:opacity-50 cursor-pointer"
                 >
                   <Check className="w-3.5 h-3.5" />
                   <span>{savingCust ? 'Saving...' : 'Save & Select Customer'}</span>

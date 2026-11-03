@@ -1,287 +1,237 @@
 @import "tailwindcss";
 
 /* ==========================================================================
-   SSL Billing - visual language
+   SSL Billing - "Ledger"
    --------------------------------------------------------------------------
-   Deep charcoal, glass surfaces, restrained ember.
+   A quiet working surface for people who bill all day. Solid paper surfaces
+   separated by hairlines, ink-dark text, one ink-blue accent for actions and
+   the current place. No glass, glow, gradients or decorative layers: the
+   figures are the content.
 
-   Surfaces are translucent white-over-charcoal rather than solid fills, so
-   panels layer and the ambient light reads through them. Orange is an accent,
-   not a theme: it marks the primary action, the active destination, and the
-   one series that matters - nothing else.
+   Light is the default. Dark re-points the same tokens; components never use
+   `dark:` variants or raw colours.
 
-   Dark is the default. Light re-points the same tokens; no `dark:` variant
-   exists anywhere in the codebase.
+   The Tailwind type scale, weights and radii are re-defined here, so every
+   screen is compact by construction (base 14px, nothing heavier than 600).
    ========================================================================== */
 @theme {
-  /* ---- Ember: used sparingly ------------------------------------------- */
-  --color-ember-100: #FFE7DC;
-  --color-ember-200: #FFC4A8;
-  --color-ember-300: #FF9E74;
-  --color-ember-400: #FF7A41;
-  --color-ember-500: #FF6A2B;
-  --color-ember-600: #E8541A;
-  --color-ember-700: #C24412;
-  --color-ember-800: #8E310C;
+  /* ---- Type ------------------------------------------------------------- */
+  --font-sans: "IBM Plex Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
 
-  /* ---- Charcoal ramp ---------------------------------------------------- */
-  --color-char-50:  #F7F7F8;
-  --color-char-100: #EDEDEF;
-  --color-char-200: #D6D6DA;
-  --color-char-300: #A8A8B0;
-  --color-char-400: #77777F;
-  --color-char-500: #52525A;
-  --color-char-600: #34343A;
-  --color-char-700: #212126;
-  --color-char-800: #141418;
-  --color-char-900: #0D0D10;
-  --color-char-950: #08080A;
+  --text-xs: 0.75rem;      --text-xs--line-height: 1rem;           /* 12 */
+  --text-sm: 0.8125rem;    --text-sm--line-height: 1.25rem;        /* 13 */
+  --text-base: 0.875rem;   --text-base--line-height: 1.375rem;     /* 14 */
+  --text-lg: 1rem;         --text-lg--line-height: 1.5rem;         /* 16 */
+  --text-xl: 1.125rem;     --text-xl--line-height: 1.625rem;       /* 18 */
+  --text-2xl: 1.25rem;     --text-2xl--line-height: 1.75rem;       /* 20 */
+  --text-3xl: 1.5rem;      --text-3xl--line-height: 2rem;          /* 24 */
+  --text-4xl: 1.75rem;     --text-4xl--line-height: 2.25rem;       /* 28 */
+
+  /* Nothing on screen is heavier than semibold */
+  --font-weight-bold: 600;
+  --font-weight-extrabold: 600;
+  --font-weight-black: 600;
+
+  --tracking-wide: 0.01em;
+  --tracking-wider: 0.02em;
+  --tracking-widest: 0.03em;
+
+  /* ---- Radius: crisp, not bubbly ---------------------------------------- */
+  --radius-sm: 0.25rem;
+  --radius-md: 0.375rem;
+  --radius-lg: 0.5rem;
+  --radius-xl: 0.5rem;
+  --radius-2xl: 0.625rem;
+  --radius-3xl: 0.75rem;
+  --radius-control: 0.375rem;   /* 6  - inputs, buttons */
+  --radius-card: 0.5rem;        /* 8  - cards, tables */
+  --radius-overlay: 0.625rem;   /* 10 - dialogs, sheets */
 
   /* ======================================================================
-     DEFAULT = DARK. Surfaces are glass: white at low alpha over charcoal.
+     LIGHT (default)
      ====================================================================== */
-  --color-canvas:         #08080A;
-  --color-surface:        rgb(255 255 255 / 0.034);
-  --color-surface-muted:  rgb(255 255 255 / 0.062);
-  --color-surface-sunken: rgb(0 0 0 / 0.30);
-  --color-line:           rgb(255 255 255 / 0.075);
-  --color-line-strong:    rgb(255 255 255 / 0.16);
-  --color-ink:            #ECECEF;
-  --color-ink-soft:       #9C9CA5;
-  --color-ink-faint:      #85858F;   /* 4.5:1+ on every dark surface */
-  --color-ink-inverse:    #08080A;
-  --color-scrim:          rgb(0 0 0 / 0.72);
-  --color-sheet:          #121217;   /* dialogs, drawers, tooltips: opaque */
+  --color-canvas:         #F4F4F1;
+  --color-surface:        #FFFFFF;
+  --color-surface-muted:  #F8F8F6;
+  --color-surface-sunken: #EEEEEA;
+  --color-sheet:          #FFFFFF;
+  --color-line:           #E2E2DD;
+  --color-line-strong:    #C9C9C2;
+  --color-ink:            #191918;
+  --color-ink-soft:       #484845;
+  --color-ink-faint:      #6A6A65;   /* 5.2:1 on white */
+  --color-ink-inverse:    #FFFFFF;
+  --color-scrim:          rgb(24 24 22 / 0.42);
 
-  --color-accent:               #FF6A2B;
-  --color-accent-hover:         #FF7A41;
-  --color-accent-strong:        #E8541A;
-  --color-accent-strong-hover:  #FF6A2B;
-  --color-on-accent:            #FFFFFF;
-  --color-accent-soft:          rgb(255 106 43 / 0.10);
-  --color-accent-line:          rgb(255 106 43 / 0.28);
-  --color-accent-ink:           #FF9E74;
+  --color-accent:              #2450D6;
+  --color-accent-hover:        #1D43B8;
+  --color-accent-strong:       #1F47C4;   /* white text 6.9:1 */
+  --color-accent-strong-hover: #193AA3;
+  --color-on-accent:           #FFFFFF;
+  --color-accent-soft:         #EDF1FC;
+  --color-accent-line:         #C5D3F5;
+  --color-accent-ink:          #1B3EA8;
 
-  --color-positive:      #3DD68C;
-  --color-positive-soft: rgb(61 214 140 / 0.10);
-  --color-positive-line: rgb(61 214 140 / 0.26);
-  --color-positive-ink:  #6EE7AC;
+  --color-positive:      #1C7C4A;
+  --color-positive-soft: #EAF5EF;
+  --color-positive-line: #BCDDC9;
+  --color-positive-ink:  #14633A;
 
-  --color-warning:       #F0B429;
-  --color-warning-soft:  rgb(240 180 41 / 0.10);
-  --color-warning-line:  rgb(240 180 41 / 0.26);
-  --color-warning-ink:   #F7CB5E;
+  --color-warning:       #B06A00;
+  --color-warning-soft:  #FBF3E2;
+  --color-warning-line:  #E9D2A3;
+  --color-warning-ink:   #865000;
 
-  --color-danger:        #F2555A;
-  --color-danger-soft:   rgb(242 85 90 / 0.10);
-  --color-danger-line:   rgb(242 85 90 / 0.28);
-  --color-danger-ink:    #FF8A8E;
+  --color-danger:        #C2302B;
+  --color-danger-soft:   #FBEDEC;
+  --color-danger-line:   #EFC4C1;
+  --color-danger-ink:    #A1221E;
 
-  --color-info:          #5B9CFF;
-  --color-info-soft:     rgb(91 156 255 / 0.10);
-  --color-info-line:     rgb(91 156 255 / 0.26);
-  --color-info-ink:      #8FBAFF;
+  --color-info:          #2E62C2;
+  --color-info-soft:     #EDF2FB;
+  --color-info-line:     #C7D7F1;
+  --color-info-ink:      #234E9F;
 
-  /* Ambient light + the decorative layer's strength */
-  --glow-color: 255 106 43;
-  --glow-alpha: 0.10;
-  --deco-alpha: 0.030;
-  --grid-size: 44px;
+  /* Legacy ramps still referenced by charts and the PDF preview */
+  --color-ember-300: #F2A27C;
+  --color-ember-500: #E2632E;
+  --color-char-500:  #6A6A65;
 
-  /* ---- Type ------------------------------------------------------------- */
-  /* Apple devices get the real SF; everyone else gets Geist, which is the
-     closest widely available match: same tall x-height, open apertures and
-     neutral humanist shapes. */
-  --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display",
-               Geist, "Segoe UI Variable Text", "Segoe UI", Roboto, sans-serif;
-  --font-mono: ui-monospace, "SF Mono", "Geist Mono", Menlo, Consolas, monospace;
-
-  /* ---- Radius ----------------------------------------------------------- */
-  --radius-control: 0.5rem;
-  --radius-card:    0.75rem;
-  --radius-overlay: 1rem;
-
-  /* ---- Elevation: glass casts softly ------------------------------------ */
-  --shadow-card:    0 1px 2px 0 rgb(0 0 0 / 0.36);
-  --shadow-raised:  0 8px 24px -6px rgb(0 0 0 / 0.58), 0 2px 6px -2px rgb(0 0 0 / 0.40);
-  --shadow-overlay: 0 32px 72px -18px rgb(0 0 0 / 0.78), 0 0 0 1px rgb(255 255 255 / 0.07);
-  --shadow-focus:   0 0 0 3px rgb(255 106 43 / 0.26);
-  --shadow-ember:   0 0 18px -2px rgb(255 106 43 / 0.55);
+  /* ---- Elevation: cards are flat; only things that float cast a shadow -- */
+  --shadow-card:    0 0 #0000;
+  --shadow-raised:  0 1px 2px rgb(24 24 22 / 0.06), 0 4px 12px -2px rgb(24 24 22 / 0.08);
+  --shadow-overlay: 0 18px 48px -12px rgb(24 24 22 / 0.28), 0 2px 6px rgb(24 24 22 / 0.06);
+  --shadow-focus:   0 0 0 3px rgb(36 80 214 / 0.22);
+  --shadow-ember:   0 0 #0000;
 
   /* ---- Motion ----------------------------------------------------------- */
-  --ease-out-soft: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-out-soft: cubic-bezier(0.2, 0.8, 0.2, 1);
   --ease-in-out-soft: cubic-bezier(0.4, 0, 0.2, 1);
-  --duration-fast: 140ms;
-  --duration-base: 220ms;
-  --duration-slow: 380ms;
+  --duration-fast: 120ms;
+  --duration-base: 180ms;
+  --duration-slow: 280ms;
 }
 
 @layer base {
-  :root { color-scheme: dark; }
+  :root { color-scheme: light; }
 
   /* ======================================================================
-     LIGHT - same tokens, glass over warm paper.
+     DARK - the same tokens, re-pointed. Graphite, not black.
      ====================================================================== */
-  :root:has(body[data-theme="light"]),
-  body[data-theme="light"] {
-    color-scheme: light;
+  :root:has(body[data-theme="dark"]),
+  body[data-theme="dark"] {
+    color-scheme: dark;
 
-    --color-canvas:         #F4F4F6;
-    --color-surface:        rgb(255 255 255 / 0.78);
-    --color-surface-muted:  rgb(255 255 255 / 0.95);
-    --color-surface-sunken: rgb(15 15 20 / 0.045);
-    --color-line:           rgb(15 15 20 / 0.10);
-    --color-line-strong:    rgb(15 15 20 / 0.20);
-    --color-ink:            #15151A;
-    --color-ink-soft:       #4E4E58;
-    --color-ink-faint:      #6B6B76;
-    --color-ink-inverse:    #FFFFFF;
-    --color-scrim:          rgb(15 15 20 / 0.45);
-    --color-sheet:          #FFFFFF;
+    --color-canvas:         #0F1012;
+    --color-surface:        #17181B;
+    --color-surface-muted:  #1C1D21;
+    --color-surface-sunken: #121316;
+    --color-sheet:          #1A1B1F;
+    --color-line:           #2A2C31;
+    --color-line-strong:    #3A3C43;
+    --color-ink:            #E9E9EB;
+    --color-ink-soft:       #B0B1B7;
+    --color-ink-faint:      #8C8E96;   /* 5.0:1 on surface */
+    --color-ink-inverse:    #0F1012;
+    --color-scrim:          rgb(0 0 0 / 0.6);
 
-    --color-accent:               #D9480F;
-    --color-accent-hover:         #B8380B;
-    --color-accent-strong:        #D9480F;
-    --color-accent-strong-hover:  #B8380B;
-    --color-on-accent:            #FFFFFF;
-    --color-accent-soft:          rgb(217 72 15 / 0.08);
-    --color-accent-line:          rgb(217 72 15 / 0.24);
-    --color-accent-ink:           #B8380B;
+    --color-accent:              #7193FF;
+    --color-accent-hover:        #8AA6FF;
+    --color-accent-strong:       #3B60DB;
+    --color-accent-strong-hover: #4A6EE6;
+    --color-on-accent:           #FFFFFF;
+    --color-accent-soft:         rgb(113 147 255 / 0.12);
+    --color-accent-line:         rgb(113 147 255 / 0.32);
+    --color-accent-ink:          #A3B8FF;
 
-    --color-positive:      #12805C;
-    --color-positive-soft: rgb(18 128 92 / 0.08);
-    --color-positive-line: rgb(18 128 92 / 0.24);
-    --color-positive-ink:  #0C6547;
+    --color-positive:      #44B97C;
+    --color-positive-soft: rgb(68 185 124 / 0.12);
+    --color-positive-line: rgb(68 185 124 / 0.30);
+    --color-positive-ink:  #79D3A2;
 
-    --color-warning:       #A96A00;
-    --color-warning-soft:  rgb(169 106 0 / 0.08);
-    --color-warning-line:  rgb(169 106 0 / 0.24);
-    --color-warning-ink:   #855300;
+    --color-warning:       #DDA23E;
+    --color-warning-soft:  rgb(221 162 62 / 0.12);
+    --color-warning-line:  rgb(221 162 62 / 0.30);
+    --color-warning-ink:   #EDC277;
 
-    --color-danger:        #C62A2F;
-    --color-danger-soft:   rgb(198 42 47 / 0.08);
-    --color-danger-line:   rgb(198 42 47 / 0.24);
-    --color-danger-ink:    #A11E23;
+    --color-danger:        #EE6A68;
+    --color-danger-soft:   rgb(238 106 104 / 0.12);
+    --color-danger-line:   rgb(238 106 104 / 0.32);
+    --color-danger-ink:    #FF9C9A;
 
-    --color-info:          #2563C9;
-    --color-info-soft:     rgb(37 99 201 / 0.08);
-    --color-info-line:     rgb(37 99 201 / 0.24);
-    --color-info-ink:      #1D4FA3;
+    --color-info:          #6B9BEF;
+    --color-info-soft:     rgb(107 155 239 / 0.12);
+    --color-info-line:     rgb(107 155 239 / 0.30);
+    --color-info-ink:      #9DBDF6;
 
-    --glow-alpha: 0.055;
-    --deco-alpha: 0.032;
-
-    --shadow-card:    0 1px 2px 0 rgb(15 15 20 / 0.05);
-    --shadow-raised:  0 8px 22px -6px rgb(15 15 20 / 0.12), 0 2px 5px -2px rgb(15 15 20 / 0.07);
-    --shadow-overlay: 0 28px 64px -18px rgb(15 15 20 / 0.26), 0 0 0 1px rgb(15 15 20 / 0.06);
-    --shadow-focus:   0 0 0 3px rgb(217 72 15 / 0.20);
-    --shadow-ember:   0 0 16px -3px rgb(217 72 15 / 0.40);
+    --shadow-raised:  0 1px 2px rgb(0 0 0 / 0.4), 0 6px 16px -4px rgb(0 0 0 / 0.5);
+    --shadow-overlay: 0 22px 56px -12px rgb(0 0 0 / 0.7), 0 0 0 1px rgb(255 255 255 / 0.05);
+    --shadow-focus:   0 0 0 3px rgb(113 147 255 / 0.3);
   }
 
-  html { -webkit-text-size-adjust: 100%; scroll-behavior: smooth; }
+  html { -webkit-text-size-adjust: 100%; }
 
   body {
     background-color: var(--color-canvas);
     color: var(--color-ink);
     font-family: var(--font-sans);
-    font-size: 15px;              /* compact; inputs are lifted to 16px below */
-    line-height: 1.5;
-    letter-spacing: -0.008em;
+    font-size: var(--text-base);
+    line-height: 1.45;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
     text-rendering: optimizeLegibility;
     overscroll-behavior-y: none;
     min-height: 100dvh;
+    -webkit-tap-highlight-color: transparent;
   }
+  button, a, [role="button"] { touch-action: manipulation; }
 
-  /* ---- The decorative layer -------------------------------------------
-     A faint technical grid, two ambient ember washes and a hairline horizon.
-     Fixed, non-interactive, and low enough in opacity to read as texture
-     rather than content. -------------------------------------------------- */
-  body::before {
-    content: "";
-    position: fixed;
-    inset: 0;
-    z-index: 0;
-    pointer-events: none;
-    background:
-      /* ambient light, top-right and a weaker one bottom-left */
-      radial-gradient(52rem 38rem at 88% -10%,
-        rgb(var(--glow-color) / var(--glow-alpha)) 0%, transparent 62%),
-      radial-gradient(40rem 32rem at -6% 106%,
-        rgb(var(--glow-color) / calc(var(--glow-alpha) * 0.5)) 0%, transparent 60%),
-      /* fine technical grid */
-      linear-gradient(to right, currentColor 1px, transparent 1px),
-      linear-gradient(to bottom, currentColor 1px, transparent 1px);
-    background-size: 100% 100%, 100% 100%, var(--grid-size) var(--grid-size), var(--grid-size) var(--grid-size);
-    color: rgb(128 128 140 / var(--deco-alpha));
-    mask-image: radial-gradient(130% 100% at 50% 0%, #000 42%, transparent 92%);
-    -webkit-mask-image: radial-gradient(130% 100% at 50% 0%, #000 42%, transparent 92%);
-  }
+  h1, h2, h3, h4 { font-weight: 600; letter-spacing: -0.01em; }
 
-  /* Content always sits above the decorative layer */
-  #root { position: relative; z-index: 1; }
-
-  h1, h2, h3, h4 { letter-spacing: -0.021em; font-weight: 600; }
-
-  /* Figures must not jitter as digits change */
+  /* Figures never jitter as digits change */
   .font-mono, table, input[type="number"], [data-numeric], .numeral {
     font-variant-numeric: tabular-nums;
     font-feature-settings: "tnum" 1;
   }
+  .font-mono { letter-spacing: -0.01em; }
   .numeral {
     font-family: var(--font-sans);
     font-weight: 600;
-    letter-spacing: -0.032em;
-    font-variant-numeric: tabular-nums;
+    letter-spacing: -0.015em;
   }
 
   /* One focus ring everywhere - never removed (WCAG 2.4.7) */
   :focus-visible {
-    outline: 1px solid var(--color-accent);
+    outline: 2px solid var(--color-accent);
     outline-offset: 2px;
-    border-radius: var(--radius-control);
   }
   :focus:not(:focus-visible) { outline: none; }
 
-  /* iOS: stop the auto-zoom that fires on fields under 16px */
+  /* iOS zooms into fields under 16px; lift them there only */
   @supports (-webkit-touch-callout: none) {
     input, select, textarea { font-size: max(16px, 1em); }
   }
 
-  /* Native <select> option lists. Some browsers (Firefox, and Chrome on Linux
-     with a light GTK theme) draw the popup with the OS colours and ignore
-     color-scheme, while the option text inherits our light ink: white on white
-     in dark mode. Pin both explicitly. */
   select { color-scheme: inherit; }
-  select option, select optgroup {
-    background-color: var(--color-sheet);
-    color: var(--color-ink);
-  }
-  select option:checked { background-color: var(--color-surface-muted); }
-  select option:disabled { color: var(--color-ink-faint); }
+  select option, select optgroup { background-color: var(--color-sheet); color: var(--color-ink); }
 
-  /* Native checkboxes and radios pick up the brand instead of the UA blue */
-  input[type="checkbox"], input[type="radio"], progress, ::marker {
-    accent-color: var(--color-accent);
-  }
+  input[type="checkbox"], input[type="radio"], progress { accent-color: var(--color-accent-strong); }
 
-  ::placeholder { color: var(--color-ink-faint); opacity: 1; }
-  ::selection { background: rgb(var(--glow-color) / 0.28); color: var(--color-ink); }
+  ::placeholder { color: var(--color-ink-faint); opacity: 0.85; }
+  ::selection { background: var(--color-accent-line); color: var(--color-ink); }
 
   * { scrollbar-width: thin; scrollbar-color: var(--color-line-strong) transparent; }
-  ::-webkit-scrollbar { width: 9px; height: 9px; }
+  ::-webkit-scrollbar { width: 8px; height: 8px; }
   ::-webkit-scrollbar-track { background: transparent; }
   ::-webkit-scrollbar-thumb {
     background: var(--color-line-strong);
     border-radius: 999px;
-    border: 3px solid transparent;
+    border: 2px solid transparent;
     background-clip: content-box;
   }
-  ::-webkit-scrollbar-thumb:hover { background: var(--color-ink-faint); background-clip: content-box; }
 
   @media (prefers-reduced-motion: reduce) {
-    html { scroll-behavior: auto; }
     *, *::before, *::after {
       animation-duration: 0.01ms !important;
       animation-iteration-count: 1 !important;
@@ -291,8 +241,7 @@
 }
 
 @layer components {
-  /* Hit-area helper: reaches the 44px touch minimum without changing the
-     element's visual size or shifting layout. */
+  /* Reaches the 44px touch minimum without changing the visual size */
   .tap-44 { position: relative; }
   .tap-44::after {
     content: "";
@@ -302,87 +251,36 @@
     transform: translate(-50%, -50%);
   }
 
-  /* ---- Glass panel -----------------------------------------------------
-     Translucent, blurred, hairline-bordered, with a lit top edge. Panels
-     layer over one another rather than stacking opaque cards. */
+  /* A card: solid paper with a hairline. Flat - no shadow, no blur. */
   .panel {
     position: relative;
     background: var(--color-surface);
-    backdrop-filter: blur(20px) saturate(140%);
-    -webkit-backdrop-filter: blur(20px) saturate(140%);
     border: 1px solid var(--color-line);
     border-radius: var(--radius-card);
-    box-shadow: var(--shadow-card);
-    transition: border-color var(--duration-base) var(--ease-out-soft),
-                box-shadow var(--duration-base) var(--ease-out-soft);
   }
-  /* the highlight a lit pane catches along its top edge */
-  .panel::after {
-    content: "";
-    position: absolute;
-    inset: 0 0 auto 0;
-    height: 1px;
-    background: linear-gradient(90deg, transparent 12%, rgb(255 255 255 / 0.10), transparent 88%);
-    pointer-events: none;
-  }
-  body[data-theme="light"] .panel::after {
-    background: linear-gradient(90deg, transparent 12%, rgb(255 255 255 / 0.85), transparent 88%);
-  }
+  .panel-hover { transition: border-color var(--duration-fast) ease-out; }
+  .panel-hover:hover { border-color: var(--color-line-strong); }
 
-  /* A glass panel is its own stacking context (backdrop-filter), so a dropdown
-     opened inside it would be painted UNDER the next panel on the page. Any
-     panel currently holding an open list or popover lifts above its siblings. */
-  .panel:has([role="listbox"]),
-  .panel:has([data-popover-open="true"]) { z-index: 40; }
-
-  /* An interactive panel lifts and warms its border on hover */
-  .panel-hover:hover {
-    border-color: var(--color-line-strong);
-    box-shadow: var(--shadow-raised);
-  }
-
-  /* ---- Dialog surface ---------------------------------------------------
-     A dialog covers live content, so it stops being glass: a near-opaque wash
-     of the canvas keeps a dense form readable over a busy table. It keeps the
-     blur so it still feels layered rather than pasted on. */
-  .sheet {
-    background: var(--color-sheet);
-    backdrop-filter: blur(24px) saturate(140%);
-    -webkit-backdrop-filter: blur(24px) saturate(140%);
-  }
-
-  /* ---- Floating tooltip -------------------------------------------------
-     A label that floats over live content has to stay legible, so unlike a
-     panel it sits on a near-opaque wash of the canvas rather than on glass. */
+  /* Anything that floats over content (dialogs, drawer, menus, tooltips) */
+  .sheet { background: var(--color-sheet); }
   .tip {
-    background: var(--color-sheet);
-    backdrop-filter: blur(14px) saturate(140%);
-    -webkit-backdrop-filter: blur(14px) saturate(140%);
-    border: 1px solid var(--color-line-strong);
+    background: var(--color-ink);
+    color: var(--color-ink-inverse);
     border-radius: var(--radius-control);
     box-shadow: var(--shadow-raised);
-    color: var(--color-ink);
   }
 
-  /* ---- Decorative fragments -------------------------------------------- */
-  /* A hairline rule that fades at both ends */
-  .rule-fade {
-    height: 1px;
-    background: linear-gradient(90deg, transparent, var(--color-line-strong), transparent);
-  }
+  .rule-fade { height: 1px; background: var(--color-line); }
 
-  /* Small live indicator: a dot with a slow halo */
+  /* Kept as a plain status dot (the old animated "live" pip) */
   .pip {
-    position: relative;
     display: inline-block;
-    width: 5px; height: 5px;
+    width: 6px; height: 6px;
     border-radius: 999px;
-    background: var(--color-accent);
-    box-shadow: 0 0 0 0 rgb(var(--glow-color) / 0.55);
-    animation: pip-halo 2.8s var(--ease-in-out-soft) infinite;
+    background: var(--color-positive);
   }
 
-  /* KPI band: one continuous surface split by hairlines, not separate cards */
+  /* KPI band: one surface split by hairlines */
   .metric-strip { display: grid; }
   .metric-strip > * + * { border-left: 1px solid var(--color-line); }
   @media (max-width: 1023px) {
@@ -393,7 +291,7 @@
 
   .status-dot {
     display: inline-block;
-    width: 0.375rem; height: 0.375rem;
+    width: 6px; height: 6px;
     border-radius: 999px;
     flex: none;
   }
@@ -403,68 +301,55 @@
   .table-sticky thead th {
     position: sticky; top: 0; z-index: 2;
     background: var(--color-surface-muted);
-    backdrop-filter: blur(12px);
     border-bottom: 1px solid var(--color-line);
   }
 }
 
 @layer utilities {
-  .pb-safe { padding-bottom: max(1rem, env(safe-area-inset-bottom)); }
-
-  /* A segmented control that overflows on a phone should still scroll, just
-     without a scrollbar sitting inside the pill. */
-  .scrollbar-none { scrollbar-width: none; -ms-overflow-style: none; }
-  .scrollbar-none::-webkit-scrollbar { display: none; }
+  .pb-safe { padding-bottom: max(0.75rem, env(safe-area-inset-bottom)); }
   .pt-safe { padding-top: env(safe-area-inset-top); }
 
+  .scrollbar-none { scrollbar-width: none; -ms-overflow-style: none; }
+  .scrollbar-none::-webkit-scrollbar { display: none; }
+
   @keyframes ssl-fade-in { from { opacity: 0 } to { opacity: 1 } }
-  @keyframes ssl-rise    { from { opacity: 0; transform: translateY(10px) } to { opacity: 1; transform: none } }
+  @keyframes ssl-rise    { from { opacity: 0; transform: translateY(6px) } to { opacity: 1; transform: none } }
   @keyframes ssl-sheet   { from { transform: translateY(100%) } to { transform: none } }
   @keyframes ssl-shimmer { 100% { transform: translateX(100%) } }
-  @keyframes pip-halo {
-    0%   { box-shadow: 0 0 0 0 rgb(var(--glow-color) / 0.50); }
-    70%  { box-shadow: 0 0 0 6px rgb(var(--glow-color) / 0); }
-    100% { box-shadow: 0 0 0 0 rgb(var(--glow-color) / 0); }
-  }
 
   .animate-fade-in { animation: ssl-fade-in var(--duration-base) var(--ease-out-soft) both; }
   .animate-rise    { animation: ssl-rise var(--duration-base) var(--ease-out-soft) both; }
-  .animate-sheet   { animation: ssl-sheet 240ms var(--ease-out-soft) both; }
+  .animate-sheet   { animation: ssl-sheet 220ms var(--ease-out-soft) both; }
 
-  /* Stagger helper for lists that animate in */
-  .stagger > * { animation: ssl-rise var(--duration-base) var(--ease-out-soft) both; }
-  .stagger > *:nth-child(1) { animation-delay: 0ms }
-  .stagger > *:nth-child(2) { animation-delay: 35ms }
-  .stagger > *:nth-child(3) { animation-delay: 70ms }
-  .stagger > *:nth-child(4) { animation-delay: 105ms }
-  .stagger > *:nth-child(5) { animation-delay: 140ms }
-  .stagger > *:nth-child(n+6) { animation-delay: 175ms }
+  .stagger > * { animation: ssl-fade-in var(--duration-base) var(--ease-out-soft) both; }
 
   .skeleton {
     position: relative; overflow: hidden;
-    background: var(--color-surface-muted);
+    background: var(--color-surface-sunken);
     border-radius: var(--radius-control);
   }
   .skeleton::after {
     content: "";
     position: absolute; inset: 0;
     transform: translateX(-100%);
-    background: linear-gradient(90deg, transparent, rgb(255 255 255 / 0.06), transparent);
-    animation: ssl-shimmer 1.6s infinite;
+    background: linear-gradient(90deg, transparent, rgb(255 255 255 / 0.35), transparent);
+    animation: ssl-shimmer 1.4s infinite;
+  }
+  body[data-theme="dark"] .skeleton::after {
+    background: linear-gradient(90deg, transparent, rgb(255 255 255 / 0.05), transparent);
   }
 
   .rounded-control { border-radius: var(--radius-control); }
   .rounded-card    { border-radius: var(--radius-card); }
   .rounded-overlay { border-radius: var(--radius-overlay); }
   .ring-focus      { box-shadow: var(--shadow-focus); }
-  .glow-ember      { box-shadow: var(--shadow-ember); }
+  .glow-ember      { box-shadow: none; }
 
-  /* Micro-label: the uppercase caption above fields, metrics and columns */
+  /* Field and column caption: small, medium weight, sentence case */
   .label-micro {
-    font-size: 0.6875rem;
+    font-size: var(--text-xs);
+    line-height: 1rem;
     font-weight: 500;
-    letter-spacing: 0.07em;
-    text-transform: uppercase;
     color: var(--color-ink-faint);
   }
 

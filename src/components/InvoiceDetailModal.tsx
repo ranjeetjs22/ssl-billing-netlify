@@ -86,7 +86,7 @@ export const InvoiceDetailModal: React.FC<InvoiceDetailModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 bg-scrim backdrop-blur-[6px] flex items-center justify-center p-4 z-50 overflow-y-auto">
+    <div className="fixed inset-0 bg-scrim flex items-center justify-center p-4 z-50 overflow-y-auto">
       <div className="sheet border border-line rounded-overlay max-w-3xl w-full max-h-[92vh] flex flex-col shadow-overlay text-ink my-auto">
         {/* Top Header */}
         <div className="p-4 border-b border-line flex items-center justify-between">
@@ -97,7 +97,7 @@ export const InvoiceDetailModal: React.FC<InvoiceDetailModalProps> = ({
             <div>
               <div className="flex items-center gap-2">
                 <h2 className="text-base font-bold font-mono text-ink">{inv.invoice_no}</h2>
-                <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold uppercase ${
+                <span className={`px-2 py-0.5 rounded-full text-[11px] font-semibold ${
                   inv.display_status === 'paid'
                     ? 'bg-positive-soft text-positive-ink border border-positive-line'
                     : inv.display_status === 'overdue'
@@ -120,7 +120,7 @@ export const InvoiceDetailModal: React.FC<InvoiceDetailModalProps> = ({
                   onClose();
                   onEditInvoice(inv);
                 }}
-                className="flex items-center gap-1.5 px-3 py-1.5 bg-surface-sunken hover:bg-surface-sunken text-ink border border-line-strong rounded-card text-xs font-semibold shadow-card transition"
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-surface-sunken hover:bg-surface-sunken text-ink border border-line-strong rounded-card text-xs font-semibold transition"
               >
                 <Edit3 className="w-3.5 h-3.5 text-accent-ink" />
                 <span>Edit Invoice</span>
@@ -129,7 +129,7 @@ export const InvoiceDetailModal: React.FC<InvoiceDetailModalProps> = ({
 
             <button
               onClick={() => printInvoicePDF(inv, companySettings, defaultBank)}
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-accent-strong hover:bg-accent-strong-hover text-on-accent rounded-card text-xs font-semibold shadow-card transition"
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-accent-strong hover:bg-accent-strong-hover text-on-accent rounded-card text-xs font-semibold transition"
             >
               <Printer className="w-3.5 h-3.5" />
               <span>Print A4 PDF</span>
@@ -141,7 +141,7 @@ export const InvoiceDetailModal: React.FC<InvoiceDetailModalProps> = ({
                   onClose();
                   onRecordPayment(inv);
                 }}
-                className="flex items-center gap-1.5 px-3 py-1.5 bg-surface text-positive-ink border border-positive-line hover:bg-positive-soft hover:border-positive rounded-card text-xs font-semibold shadow-card transition"
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-surface text-positive-ink border border-positive-line hover:bg-positive-soft hover:border-positive rounded-card text-xs font-semibold transition"
               >
                 <CreditCard className="w-3.5 h-3.5" />
                 <span>Receive Payment</span>
@@ -159,11 +159,11 @@ export const InvoiceDetailModal: React.FC<InvoiceDetailModalProps> = ({
           {/* Company Branding & Tax Header */}
           <div className="p-4 rounded-card border border-line bg-surface-muted flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
             <div className="flex items-center gap-3">
-              <div className="bg-surface p-2 rounded-card border border-line shadow-card shrink-0">
+              <div className="bg-surface p-2 rounded-card border border-line shrink-0">
                 <SslLogo className="h-12 w-auto" />
               </div>
               <div>
-                <h3 className="font-extrabold text-ink text-sm tracking-wide">
+                <h3 className="font-extrabold text-ink text-sm">
                   {companySettings?.name || 'SHREE SANWARIYA LOGISTICS'}
                 </h3>
                 <p className="text-ink-faint text-[11px]">
@@ -175,10 +175,10 @@ export const InvoiceDetailModal: React.FC<InvoiceDetailModalProps> = ({
               </div>
             </div>
             <div className="text-left sm:text-right shrink-0">
-              <span className="inline-block px-2.5 py-1 bg-surface text-ink-soft border border-line font-medium rounded-control text-[10px] uppercase tracking-wider">
+              <span className="inline-block px-2.5 py-1 bg-surface text-ink-soft border border-line font-medium rounded-control text-[11px]">
                 {internal ? 'Non-GST bill' : 'Original Tax Invoice'}
               </span>
-              <p className="text-ink-faint text-[10px] mt-1">Goods Transport Agency (GTA)</p>
+              <p className="text-ink-faint text-[11px] mt-1">Goods Transport Agency (GTA)</p>
             </div>
           </div>
 
@@ -186,12 +186,12 @@ export const InvoiceDetailModal: React.FC<InvoiceDetailModalProps> = ({
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {/* Bill To */}
             <div className="bg-surface-muted p-4 rounded-card border border-line">
-              <div className="text-[11px] font-bold text-accent-ink uppercase tracking-wider mb-2 flex items-center justify-between">
+              <div className="text-[11px] font-bold text-accent-ink mb-2 flex items-center justify-between">
                 <span className="flex items-center gap-1.5">
                   <Building className="w-3.5 h-3.5" />
                   Bill To (Buyer)
                 </span>
-                <span className="text-[10px] text-ink-faint font-medium">Billed Party</span>
+                <span className="text-[11px] text-ink-faint font-medium">Billed Party</span>
               </div>
               <div className="font-bold text-sm text-ink">{inv.buyer?.name || '-'}</div>
               <div className="text-ink-soft mt-1">{inv.buyer?.address || ''}</div>
@@ -204,12 +204,12 @@ export const InvoiceDetailModal: React.FC<InvoiceDetailModalProps> = ({
 
             {/* Ship To */}
             <div className="bg-surface-muted p-4 rounded-card border border-line">
-              <div className="text-[11px] font-bold text-accent-ink uppercase tracking-wider mb-2 flex items-center justify-between">
+              <div className="text-[11px] font-bold text-accent-ink mb-2 flex items-center justify-between">
                 <span className="flex items-center gap-1.5">
                   <MapPin className="w-3.5 h-3.5" />
                   Ship To (Consignee / Delivery)
                 </span>
-                <span className={`text-[10px] px-1.5 py-0.5 rounded font-semibold ${
+                <span className={`text-[11px] px-1.5 py-0.5 rounded font-semibold ${
                   inv.same_as_buyer ? 'bg-surface-sunken/60 text-ink-soft' : 'bg-accent-soft text-accent-ink'
                 }`}>
                   {inv.same_as_buyer ? 'Same as Buyer' : 'Custom Site'}
@@ -238,13 +238,13 @@ export const InvoiceDetailModal: React.FC<InvoiceDetailModalProps> = ({
 
           {/* Consignment Logistics */}
           <div className="bg-surface-muted p-4 rounded-card border border-line">
-            <div className="text-[11px] font-bold text-accent-ink uppercase tracking-wider mb-2 flex items-center justify-between gap-1.5">
+            <div className="text-[11px] font-bold text-accent-ink mb-2 flex items-center justify-between gap-1.5">
               <span className="flex items-center gap-1.5">
                 <Truck className="w-3.5 h-3.5" />
                 Consignment & LR Tracking Details
               </span>
               {lrItems.length > 1 && (
-                <span className="px-1.5 py-0.5 rounded-md bg-accent-soft text-accent-ink text-[10px] font-bold normal-case tracking-normal">
+                <span className="px-1.5 py-0.5 rounded-md bg-accent-soft text-accent-ink text-[11px] font-bold normal-case tracking-normal">
                   {lrItems.length} LRs on this bill
                 </span>
               )}
@@ -253,7 +253,7 @@ export const InvoiceDetailModal: React.FC<InvoiceDetailModalProps> = ({
             {lrItems.length > 1 && (
               <div className="overflow-x-auto mb-3 bg-surface rounded-control border border-line">
                 <table className="w-full text-xs text-left min-w-[560px]">
-                  <thead className="bg-surface-sunken text-ink-faint uppercase text-[10px] border-b border-line">
+                  <thead className="bg-surface-sunken text-ink-faint text-[11px] border-b border-line">
                     <tr>
                       <th className="py-2 px-2.5">#</th>
                       <th className="py-2 px-2.5">LR / Bilty No</th>
@@ -310,12 +310,12 @@ export const InvoiceDetailModal: React.FC<InvoiceDetailModalProps> = ({
           </div>
 
           {/* Charges Breakdown */}
-          <div className="bg-surface rounded-card border border-line overflow-hidden shadow-card">
+          <div className="bg-surface rounded-card border border-line overflow-hidden">
             <div className="p-3 bg-surface-muted font-semibold text-ink border-b border-line">
               Line Items & Charge Calculation
             </div>
             <table className="w-full text-left text-xs">
-              <thead className="bg-surface-muted text-ink-faint uppercase text-[10px] border-b border-line">
+              <thead className="bg-surface-muted text-ink-faint text-[11px] border-b border-line">
                 <tr>
                   <th className="py-2.5 px-3">Particulars</th>
                   <th className="py-2.5 px-3">SAC</th>
@@ -411,7 +411,7 @@ export const InvoiceDetailModal: React.FC<InvoiceDetailModalProps> = ({
           </div>
 
           {/* Payment History on this Invoice */}
-          <div className="bg-surface p-4 rounded-card border border-line shadow-card">
+          <div className="bg-surface p-4 rounded-card border border-line">
             <div className="flex items-center justify-between mb-3 border-b border-line pb-2">
               <span className="font-bold text-ink">Payment Collections</span>
               <div className="flex gap-3 text-xs">

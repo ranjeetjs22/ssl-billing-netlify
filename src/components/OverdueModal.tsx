@@ -44,7 +44,7 @@ export const OverdueModal: React.FC<OverdueModalProps> = ({ onClose }) => {
   };
 
   return (
-    <div className="fixed inset-0 bg-scrim backdrop-blur-[6px] flex items-center justify-center p-4 z-50 overflow-y-auto">
+    <div className="fixed inset-0 bg-scrim flex items-center justify-center p-4 z-50 overflow-y-auto">
       <div className="sheet border border-line rounded-overlay max-w-3xl w-full max-h-[90vh] flex flex-col shadow-overlay text-ink my-auto">
         {/* Header */}
         <div className="p-4 border-b border-line flex items-center justify-between">
@@ -83,7 +83,7 @@ export const OverdueModal: React.FC<OverdueModalProps> = ({ onClose }) => {
                   </div>
 
                   <div className="text-right">
-                    <span className="text-[10px] bg-danger-soft text-danger-ink font-semibold px-2 py-0.5 rounded-full border border-danger-line">
+                    <span className="text-[11px] bg-danger-soft text-danger-ink font-semibold px-2 py-0.5 rounded-full border border-danger-line">
                       {item.days_overdue} Days Overdue
                     </span>
                     <div className="font-mono font-bold text-accent-ink text-sm mt-1">
@@ -100,7 +100,7 @@ export const OverdueModal: React.FC<OverdueModalProps> = ({ onClose }) => {
                 <div className="flex items-center justify-end gap-2">
                   <button
                     onClick={() => copyMessage(item)}
-                    className="flex items-center gap-1 px-3 py-1.5 bg-surface hover:bg-surface-sunken text-ink-soft border border-line rounded-card text-xs font-medium transition shadow-card"
+                    className="flex items-center gap-1 px-3 py-1.5 bg-surface hover:bg-surface-sunken text-ink-soft border border-line rounded-card text-xs font-medium transition"
                   >
                     {copiedId === item.id ? <Check className="w-3.5 h-3.5 text-positive-ink" /> : <Copy className="w-3.5 h-3.5" />}
                     <span>{copiedId === item.id ? 'Copied' : 'Copy Text'}</span>
@@ -108,7 +108,7 @@ export const OverdueModal: React.FC<OverdueModalProps> = ({ onClose }) => {
 
                   <button
                     onClick={() => openWhatsApp(item)}
-                    className="flex items-center gap-1 px-3.5 py-1.5 bg-surface text-positive-ink border border-positive-line hover:bg-positive-soft hover:border-positive rounded-card text-xs font-semibold shadow-card transition"
+                    className="flex items-center gap-1 px-3.5 py-1.5 bg-surface text-positive-ink border border-positive-line hover:bg-positive-soft hover:border-positive rounded-card text-xs font-semibold transition"
                   >
                     <MessageSquare className="w-3.5 h-3.5" />
                     <span>Send WhatsApp</span>

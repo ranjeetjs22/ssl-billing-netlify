@@ -85,7 +85,7 @@ export const LoginView: React.FC = () => {
     <div className="min-h-dvh flex flex-col justify-center px-4 py-10 sm:px-6">
       <div className="mx-auto w-full max-w-md">
         <div className="flex flex-col items-center text-center mb-6">
-          <span className="bg-surface border border-line rounded-card p-3 shadow-card mb-4">
+          <span className="bg-surface border border-line rounded-card p-3 mb-4">
             <SslLogo className="h-12 w-auto" customLogoUrl={companySettings?.logo_url} />
           </span>
           <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-ink">{brandName}</h1>
