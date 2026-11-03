@@ -275,10 +275,6 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({ invoiceToEdit, initi
       d.setDate(d.getDate() + Number(cust.credit_days));
       setDueDate(d.toISOString().slice(0, 10));
     }
-    if (cust.city) {
-      fillDestinationIfEmpty(cust.city);
-    }
-
     // Default Ship To details when same as buyer
     setShipToName(cust.name);
     setShipToAddress(cust.shipping_address || cust.address || '');
@@ -316,7 +312,7 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({ invoiceToEdit, initi
     setLrLines(prev => {
       const last = prev[prev.length - 1];
       return [...prev, newLrLine({
-        origin: last?.origin || 'Ahmedabad', destination: last?.destination || '',
+        origin: last?.origin || companyCity, destination: last?.destination || consigneeCity,
         rate_kg: last?.rate_kg || 0, rate_auto: last ? last.rate_auto : true,
       })];
     });
@@ -326,11 +322,58 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({ invoiceToEdit, initi
     setLrLines(prev => (prev.length <= 1 ? prev : prev.filter(l => l.key !== key)));
   };
 
-  /** Auto-fill the first LR's destination from the consignee city when it hasn't been typed yet. */
-  const fillDestinationIfEmpty = (city: string) => {
-    if (!city) return;
-    setLrLines(prev => prev.map((l, i) => (i === 0 && !l.destination ? { ...l, destination: city } : l)));
+  /** Switching to a separate consignee starts from the buyer's details instead of a blank form. */
+  const toggleSameAsBuyer = (same: boolean) => {
+    if (!same && !shipToName.trim()) {
+      const buyer = customers.find(c => c.id === selectedCustomerId);
+      if (buyer) {
+        setShipToName(buyer.name);
+        setShipToAddress(buyer.shipping_address || buyer.address || '');
+        setShipToCity(buyer.city || '');
+        setShipToState(buyer.state || 'Gujarat');
+        setShipToPin(buyer.pin || '');
+        setShipToGstin(buyer.gstin || '');
+        setShipToPhone(buyer.phone || '');
+      }
+    }
+    setSameAsBuyer(same);
   };
+
+  // ---- LR From / To follow the parties ----
+  // To = the consignee's city: the buyer's when Ship To is "same as Bill To", otherwise the
+  // Ship To city. Every line whose To is blank or still shows the previous consignee city
+  // follows along; a To typed by hand is left alone.
+  const consigneeCity = (sameAsBuyer
+    ? customers.find(c => c.id === selectedCustomerId)?.city
+    : shipToCity) || '';
+  const prevConsigneeCity = React.useRef<string | null>(null);
+  useEffect(() => {
+    const prev = prevConsigneeCity.current;
+    prevConsigneeCity.current = consigneeCity;
+    // Opening a saved bill must not rewrite its routes
+    if (prev === null && isEditMode) return;
+    const next = consigneeCity.trim();
+    if (!next) return;
+    const was = (prev || '').trim().toLowerCase();
+    setLrLines(lines => lines.map(l => {
+      const cur = l.destination.trim().toLowerCase();
+      return !cur || (was && cur === was) ? { ...l, destination: next } : l;
+    }));
+  }, [consigneeCity]);
+
+  // From = our own city (company settings), on lines still showing the built-in default
+  const [companyCity, setCompanyCity] = useState('Ahmedabad');
+  useEffect(() => {
+    if (isEditMode) return;
+    apiRequest<{ city?: string }>('/settings/company')
+      .then(c => {
+        const city = (c?.city || '').trim();
+        if (!city || city === 'Ahmedabad') return;
+        setCompanyCity(city);
+        setLrLines(lines => lines.map(l => (l.origin === 'Ahmedabad' ? { ...l, origin: city } : l)));
+      })
+      .catch(() => {});
+  }, []);
 
   // ---- Rate / Kg from the rate chart (the customer's personal one when they have it) ----
   // 'auto' = whatever the customer is set to; the user can flip to the other chart per bill.
@@ -431,7 +474,6 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({ invoiceToEdit, initi
         }
         if (res.city) {
           setShipToCity(res.city);
-          fillDestinationIfEmpty(res.city);
         }
         if (res.pin && (!shipToPin || isExplicitClick)) setShipToPin(res.pin);
         if (res.address && (!shipToAddress || isExplicitClick)) setShipToAddress(res.address);
@@ -474,7 +516,6 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({ invoiceToEdit, initi
       if (res && res.valid) {
         if (res.city) {
           setShipToCity(res.city);
-          fillDestinationIfEmpty(res.city);
         }
         if (res.state) {
           setShipToState(res.state);
@@ -899,7 +940,7 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({ invoiceToEdit, initi
                     <input
                       type="checkbox"
                       checked={sameAsBuyer}
-                      onChange={(e) => setSameAsBuyer(e.target.checked)}
+                      onChange={(e) => toggleSameAsBuyer(e.target.checked)}
                       className="rounded text-accent-ink focus:ring-accent w-3.5 h-3.5"
                     />
                     <span>Same as Bill To</span>
@@ -921,7 +962,7 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({ invoiceToEdit, initi
                     </div>
                     <button
                       type="button"
-                      onClick={() => setSameAsBuyer(false)}
+                      onClick={() => toggleSameAsBuyer(false)}
                       className="text-xs text-accent-ink hover:text-accent-ink font-semibold underline mt-1 cursor-pointer"
                     >
                       Ship to a different branch / site / consignee?
@@ -1019,14 +1060,8 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({ invoiceToEdit, initi
                         <input
                           type="text"
                           value={shipToCity}
-                          onChange={(e) => {
-                            const prevCity = shipToCity;
-                            setShipToCity(e.target.value);
-                            // keep the first LR's destination in sync while it is still auto-filled
-                            setLrLines(lines => lines.map((l, i) =>
-                              i === 0 && (!l.destination || l.destination === prevCity) ? { ...l, destination: e.target.value } : l
-                            ));
-                          }}
+                          // LR "To" follows this city (see the consignee sync effect)
+                          onChange={(e) => setShipToCity(e.target.value)}
                           className="w-full bg-surface border border-line rounded-control px-2.5 py-1.5 text-ink text-xs focus:outline-none focus:border-accent"
                           placeholder="Surat"
                         />
