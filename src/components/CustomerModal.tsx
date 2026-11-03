@@ -2,35 +2,43 @@ import React, { useState } from 'react';
 import { X, Building2, Save, Sparkles, Check, Loader2, AlertCircle, AlertTriangle, ShieldCheck } from 'lucide-react';
 import { apiRequest } from '../services/api.js';
 import { lookupGSTIN, lookupPincode, isValidGSTINFormat, GSTLookupResult } from '../utils/gstLookup.js';
+import { Customer } from '../types.js';
 
 interface CustomerModalProps {
+  /** When given, the form edits this customer instead of registering a new one. */
+  customerToEdit?: Customer | null;
   onClose: () => void;
-  onSuccess: () => void;
+  onSuccess: (saved?: Customer) => void;
 }
 
-export const CustomerModal: React.FC<CustomerModalProps> = ({ onClose, onSuccess }) => {
-  const [name, setName] = useState('');
+export const CustomerModal: React.FC<CustomerModalProps> = ({ customerToEdit, onClose, onSuccess }) => {
+  const isEdit = Boolean(customerToEdit?.id);
+  const c0 = customerToEdit || ({} as Partial<Customer>);
+  const [name, setName] = useState(c0.name || '');
   const [legalName, setLegalName] = useState('');
   const [tradeName, setTradeName] = useState('');
-  const [contactPerson, setContactPerson] = useState('');
-  const [email, setEmail] = useState('');
-  const [phone, setPhone] = useState('');
-  const [whatsapp, setWhatsapp] = useState('');
-  const [address, setAddress] = useState('');
-  const [shippingAddress, setShippingAddress] = useState('');
-  const [city, setCity] = useState('Ahmedabad');
-  const [state, setState] = useState('Gujarat');
-  const [pin, setPin] = useState('');
-  const [gstin, setGstin] = useState('');
-  const [pan, setPan] = useState('');
+  const [contactPerson, setContactPerson] = useState(c0.contact_person || '');
+  const [email, setEmail] = useState(c0.email || '');
+  const [phone, setPhone] = useState(c0.phone || '');
+  const [whatsapp, setWhatsapp] = useState(c0.whatsapp || '');
+  const [address, setAddress] = useState(c0.address || '');
+  // Blank when it simply repeats the billing address, so it stays "same as billing"
+  const [shippingAddress, setShippingAddress] = useState(
+    c0.shipping_address && c0.shipping_address !== c0.address ? c0.shipping_address : ''
+  );
+  const [city, setCity] = useState(isEdit ? (c0.city || '') : 'Ahmedabad');
+  const [state, setState] = useState(isEdit ? (c0.state || '') : 'Gujarat');
+  const [pin, setPin] = useState(c0.pin || '');
+  const [gstin, setGstin] = useState(c0.gstin || '');
+  const [pan, setPan] = useState(c0.pan || '');
   const [gstStatus, setGstStatus] = useState('');
   const [constitution, setConstitution] = useState('');
   const [taxpayerType, setTaxpayerType] = useState('Regular');
   const [natureOfBusiness, setNatureOfBusiness] = useState<string[]>([]);
-  const [paymentTerms, setPaymentTerms] = useState('Net 15 Days');
-  const [creditDays, setCreditDays] = useState(15);
-  const [creditLimit, setCreditLimit] = useState(100000);
-  const [notes, setNotes] = useState('');
+  const [paymentTerms, setPaymentTerms] = useState(c0.payment_terms || 'Net 15 Days');
+  const [creditDays, setCreditDays] = useState(isEdit ? Number(c0.credit_days) || 0 : 15);
+  const [creditLimit, setCreditLimit] = useState(isEdit ? Number(c0.credit_limit) || 0 : 100000);
+  const [notes, setNotes] = useState(c0.notes || '');
   const [saving, setSaving] = useState(false);
   const [fetchingGst, setFetchingGst] = useState(false);
   const [fetchingPin, setFetchingPin] = useState(false);
@@ -165,8 +173,8 @@ export const CustomerModal: React.FC<CustomerModalProps> = ({ onClose, onSuccess
     setSaving(true);
     setError(null);
     try {
-      await apiRequest('/customers', {
-        method: 'POST',
+      const saved = await apiRequest<Customer>(isEdit ? `/customers/${customerToEdit!.id}` : '/customers', {
+        method: isEdit ? 'PUT' : 'POST',
         body: JSON.stringify({
           name,
           contact_person: contactPerson,
@@ -188,15 +196,19 @@ export const CustomerModal: React.FC<CustomerModalProps> = ({ onClose, onSuccess
             legalName && legalName !== name ? `Legal Name: ${legalName}` : '',
             constitution ? `Constitution: ${constitution}` : '',
             gstStatus ? `GST Status: ${gstStatus}` : '',
-            taxpayerType ? `Taxpayer: ${taxpayerType}` : '',
+            // Only the default taxpayer line on a new record; on edit it is noise unless looked up
+            taxpayerType && (!isEdit || lookupFeedback?.type === 'verified') ? `Taxpayer: ${taxpayerType}` : '',
             natureOfBusiness.length > 0 ? `Activities: ${natureOfBusiness.join(', ')}` : '',
-          ].filter(Boolean).join('\n'),
+          ]
+            // Editing keeps the existing notes; never append a line that is already there
+            .filter((line, i) => Boolean(line) && (i === 0 || !notes.includes(line)))
+            .join('\n'),
         }),
       });
-      onSuccess();
+      onSuccess(saved);
       onClose();
     } catch (err: any) {
-      setError(err.message || 'Failed to add customer');
+      setError(err.message || (isEdit ? 'Failed to save customer' : 'Failed to add customer'));
     } finally {
       setSaving(false);
     }
@@ -212,7 +224,7 @@ export const CustomerModal: React.FC<CustomerModalProps> = ({ onClose, onSuccess
               <Building2 className="w-4 h-4" />
             </div>
             <div>
-              <h2 className="text-base font-bold text-ink">Register Consignee / Customer</h2>
+              <h2 className="text-base font-bold text-ink">{isEdit ? `Edit customer: ${customerToEdit!.name}` : 'Register Consignee / Customer'}</h2>
               <p className="text-[11px] text-ink-faint">Authoritative GSTVerify Integration & PIN Lookup</p>
             </div>
           </div>
@@ -467,6 +479,28 @@ export const CustomerModal: React.FC<CustomerModalProps> = ({ onClose, onSuccess
                 placeholder="Net 15 Days"
               />
             </div>
+
+            <div>
+              <label className="block text-ink-soft font-semibold mb-1">Credit Limit (₹)</label>
+              <input
+                type="number"
+                min="0"
+                value={creditLimit}
+                onChange={(e) => setCreditLimit(parseFloat(e.target.value) || 0)}
+                className="w-full bg-surface-muted border border-line rounded-card px-3 py-2 text-ink text-xs focus:outline-none focus:border-accent"
+              />
+            </div>
+
+            <div className="sm:col-span-2">
+              <label className="block text-ink-soft font-semibold mb-1">Notes</label>
+              <textarea
+                rows={3}
+                value={notes}
+                onChange={(e) => setNotes(e.target.value)}
+                className="w-full bg-surface-muted border border-line rounded-card px-3 py-2 text-ink text-xs focus:outline-none focus:border-accent"
+                placeholder="Internal notes about this customer"
+              />
+            </div>
           </div>
 
           {/* Footer */}
@@ -484,7 +518,7 @@ export const CustomerModal: React.FC<CustomerModalProps> = ({ onClose, onSuccess
               className="px-5 py-2 bg-accent-strong hover:bg-accent-strong-hover text-on-accent rounded-card text-xs font-semibold shadow-card transition flex items-center gap-2 disabled:opacity-50 cursor-pointer"
             >
               <Save className="w-4 h-4" />
-              <span>{saving ? 'Saving...' : 'Register Customer'}</span>
+              <span>{saving ? 'Saving...' : isEdit ? 'Save Changes' : 'Register Customer'}</span>
             </button>
           </div>
         </form>

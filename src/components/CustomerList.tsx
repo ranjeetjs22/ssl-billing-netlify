@@ -1,15 +1,16 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Users, Plus, Search, Phone, MapPin, ChevronRight } from 'lucide-react';
+import { Users, Plus, Search, Phone, MapPin, ChevronRight, Pencil } from 'lucide-react';
 import { apiRequest } from '../services/api.js';
 import { Customer, CompanySettings } from '../types.js';
 import { formatINR } from '../utils/format.js';
 import {
-  Button, Card, StatCard, DataTable, Column, EmptyState, ErrorState, Badge, Input, cx,
+  Button, IconButton, Card, StatCard, DataTable, Column, EmptyState, ErrorState, Badge, Input, cx,
 } from './ui.js';
 
 interface CustomerListProps {
   onNewCustomer: () => void;
   onSelectCustomer: (cust: Customer) => void;
+  onEditCustomer?: (cust: Customer) => void;
   companySettings: CompanySettings;
 }
 
@@ -21,7 +22,7 @@ const TABS = [
 
 type FilterKey = (typeof TABS)[number]['key'];
 
-export const CustomerList: React.FC<CustomerListProps> = ({ onNewCustomer, onSelectCustomer }) => {
+export const CustomerList: React.FC<CustomerListProps> = ({ onNewCustomer, onSelectCustomer, onEditCustomer }) => {
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -134,6 +135,18 @@ export const CustomerList: React.FC<CustomerListProps> = ({ onNewCustomer, onSel
           <span className="text-ink-faint"> - </span>
         ),
     },
+    ...(onEditCustomer ? [{
+      key: 'edit',
+      header: 'Edit',
+      align: 'right' as const,
+      cell: (c: Customer) => (
+        <div onClick={(e) => e.stopPropagation()}>
+          <IconButton label={`Edit ${c.name}`} onClick={() => onEditCustomer(c)}>
+            <Pencil className="w-4 h-4" />
+          </IconButton>
+        </div>
+      ),
+    }] : []),
   ];
 
   const mobileCard = (c: Customer) => {

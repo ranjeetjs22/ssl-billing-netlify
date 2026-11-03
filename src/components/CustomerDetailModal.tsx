@@ -23,7 +23,8 @@ import {
   DollarSign,
   Trash2,
   AlertTriangle,
-  Loader2
+  Loader2,
+  Pencil
 } from 'lucide-react';
 import { Customer, Invoice, Payment, CompanySettings, BankAccount, CustomerStatementResponse, CustomerLedgerEntry } from '../types.js';
 import { formatINR } from '../utils/format.js';
@@ -35,6 +36,8 @@ interface CustomerDetailModalProps {
   customer: Customer;
   onClose: () => void;
   onNewInvoice: (customer: Customer) => void;
+  /** Open the edit form for this customer. */
+  onEditCustomer?: (customer: Customer) => void;
   companySettings: CompanySettings;
   /** Called after a change that affects balances, so the screens behind refresh too. */
   onRefresh?: () => void;
@@ -44,6 +47,7 @@ export const CustomerDetailModal: React.FC<CustomerDetailModalProps> = ({
   customer: initialCustomer,
   onClose,
   onNewInvoice,
+  onEditCustomer,
   companySettings,
   onRefresh,
 }) => {
@@ -312,6 +316,17 @@ export const CustomerDetailModal: React.FC<CustomerDetailModalProps> = ({
               {copied ? <Check className="w-3.5 h-3.5 text-positive-ink" /> : <Copy className="w-3.5 h-3.5" />}
               <span>{copied ? 'Copied!' : 'Copy Summary'}</span>
             </button>
+
+            {onEditCustomer && (
+              <button
+                onClick={() => onEditCustomer(customer)}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-surface text-ink border border-line hover:border-line-strong hover:bg-surface-muted rounded-control text-xs font-medium transition cursor-pointer"
+                title="Edit this customer's details"
+              >
+                <Pencil className="w-3.5 h-3.5" />
+                <span>Edit Details</span>
+              </button>
+            )}
 
             <button
               onClick={() => {

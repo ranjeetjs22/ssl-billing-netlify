@@ -55,6 +55,9 @@ function MainApp() {
   const [selectedInvoice, setSelectedInvoice] = useState<Invoice | null>(null);
   const [editingInvoice, setEditingInvoice] = useState<Invoice | null>(null);
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
+  const [editingCustomer, setEditingCustomer] = useState<Customer | null>(null);
+  // Bumped after a customer is edited so an open statement reloads with the new details
+  const [customerVersion, setCustomerVersion] = useState(0);
   const [targetCustomerForInvoice, setTargetCustomerForInvoice] = useState<string | undefined>(undefined);
   const [targetInvoiceForPayment, setTargetInvoiceForPayment] = useState<Invoice | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
@@ -220,6 +223,7 @@ function MainApp() {
               key={refreshKey}
               onNewCustomer={() => setShowCustomerModal(true)}
               onSelectCustomer={(cust) => setSelectedCustomer(cust)}
+              onEditCustomer={(cust) => setEditingCustomer(cust)}
               companySettings={companySettings}
             />
           )}
@@ -343,6 +347,8 @@ function MainApp() {
       {selectedCustomer && (
         <CustomerDetailModal
           customer={selectedCustomer}
+          key={`${selectedCustomer.id}:${customerVersion}`}
+          onEditCustomer={(cust) => setEditingCustomer(cust)}
           onClose={() => setSelectedCustomer(null)}
           onNewInvoice={(cust) => {
             setSelectedCustomer(null);
@@ -351,6 +357,19 @@ function MainApp() {
           }}
           onRefresh={() => setRefreshKey(k => k + 1)}
           companySettings={companySettings}
+        />
+      )}
+
+      {/* Rendered after the statement so it stacks on top of it */}
+      {editingCustomer && (
+        <CustomerModal
+          customerToEdit={editingCustomer}
+          onClose={() => setEditingCustomer(null)}
+          onSuccess={(saved) => {
+            if (saved && selectedCustomer?.id === saved.id) setSelectedCustomer({ ...selectedCustomer, ...saved });
+            setCustomerVersion(v => v + 1);
+            setRefreshKey(k => k + 1);
+          }}
         />
       )}
 
