@@ -10,7 +10,7 @@ import { printInvoicePDF } from '../utils/pdf.js';
 import { DeleteInvoiceModal } from './DeleteInvoiceModal.js';
 import {
   Button, IconButton, Card, StatCard, DataTable, Column, EmptyState, ErrorState,
-  Toast, StatusBadge, Input, cx,
+  Toast, StatusBadge, Input, Select, cx,
 } from './ui.js';
 
 interface InvoiceListProps {
@@ -34,6 +34,40 @@ const TABS = [
 
 const PAGE_SIZE = 20;
 
+/** Local-time YYYY-MM-DD; toISOString() would shift IST dates back a day. */
+const isoDay = (d: Date) =>
+  `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+
+type Period = 'all' | 'today' | 'this_month' | 'last_month' | 'last_3_months' | 'fy' | 'custom';
+
+const PERIODS: { key: Period; label: string }[] = [
+  { key: 'all', label: 'All dates' },
+  { key: 'today', label: 'Today' },
+  { key: 'this_month', label: 'This month' },
+  { key: 'last_month', label: 'Last month' },
+  { key: 'last_3_months', label: 'Last 3 months' },
+  { key: 'fy', label: 'This financial year' },
+  { key: 'custom', label: 'Custom range…' },
+];
+
+/** The from/to dates a preset stands for ('' = open-ended). */
+function periodRange(p: Period): { from: string; to: string } {
+  const now = new Date();
+  const y = now.getFullYear();
+  const m = now.getMonth();
+  switch (p) {
+    case 'today': return { from: isoDay(now), to: isoDay(now) };
+    case 'this_month': return { from: isoDay(new Date(y, m, 1)), to: isoDay(new Date(y, m + 1, 0)) };
+    case 'last_month': return { from: isoDay(new Date(y, m - 1, 1)), to: isoDay(new Date(y, m, 0)) };
+    case 'last_3_months': return { from: isoDay(new Date(y, m - 2, 1)), to: isoDay(new Date(y, m + 1, 0)) };
+    case 'fy': {
+      const start = m >= 3 ? y : y - 1;   // Indian FY: 1 Apr - 31 Mar
+      return { from: `${start}-04-01`, to: `${start + 1}-03-31` };
+    }
+    default: return { from: '', to: '' };
+  }
+}
+
 export const InvoiceList: React.FC<InvoiceListProps> = ({
   onNewInvoice, onSelectInvoice, onEditInvoice, onRecordPayment,
   companySettings, defaultBank, highlightInvoiceId, initialToastMessage,
@@ -48,6 +82,14 @@ export const InvoiceList: React.FC<InvoiceListProps> = ({
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
   const [invoiceToDelete, setInvoiceToDelete] = useState<Invoice | null>(null);
+  // Party and date filters
+  const [parties, setParties] = useState<{ id: string; name: string }[]>([]);
+  const [partyId, setPartyId] = useState('');
+  const [period, setPeriod] = useState<Period>('all');
+  const [customFrom, setCustomFrom] = useState('');
+  const [customTo, setCustomTo] = useState('');
+  const range = period === 'custom' ? { from: customFrom, to: customTo } : periodRange(period);
+  const hasExtraFilters = Boolean(partyId || range.from || range.to);
   const [toast, setToast] = useState<string | null>(initialToastMessage || null);
   const [summary, setSummary] = useState({
     count: 0, grand_total: 0, taxable: 0, gst: 0, balance: 0,
@@ -68,6 +110,9 @@ export const InvoiceList: React.FC<InvoiceListProps> = ({
       if (statusFilter !== 'all') url += `&status=${statusFilter}`;
       if (docFilter !== 'all') url += `&doc_type=${docFilter}`;
       if (search) url += `&search=${encodeURIComponent(search)}`;
+      if (partyId) url += `&customer_id=${encodeURIComponent(partyId)}`;
+      if (range.from) url += `&from_date=${range.from}`;
+      if (range.to) url += `&to_date=${range.to}`;
       const res = await apiRequest<{ items: Invoice[]; total: number; summary: any }>(url);
       setInvoices(res.items || []);
       setTotal(res.total || 0);
@@ -77,9 +122,20 @@ export const InvoiceList: React.FC<InvoiceListProps> = ({
     } finally {
       setLoading(false);
     }
-  }, [statusFilter, docFilter, search, page]);
+  }, [statusFilter, docFilter, search, page, partyId, range.from, range.to]);
 
   useEffect(() => { fetchInvoices(); }, [fetchInvoices]);
+
+  useEffect(() => {
+    apiRequest<{ items: { id: string; name: string }[] }>('/customers?page=1&page_size=500')
+      .then(r => setParties((r.items || []).map(c => ({ id: c.id, name: c.name })).sort((a, b) => a.name.localeCompare(b.name))))
+      .catch(() => setParties([]));   // no customer access: the party filter just stays empty
+  }, []);
+
+  const clearAllFilters = () => {
+    setSearchInput(''); setStatusFilter('all'); setDocFilter('all');
+    setPartyId(''); setPeriod('all'); setCustomFrom(''); setCustomTo(''); setPage(1);
+  };
   useEffect(() => { if (initialToastMessage) setToast(initialToastMessage); }, [initialToastMessage]);
 
   const handleExportCSV = async () => {
@@ -132,10 +188,7 @@ export const InvoiceList: React.FC<InvoiceListProps> = ({
       hideBelow: 'lg',
       cell: (inv) => (
         <div className="min-w-0">
-          <div className="truncate max-w-[220px]" title={inv.lr_no}>
-            <span className="font-mono text-ink-soft">{lrLabel(inv)}</span>
-            {inv.buyer?.name && <span className="text-ink-faint"> · {inv.buyer.name}</span>}
-          </div>
+          <div className="font-mono text-ink-soft truncate max-w-[160px]" title={inv.lr_no}>{lrLabel(inv)}</div>
           <div className="text-xs text-ink-faint truncate">
             {inv.origin && inv.destination ? `${inv.origin} → ${inv.destination}` : 'Local'}
           </div>
@@ -328,6 +381,45 @@ export const InvoiceList: React.FC<InvoiceListProps> = ({
         </div>
       </div>
 
+      {/* Party & date filters */}
+      <div className="flex flex-col sm:flex-row sm:flex-wrap sm:items-end gap-2">
+        <div className="sm:w-64">
+          <label htmlFor="inv-party" className="block text-[11px] font-semibold text-ink-faint mb-1">Party</label>
+          <Select id="inv-party" value={partyId} onChange={(e) => { setPartyId(e.target.value); setPage(1); }}>
+            <option value="">All parties</option>
+            {parties.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+          </Select>
+        </div>
+        <div className="sm:w-52">
+          <label htmlFor="inv-period" className="block text-[11px] font-semibold text-ink-faint mb-1">Invoice date</label>
+          <Select id="inv-period" value={period} onChange={(e) => { setPeriod(e.target.value as Period); setPage(1); }}>
+            {PERIODS.map(p => <option key={p.key} value={p.key}>{p.label}</option>)}
+          </Select>
+        </div>
+        {period === 'custom' && (
+          <div className="flex items-end gap-2">
+            <div>
+              <label htmlFor="inv-from" className="block text-[11px] font-semibold text-ink-faint mb-1">From</label>
+              <Input id="inv-from" type="date" value={customFrom} max={customTo || undefined}
+                onChange={(e) => { setCustomFrom(e.target.value); setPage(1); }} />
+            </div>
+            <div>
+              <label htmlFor="inv-to" className="block text-[11px] font-semibold text-ink-faint mb-1">To</label>
+              <Input id="inv-to" type="date" value={customTo} min={customFrom || undefined}
+                onChange={(e) => { setCustomTo(e.target.value); setPage(1); }} />
+            </div>
+          </div>
+        )}
+        {hasExtraFilters && (
+          <Button variant="ghost" size="sm" onClick={() => { setPartyId(''); setPeriod('all'); setCustomFrom(''); setCustomTo(''); setPage(1); }}>
+            Clear party / date
+          </Button>
+        )}
+        {period !== 'all' && period !== 'custom' && range.from && (
+          <span className="text-xs text-ink-faint sm:pb-2.5">{range.from} → {range.to}</span>
+        )}
+      </div>
+
       <Card padded={false} className="overflow-hidden">
         {loadError ? (
           <ErrorState message={loadError} onRetry={fetchInvoices} />
@@ -343,15 +435,15 @@ export const InvoiceList: React.FC<InvoiceListProps> = ({
             empty={
               <EmptyState
                 icon={<FileText className="w-6 h-6" />}
-                title={search || statusFilter !== 'all' ? 'No matching invoices' : 'No invoices yet'}
+                title={search || statusFilter !== 'all' || hasExtraFilters ? 'No matching invoices' : 'No invoices yet'}
                 message={
-                  search || statusFilter !== 'all'
+                  search || statusFilter !== 'all' || hasExtraFilters
                     ? 'Try a different search term or filter.'
                     : 'Create your first GST tax invoice to get started.'
                 }
                 action={
-                  search || statusFilter !== 'all' ? (
-                    <Button variant="secondary" onClick={() => { setSearchInput(''); setStatusFilter('all'); }}>
+                  search || statusFilter !== 'all' || hasExtraFilters ? (
+                    <Button variant="secondary" onClick={clearAllFilters}>
                       Clear filters
                     </Button>
                   ) : (
