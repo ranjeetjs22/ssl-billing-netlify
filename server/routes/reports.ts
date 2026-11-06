@@ -267,7 +267,8 @@ reportRouter.get('/reports/invoices', requireReports, async (req: Request, res: 
       { key: 'lr_count', label: 'LR Count', kind: 'num' },
       { key: 'origin', label: 'Origin' },
       { key: 'dest', label: 'Destination' },
-      { key: 'weight', label: 'Weight (Kg)', kind: 'num' },
+      { key: 'actual_weight', label: 'Actual Weight (Kg)', kind: 'num' },
+      { key: 'weight', label: 'Chargeable Weight (Kg)', kind: 'num' },
       { key: 'rate', label: 'Rate/Kg', kind: 'num' },
       { key: 'freight', label: 'Freight', kind: 'money' },
       { key: 'extra', label: 'Additional Charges', kind: 'money' },
@@ -302,6 +303,9 @@ reportRouter.get('/reports/invoices', requireReports, async (req: Request, res: 
             lr: inv.lr_no || '',
             lr_count: Array.isArray(inv.lr_items) && inv.lr_items.length ? inv.lr_items.length : (inv.lr_no ? 1 : 0),
             origin: inv.origin || '', dest: inv.destination || '',
+            // Blank, not 0, on bills saved before actual weight was recorded
+            actual_weight: (Array.isArray(inv.lr_items)
+              ? calc.r2(inv.lr_items.reduce((a: number, l: any) => a + calc.num(l?.actual_weight), 0)) : 0) || '',
             weight: inv.weight || 0, rate: inv.rate_kg || 0,
             freight: t.freight, extra: t.additional_total, discount: t.discount_amount, taxable: t.taxable_amount,
             gst_type: t.doc_type === 'internal' ? 'None' : t.gst_type === 'igst' ? 'IGST' : t.gst_type === 'exempt' ? 'Exempt' : 'CGST+SGST',

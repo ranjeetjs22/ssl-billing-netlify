@@ -143,6 +143,7 @@ export async function printInvoicePDF(inv: Invoice, company: CompanySettings, ba
     : [];
   const multiLr = lrItems.length > 1;
   const lrTotalWeight = lrItems.reduce((acc, l) => acc + (Number(l.weight) || 0), 0);
+  const lrTotalActual = lrItems.reduce((acc, l) => acc + (Number(l.actual_weight) || 0), 0);
   const lrTotalFreight = lrItems.reduce((acc, l) => acc + (Number(l.amount) || 0), 0);
   const lrRates = Array.from(new Set(lrItems.map(l => Number(l.rate_kg) || 0).filter(r => r > 0)));
 
@@ -168,14 +169,20 @@ export async function printInvoicePDF(inv: Invoice, company: CompanySettings, ba
       ],
       ['Origin', inv.origin || '-', 'Destination', inv.destination || '-'],
       [
-        multiLr ? 'Total Weight (Kg)' : 'Weight (Kg)',
+        multiLr ? 'Total Actual Weight' : 'Actual Weight',
+        lrTotalActual ? `${formatINR(lrTotalActual)} Kg` : '-',
+        multiLr ? 'Total Chargeable Weight' : 'Chargeable Weight',
         (multiLr ? lrTotalWeight : inv.weight) ? `${formatINR(multiLr ? lrTotalWeight : inv.weight)} Kg` : '-',
+      ],
+      [
         'Rate per Kg',
         multiLr
           ? (lrRates.length === 1 ? `Rs. ${lrRates[0]}` : (lrRates.length > 1 ? 'As per LR' : '-'))
           : (inv.rate_kg ? `Rs. ${inv.rate_kg}` : '-'),
+        internal ? 'Delivery State' : 'Place of Supply',
+        inv.place_of_supply || '-',
       ],
-      [internal ? 'Delivery State' : 'Place of Supply', inv.place_of_supply || '-', 'Payment Terms', inv.payment_terms || '-'],
+      ['Payment Terms', { content: inv.payment_terms || '-', colSpan: 3 }],
     ],
   });
 
@@ -215,12 +222,14 @@ export async function printInvoicePDF(inv: Invoice, company: CompanySettings, ba
       l.lr_no || '-',
       l.lr_date || '-',
       [l.origin, l.destination].filter(Boolean).join(' -> ') || '-',
+      l.actual_weight ? formatINR(l.actual_weight) : '-',
       l.weight ? formatINR(l.weight) : '-',
       l.rate_kg ? formatINR(l.rate_kg) : '-',
       formatINR(l.amount),
     ]);
     lrRows.push([
       { content: `Total (${lrItems.length} LRs)`, colSpan: 4, styles: { fontStyle: 'bold', halign: 'right', fillColor: [248, 250, 252] } },
+      { content: lrTotalActual ? formatINR(lrTotalActual) : '-', styles: { fontStyle: 'bold', halign: 'right', fillColor: [248, 250, 252] } },
       { content: formatINR(lrTotalWeight), styles: { fontStyle: 'bold', halign: 'right', fillColor: [248, 250, 252] } },
       { content: '', styles: { fillColor: [248, 250, 252] } },
       { content: formatINR(lrTotalFreight), styles: { fontStyle: 'bold', halign: 'right', fillColor: [248, 250, 252] } },
@@ -236,12 +245,13 @@ export async function printInvoicePDF(inv: Invoice, company: CompanySettings, ba
         0: { cellWidth: 8, halign: 'center' },
         1: { cellWidth: 30, fontStyle: 'bold' },
         2: { cellWidth: 22 },
-        3: { cellWidth: 52 },
-        4: { cellWidth: 24, halign: 'right' },
+        3: { cellWidth: 36 },
+        4: { cellWidth: 18, halign: 'right' },
         5: { cellWidth: 22, halign: 'right' },
-        6: { cellWidth: 28, halign: 'right', fontStyle: 'bold' },
+        6: { cellWidth: 22, halign: 'right' },
+        7: { cellWidth: 28, halign: 'right', fontStyle: 'bold' },
       },
-      head: [['#', 'LR / Bilty No', 'LR Date', 'From -> To', 'Weight (Kg)', 'Rate / Kg', 'Freight (Rs)']],
+      head: [['#', 'LR / Bilty No', 'LR Date', 'From -> To', 'Actual (Kg)', 'Chargeable (Kg)', 'Rate / Kg', 'Freight (Rs)']],
       body: lrRows,
     });
     partiesEndY = (doc as any).lastAutoTable.finalY || partiesEndY + 30;

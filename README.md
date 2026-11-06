@@ -132,6 +132,7 @@ PostgREST schema cache.
 ## Multi-LR billing
 
 One tax invoice can cover several LRs / bilties. Each line has its own LR number, date, route,
-weight, rate and freight; total freight is the sum of the lines. The lines are stored in
+actual weight, chargeable weight, rate and freight. Freight is chargeable weight × rate; actual
+weight is recorded and printed but never priced. Total freight is the sum of the lines. The lines are stored in
 `invoices.lr_items` and printed as a "Consignment Details" table on the PDF. Older single-LR
 invoices continue to work unchanged.

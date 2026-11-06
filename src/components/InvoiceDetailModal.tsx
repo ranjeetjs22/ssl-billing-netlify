@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Printer, CreditCard, Trash2, Edit3 } from 'lucide-react';
 import { Invoice, CompanySettings, BankAccount } from '../types.js';
 import { formatINR, numberToWords } from '../utils/format.js';
+import { r2 } from '../utils/calc.js';
 import { printInvoicePDF } from '../utils/pdf.js';
 import { apiRequest } from '../services/api.js';
 import { DeleteInvoiceModal } from './DeleteInvoiceModal.js';
@@ -51,6 +52,8 @@ export const InvoiceDetailModal: React.FC<InvoiceDetailModalProps> = ({
   const lrItems = Array.isArray(inv.lr_items)
     ? inv.lr_items.filter(l => l && (l.lr_no || Number(l.amount) > 0 || Number(l.weight) > 0))
     : [];
+  // Bills saved before actual weight was added have none, so this stays 0 and shows as "-"
+  const actualWeight = r2(lrItems.reduce((a, l) => a + (Number(l.actual_weight) || 0), 0));
 
   const internal = inv.doc_type === 'internal';
   const totals = inv.totals || {
@@ -125,7 +128,8 @@ export const InvoiceDetailModal: React.FC<InvoiceDetailModalProps> = ({
                 <span className="font-mono text-[13px] break-words">{inv.lr_no || '-'}</span>
               </KV>
               <KV label="Route">{route}</KV>
-              <KV label="Charged weight"><span className="tabular-nums">{inv.weight ? `${inv.weight} kg` : '-'}</span></KV>
+              <KV label="Actual weight"><span className="tabular-nums">{actualWeight ? `${actualWeight} kg` : '-'}</span></KV>
+              <KV label="Chargeable weight"><span className="tabular-nums">{inv.weight ? `${inv.weight} kg` : '-'}</span></KV>
               <KV label="Place of supply">{inv.place_of_supply || '-'}</KV>
               <KV label="Bill type">{internal ? 'Non-GST bill' : 'Original tax invoice'}</KV>
               <KV label="SAC"><span className="font-mono text-[13px]">{inv.sac || '996511'}</span></KV>
@@ -184,6 +188,7 @@ export const InvoiceDetailModal: React.FC<InvoiceDetailModalProps> = ({
                       <div className="flex items-baseline justify-between gap-3 text-xs text-ink-faint">
                         <span className="truncate">{[l.origin, l.destination].filter(Boolean).join(' → ') || '-'}{l.lr_date ? ` · ${l.lr_date}` : ''}</span>
                         <span className="tabular-nums shrink-0">
+                          {l.actual_weight ? `Actual ${formatINR(l.actual_weight)} · ` : ''}
                           {l.weight ? `${formatINR(l.weight)} kg` : '-'}{l.rate_kg ? ` × ₹${formatINR(l.rate_kg)}` : ''}
                         </span>
                       </div>
@@ -199,7 +204,8 @@ export const InvoiceDetailModal: React.FC<InvoiceDetailModalProps> = ({
                         <th className="h-8 px-3 font-medium">LR / bilty no</th>
                         <th className="h-8 px-3 font-medium">LR date</th>
                         <th className="h-8 px-3 font-medium">Route</th>
-                        <th className="h-8 px-3 font-medium text-right">Weight (kg)</th>
+                        <th className="h-8 px-3 font-medium text-right">Actual (kg)</th>
+                        <th className="h-8 px-3 font-medium text-right">Chargeable (kg)</th>
                         <th className="h-8 px-3 font-medium text-right">Rate / kg</th>
                         <th className="h-8 px-3 font-medium text-right">Freight</th>
                       </tr>
@@ -211,6 +217,7 @@ export const InvoiceDetailModal: React.FC<InvoiceDetailModalProps> = ({
                           <td className="py-1.5 px-3 font-mono text-[13px] text-ink">{l.lr_no || '-'}</td>
                           <td className="py-1.5 px-3 text-ink-soft tabular-nums">{l.lr_date || '-'}</td>
                           <td className="py-1.5 px-3 text-ink-soft">{[l.origin, l.destination].filter(Boolean).join(' → ') || '-'}</td>
+                          <td className="py-1.5 px-3 text-right tabular-nums text-ink-soft">{l.actual_weight ? formatINR(l.actual_weight) : '-'}</td>
                           <td className="py-1.5 px-3 text-right tabular-nums text-ink-soft">{l.weight ? formatINR(l.weight) : '-'}</td>
                           <td className="py-1.5 px-3 text-right tabular-nums text-ink-soft">{l.rate_kg ? formatINR(l.rate_kg) : '-'}</td>
                           <td className="py-1.5 px-3 text-right tabular-nums font-medium text-ink">₹{formatINR(l.amount)}</td>
@@ -221,6 +228,7 @@ export const InvoiceDetailModal: React.FC<InvoiceDetailModalProps> = ({
                       <tfoot className="border-t border-line">
                         <tr>
                           <td colSpan={4} className="py-1.5 px-3 text-right text-xs text-ink-faint">Total ({lrItems.length} LRs)</td>
+                          <td className="py-1.5 px-3 text-right tabular-nums text-ink">{actualWeight ? formatINR(actualWeight) : '-'}</td>
                           <td className="py-1.5 px-3 text-right tabular-nums text-ink">{formatINR(lrItems.reduce((a, l) => a + (Number(l.weight) || 0), 0))}</td>
                           <td></td>
                           <td className="py-1.5 px-3 text-right tabular-nums font-semibold text-ink">₹{formatINR(totals.freight)}</td>

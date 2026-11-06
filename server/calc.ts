@@ -63,6 +63,9 @@ export interface LrItem {
   destination: string;
   description: string;
   packages: number;
+  /** Actual (dead) weight in kg, as weighed. For the record only: freight never uses it. */
+  actual_weight: number;
+  /** Chargeable weight in kg. This is the weight billed: freight = weight × rate_kg. */
   weight: number;
   rate_kg: number;
   amount: number;
@@ -103,6 +106,7 @@ export function lrItemsList(raw: any): LrItem[] {
       destination: String(x.destination ?? x.to ?? '').trim(),
       description: String(x.description ?? '').trim(),
       packages: num(x.packages),
+      actual_weight: num(x.actual_weight),
       weight,
       rate_kg: rate,
       amount: r2(amount),

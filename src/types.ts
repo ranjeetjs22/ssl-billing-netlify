@@ -142,6 +142,9 @@ export interface LrItem {
   destination?: string;
   description?: string;
   packages?: number;
+  /** Actual (dead) weight in kg. Missing on bills saved before it was added. */
+  actual_weight?: number;
+  /** Chargeable weight in kg: freight = weight × rate_kg. */
   weight: number;
   rate_kg: number;
   amount: number;

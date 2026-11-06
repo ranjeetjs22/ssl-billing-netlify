@@ -34,7 +34,12 @@ interface LrLine {
   lr_date: string;
   origin: string;
   destination: string;
+  /** Actual (dead) weight in kg. Recorded and printed; freight does not use it. */
+  actual_weight: number;
+  /** Chargeable weight in kg: this one drives freight. */
   weight: number;
+  /** true while chargeable weight copies actual weight; typing a chargeable weight turns it off. Never saved. */
+  weight_auto: boolean;
   rate_kg: number;
   amount: number;
   /** What we paid for this trip INCLUDING the vendor's GST. null = not entered yet (not the same as zero). */
@@ -55,7 +60,9 @@ const newLrLine = (partial: Partial<LrLine> = {}): LrLine => ({
   lr_date: '',
   origin: 'Ahmedabad',
   destination: '',
+  actual_weight: 0,
   weight: 0,
+  weight_auto: true,
   rate_kg: 0,
   amount: 0,
   cost_incl_gst: null,
@@ -73,7 +80,10 @@ function buildInitialLrLines(inv?: Invoice | null): LrLine[] {
       lr_date: l.lr_date || '',
       origin: l.origin || '',
       destination: l.destination || '',
+      actual_weight: Number(l.actual_weight) || 0,
       weight: Number(l.weight) || 0,
+      // A saved bill keeps the weight it was billed at
+      weight_auto: false,
       rate_kg: Number(l.rate_kg) || 0,
       amount: Number(l.amount) || 0,
       // Bills saved before the combined entry stored cost and GST apart: add them back together.
@@ -95,6 +105,7 @@ function buildInitialLrLines(inv?: Invoice | null): LrLine[] {
       origin: inv.origin || '',
       destination: inv.destination || '',
       weight: Number(inv.weight) || 0,
+      weight_auto: false,
       rate_kg: Number(inv.rate_kg) || 0,
       amount: Number(inv.freight) || 0,
       rate_auto: false,
@@ -146,6 +157,7 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({ invoiceToEdit, initi
   const [lrLines, setLrLines] = useState<LrLine[]>(() => buildInitialLrLines(invoiceToEdit));
   const freight = useMemo(() => r2(lrLines.reduce((acc, l) => acc + (Number(l.amount) || 0), 0)), [lrLines]);
   const totalWeight = useMemo(() => r2(lrLines.reduce((acc, l) => acc + (Number(l.weight) || 0), 0)), [lrLines]);
+  const totalActualWeight = useMemo(() => r2(lrLines.reduce((acc, l) => acc + (Number(l.actual_weight) || 0), 0)), [lrLines]);
   const [extraCharges, setExtraCharges] = useState<ChargeItem[]>(
     invoiceToEdit?.extra_charges && invoiceToEdit.extra_charges.length > 0
       ? invoiceToEdit.extra_charges
@@ -291,8 +303,11 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({ invoiceToEdit, initi
       const next = { ...l, ...patch };
       // Typing a rate or an amount by hand stops the chart from overwriting it
       if (('rate_kg' in patch || 'amount' in patch) && !('rate_auto' in patch)) next.rate_auto = false;
-      // Weight × Rate drives the line freight whenever both are known; a direct amount is also allowed
-      if (('weight' in patch || 'rate_kg' in patch) && next.weight > 0 && next.rate_kg > 0) {
+      // Chargeable weight copies actual weight until someone types a different one
+      const weightFollowed = 'actual_weight' in patch && next.weight_auto;
+      if (weightFollowed) next.weight = next.actual_weight;
+      // Chargeable weight × Rate drives the line freight whenever both are known; a direct amount is also allowed
+      if (('weight' in patch || 'rate_kg' in patch || weightFollowed) && next.weight > 0 && next.rate_kg > 0) {
         next.amount = Math.round(next.weight * next.rate_kg * 100) / 100;
       }
       return next;
@@ -665,14 +680,14 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({ invoiceToEdit, initi
       return;
     }
     if (freight <= 0) {
-      setError('Please enter freight for at least one LR line (Weight × Rate, or type the amount directly).');
+      setError('Please enter freight for at least one LR line (Chargeable weight × Rate, or type the amount directly).');
       return;
     }
     setSaving(true);
     setError(null);
 
     try {
-      const cleanLines = lrLines.map(({ key: _key, rate_auto: _auto, ...rest }) => ({
+      const cleanLines = lrLines.map(({ key: _key, rate_auto: _auto, weight_auto: _weightAuto, ...rest }) => ({
         ...rest,
         lr_no: rest.lr_no.trim(),
         origin: rest.origin.trim(),
@@ -750,7 +765,7 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({ invoiceToEdit, initi
           ? `Edit ${isInternal ? 'non-GST bill' : 'tax invoice'}`
           : isInternal ? 'New non-GST bill' : 'New GST tax invoice'}
         subtitle={isEditMode ? (invoiceNo || invoiceToEdit?.invoice_no) : 'Bill to, ship to, consignments and tax'}
-        size="xl"
+        size="2xl"
         footer={
           <div className="flex items-center gap-3">
             <div className="min-w-0 mr-auto leading-tight">
@@ -956,7 +971,7 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({ invoiceToEdit, initi
           {/* =========================================================== Consignments */}
           <FormSection
             title="Consignments"
-            hint="Every LR / bilty on this bill. Freight = weight × rate, or type the amount."
+            hint="Every LR / bilty on this bill. Freight = chargeable weight × rate, or type the amount."
             actions={
               <Button type="button" variant="secondary" size="sm" icon={<Plus />} onClick={addLrLine}>
                 Add LR
@@ -989,14 +1004,15 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({ invoiceToEdit, initi
             )}
 
             <div className="border border-line rounded-card overflow-x-auto overscroll-x-contain">
-              <table className="w-full min-w-[980px] table-fixed text-sm">
+              <table className="w-full min-w-[1060px] table-fixed text-sm">
                 <colgroup>
                   <col className="w-7" />
                   <col className="w-[100px]" />
                   <col className="w-[120px]" />
                   <col className="w-[84px]" />
                   <col className="w-[84px]" />
-                  <col className="w-[72px]" />
+                  <col className="w-[64px]" />
+                  <col className="w-[88px]" />
                   <col className="w-[72px]" />
                   <col className="w-[88px]" />
                   <col className="w-[88px]" />
@@ -1012,7 +1028,8 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({ invoiceToEdit, initi
                     <th className="h-8 px-1 text-left font-medium">LR date</th>
                     <th className="h-8 px-1 text-left font-medium">From</th>
                     <th className="h-8 px-1 text-left font-medium">To</th>
-                    <th className="h-8 px-1 text-right font-medium">Weight kg</th>
+                    <th className="h-8 px-1 text-right font-medium" title="Actual (dead) weight as weighed. Not used for freight.">Actual kg</th>
+                    <th className="h-8 px-1 text-right font-medium" title="The weight billed: freight = chargeable weight × rate. Follows actual weight until you type a different one.">Chargeable kg</th>
                     <th className="h-8 px-1 text-right font-medium">Rate / kg</th>
                     <th className="h-8 px-1 text-right font-medium">Freight ₹</th>
                     <th className="h-8 px-1 text-right font-medium border-l border-line" title="What we paid for this trip, including the vendor's GST">Our cost ₹</th>
@@ -1055,9 +1072,18 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({ invoiceToEdit, initi
                             className={lrInputCls} placeholder="Surat" aria-label={`To, line ${idx + 1}`} />
                         </td>
                         <td className="px-1">
+                          <input type="number" min="0" step="any" value={line.actual_weight || ''}
+                            onChange={(e) => updateLrLine(line.key, { actual_weight: parseFloat(e.target.value) || 0 })}
+                            className={cx(lrInputCls, 'text-right')} placeholder="0" aria-label={`Actual weight in kg, line ${idx + 1}`} />
+                        </td>
+                        <td className="px-1">
                           <input type="number" min="0" step="any" value={line.weight || ''}
-                            onChange={(e) => updateLrLine(line.key, { weight: parseFloat(e.target.value) || 0 })}
-                            className={cx(lrInputCls, 'text-right')} placeholder="0" aria-label={`Weight in kg, line ${idx + 1}`} />
+                            onChange={(e) => updateLrLine(line.key, {
+                              weight: parseFloat(e.target.value) || 0,
+                              // Emptying the box hands it back to actual weight
+                              weight_auto: e.target.value === '',
+                            })}
+                            className={cx(lrInputCls, 'text-right')} placeholder="0" aria-label={`Chargeable weight in kg, line ${idx + 1}`} />
                         </td>
                         <td className="px-1">
                           <input type="number" min="0" step="any" value={line.rate_kg || ''}
@@ -1139,6 +1165,7 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({ invoiceToEdit, initi
                     <td colSpan={5} className="h-8 pl-2.5 text-ink-faint">
                       {lrLines.length} LR{lrLines.length === 1 ? '' : 's'}
                     </td>
+                    <td className="px-2 text-right tabular-nums text-ink-soft">{formatINR(totalActualWeight)}</td>
                     <td className="px-2 text-right tabular-nums text-ink-soft">{formatINR(totalWeight)}</td>
                     <td className="px-1 text-right text-ink-faint">Total</td>
                     <td className="px-2 text-right tabular-nums font-semibold text-ink text-sm">₹{formatINR(freight)}</td>

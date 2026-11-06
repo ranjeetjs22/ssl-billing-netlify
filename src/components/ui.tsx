@@ -385,7 +385,7 @@ export const Modal: React.FC<{
   title: string;
   subtitle?: string;
   icon?: React.ReactNode;
-  size?: 'sm' | 'md' | 'lg' | 'xl';
+  size?: 'sm' | 'md' | 'lg' | 'xl' | '2xl';
   headerActions?: React.ReactNode;
   footer?: React.ReactNode;
   children: React.ReactNode;
@@ -425,7 +425,7 @@ export const Modal: React.FC<{
     else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
   }, [onClose]);
 
-  const width = { sm: 'sm:max-w-md', md: 'sm:max-w-lg', lg: 'sm:max-w-3xl', xl: 'sm:max-w-5xl' }[size];
+  const width = { sm: 'sm:max-w-md', md: 'sm:max-w-lg', lg: 'sm:max-w-3xl', xl: 'sm:max-w-5xl', '2xl': 'sm:max-w-6xl' }[size];
 
   return (
     <div
